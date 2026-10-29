@@ -13,7 +13,7 @@ Bu dokümanda projenin Git/GitHub süreçleri, repository bilgileri, dal (branch
 ---
 
 ## 2. Depo (Repository) Bilgileri
-- **GitHub Repository URL:** *(Kullanıcı tarafından belirlendiğinde eklenecek)*
+- **GitHub Repository URL:** `https://github.com/erhanayy/tatildebugun`
 - **Varsayılan Ana Dal (Default Branch):** `main`
 - **Geliştirme Dalı (Dev Branch):** `develop` veya `feature/*`
 
@@ -27,9 +27,9 @@ Bu dokümanda projenin Git/GitHub süreçleri, repository bilgileri, dal (branch
   - `refactor: ...` : Kod yeniden düzenlemeleri
   - `chore: ...` : Bağımlılık ve yapılandırma işleri
 - **Gönderim Öncesi Kontrol Listesi:**
-  - [ ] `.gitignore` dosyasının hassas dosyaları (`.env`, `Access.md`, anahtarlar, credentials vb.) kapsadığından emin olunması
-  - [ ] Kodun yerel testlerden ve statik analizden başarıyla geçmesi
-  - [ ] Kullanıcıdan açık "GitHub'a gönder / push et" onayı alınmış olması
+  - [x] `.gitignore` dosyasının hassas dosyaları (`.env`, `Access.md`, anahtarlar, credentials, `sifreler.md` vb.) kapsadığından emin olunması
+  - [x] Kodun yerel testlerden ve statik analizden başarıyla geçmesi
+  - [x] Kullanıcıdan açık "GitHub'a gönder / push et" onayı alınmış olması
 
 ---
 
@@ -37,4 +37,5 @@ Bu dokümanda projenin Git/GitHub süreçleri, repository bilgileri, dal (branch
 
 | Tarih | Commit Özeti | Dal (Branch) | Onaylayan | Notlar |
 | :--- | :--- | :--- | :--- | :--- |
-| *Henüz gönderim yapılmadı* | - | - | - | - |
+| 2026-10-30 | `feat: TatildeBugun platformu tum mimari, harita, rota, sosyal ve eslesme modulleri ile baslatildi` (`7673494`) | `main` | Erhan Ayyıldız | Kullanıcının açık onayı ile `tatildebugun` reposu oluşturuldu; tüm kod tabanı, migrasyonlar ve analiz dokümanları gönderildi. |
+
