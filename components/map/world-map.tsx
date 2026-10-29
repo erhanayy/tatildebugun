@@ -40,6 +40,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
   const tileLayerRef = useRef<any>(null);
   const markersLayerRef = useRef<any>(null);
   const routesLayerRef = useRef<any>(null);
+  const kktcLayerRef = useRef<any>(null);
 
   const [visits, setVisits] = useState<Visit[]>(initialVisits);
   const [tripsList, setTripsList] = useState<TripWithStops[]>(initialTrips);
@@ -205,6 +206,9 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
       const markersLayer = L.layerGroup().addTo(map);
       markersLayerRef.current = markersLayer;
 
+      const kktcLayer = L.layerGroup().addTo(map);
+      kktcLayerRef.current = kktcLayer;
+
       map.on("zoomend", () => {
         setCurrentZoom(map.getZoom());
       });
@@ -301,6 +305,158 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
     }
   };
 
+  // 2.B. Kuzey Kıbrıs Türk Cumhuriyeti (KKTC) Egemenlik, Sınır ve Şehir Katmanı
+  useEffect(() => {
+    if (!mapInstanceRef.current || !kktcLayerRef.current || !isMapReady) return;
+
+    import("leaflet").then((L) => {
+      const kktcLayer = kktcLayerRef.current;
+      kktcLayer.clearLayers();
+      const map = mapInstanceRef.current;
+
+      // KKTC Sınır Koordinatları (Kuzey Kıbrıs Türk Cumhuriyeti & Yeşil Hat)
+      const KKTC_BORDER_COORDS: [number, number][] = [
+        [35.698, 34.582], // Karpaz Zafer Burnu
+        [35.534, 34.225],
+        [35.395, 33.955],
+        [35.125, 33.945], // Gazimağusa Liman
+        [35.085, 33.925], // Derinya / Ateşkes Hattı
+        [35.050, 33.520], // Ercan güneyi
+        [35.170, 33.375], // Lefkoşa güneyi
+        [35.178, 33.355], // Lefkoşa Ledra Palas / Yeşil Hat
+        [35.175, 33.150], // Mammari / Deneia
+        [35.165, 33.000], // Güzelyurt Bostancı
+        [35.105, 32.845], // Lefke / Çamlıköy
+        [35.163, 32.748], // Yeşilırmak kıyısı
+        [35.210, 32.850],
+        [35.405, 32.915], // Koruçam Burnu
+        [35.355, 33.150], // Lapta
+        [35.340, 33.320], // Girne
+        [35.350, 33.550], // Esentepe / Tatlısu
+        [35.420, 33.850], // Kantara
+        [35.500, 34.100], // Yenierenköy
+        [35.698, 34.582],
+      ];
+
+      // Yeşil Hat / Ateşkes Sınır Çizgisi
+      const GREEN_LINE_COORDS: [number, number][] = [
+        [35.163, 32.748],
+        [35.105, 32.845],
+        [35.165, 33.000],
+        [35.175, 33.150],
+        [35.178, 33.355],
+        [35.170, 33.375],
+        [35.050, 33.520],
+        [35.085, 33.925],
+      ];
+
+      // 1. KKTC Poligonu (Hafif Kırmızı Pastel Vurgulu)
+      L.polygon(KKTC_BORDER_COORDS, {
+        color: "#dc2626",
+        weight: 1.5,
+        opacity: 0.85,
+        fillColor: "#ef4444",
+        fillOpacity: 0.08,
+        dashArray: "4, 4",
+      }).addTo(kktcLayer);
+
+      // 2. Yeşil Hat Ateşkes Sınırı (Belirgin Sınır)
+      L.polyline(GREEN_LINE_COORDS, {
+        color: "#b91c1c",
+        weight: 2.5,
+        opacity: 0.95,
+        dashArray: "6, 4",
+      }).addTo(kktcLayer);
+
+      // 3. Kalıcı KKTC Bayrak Kartı (Diğer ülke logoları ile birebir aynı: Sadece Bayrak, Yazı Yok)
+      const hasKktcVisit = countryAggregates.some((c) => c.countryCode === "KKTC");
+      if (!hasKktcVisit) {
+        const kktcBadgeIcon = L.divIcon({
+          className: "custom-country-flag-icon",
+          html: `
+            <div class="relative group cursor-pointer transform hover:scale-125 transition-transform duration-200" title="Kuzey Kıbrıs Türk Cumhuriyeti (KKTC)">
+              <div class="flex items-center justify-center w-11 h-11 rounded-2xl bg-white dark:bg-slate-900 shadow-xl border-2 border-cyan-500/80 hover:border-cyan-400">
+                <svg width="24" height="16" viewBox="0 0 30 20" style="border: 1px solid #e2e8f0; border-radius: 2px;">
+                  <rect width="30" height="20" fill="#fff"/>
+                  <rect y="2" width="30" height="2.5" fill="#e30a17"/>
+                  <rect y="15.5" width="30" height="2.5" fill="#e30a17"/>
+                  <circle cx="12" cy="10" r="4.2" fill="#e30a17"/>
+                  <circle cx="13.2" cy="10" r="3.3" fill="#fff"/>
+                  <polygon points="16.5,10 14.5,10.6 15.2,12 13.8,11 13.2,12.5 13,10.7 11.5,10.7 12.7,9.7 11.8,8.5 13.4,9.1 14.2,7.7 14.2,9.5" fill="#e30a17"/>
+                </svg>
+              </div>
+            </div>
+          `,
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
+        });
+
+        const badgeMarker = L.marker([35.25, 33.55], {
+          icon: kktcBadgeIcon,
+          zIndexOffset: 300,
+        }).addTo(kktcLayer);
+
+        badgeMarker.on("click", (e) => {
+          L.DomEvent.stopPropagation(e);
+          map.flyTo([35.25, 33.55], 9, { duration: 1.2 });
+        });
+      }
+
+      // 4. Şehir Etiketleri (Zoom >= 6.5 olduğunda Türkçe şehir adları görünür)
+      if (currentZoom >= 6.5) {
+        const KKTC_CITIES = [
+          { name: "Lefkoşa", lat: 35.1856, lng: 33.3644, isCapital: true },
+          { name: "Girne", lat: 35.3386, lng: 33.3186 },
+          { name: "Gazimağusa", lat: 35.1250, lng: 33.9417 },
+          { name: "Güzelyurt", lat: 35.1989, lng: 32.9931 },
+          { name: "İskele", lat: 35.2892, lng: 33.8878 },
+          { name: "Lefke", lat: 35.1167, lng: 32.8500 },
+        ];
+
+        KKTC_CITIES.forEach((c) => {
+          const cityIcon = L.divIcon({
+            className: "kktc-city-badge",
+            html: `
+              <div style="
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                background: rgba(255, 255, 255, 0.94);
+                color: #1e293b;
+                border: 1px solid ${c.isCapital ? "#dc2626" : "#cbd5e1"};
+                border-radius: 999px;
+                padding: 1px 7px;
+                box-shadow: 0 1px 5px rgba(0,0,0,0.18);
+                font-family: ui-sans-serif, system-ui, sans-serif;
+                font-size: 10px;
+                font-weight: 700;
+                white-space: nowrap;
+                cursor: pointer;
+              ">
+                <span style="width: 5px; height: 5px; border-radius: 999px; background: ${c.isCapital ? "#dc2626" : "#0284c7"};"></span>
+                <span>${c.name}${c.isCapital ? " 🏛️" : ""}</span>
+              </div>
+            `,
+            iconSize: [80, 20],
+            iconAnchor: [40, 10],
+          });
+
+          const cityMarker = L.marker([c.lat, c.lng], {
+            icon: cityIcon,
+            zIndexOffset: 350,
+          }).addTo(kktcLayer);
+
+          cityMarker.on("click", (e) => {
+            L.DomEvent.stopPropagation(e);
+            setSelectedCoords({ lat: c.lat, lng: c.lng });
+            setEditingVisit(null);
+            setIsModalOpen(true);
+          });
+        });
+      }
+    });
+  }, [isMapReady, currentZoom]);
+
   // 3. Zoom Seviyesine ve Harita Hazırlığına Göre Markerları Çiz
   useEffect(() => {
     if (!mapInstanceRef.current || !markersLayerRef.current || !isMapReady) return;
@@ -322,11 +478,22 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
           // Tek şehirde çoklu ziyaret varsa (örn: Batum 3) ziyaret adedini (3) gösterir, birden çok şehir varsa şehir adedini gösterir
           const badgeText = cityCount === 1 && totalVisits > 1 ? totalVisits : cityCount;
           const badgeTitle = `${item.countryName}: ${cityCount} Şehir, ${totalVisits} Ziyaret`;
+          const isKktc = item.countryCode === "KKTC";
+          const flagContent = isKktc
+            ? `<svg width="24" height="16" viewBox="0 0 30 20" style="border: 1px solid #e2e8f0; border-radius: 2px;">
+                <rect width="30" height="20" fill="#fff"/>
+                <rect y="2" width="30" height="2.5" fill="#e30a17"/>
+                <rect y="15.5" width="30" height="2.5" fill="#e30a17"/>
+                <circle cx="12" cy="10" r="4.2" fill="#e30a17"/>
+                <circle cx="13.2" cy="10" r="3.3" fill="#fff"/>
+                <polygon points="16.5,10 14.5,10.6 15.2,12 13.8,11 13.2,12.5 13,10.7 11.5,10.7 12.7,9.7 11.8,8.5 13.4,9.1 14.2,7.7 14.2,9.5" fill="#e30a17"/>
+              </svg>`
+            : `<span class="text-xl select-none">${flag}</span>`;
 
           const html = `
             <div class="relative group cursor-pointer transform hover:scale-125 transition-transform duration-200" title="${badgeTitle}">
               <div class="flex items-center justify-center w-11 h-11 rounded-2xl bg-white dark:bg-slate-900 shadow-xl border-2 border-cyan-500/80 hover:border-cyan-400">
-                <span class="text-xl select-none">${flag}</span>
+                ${flagContent}
               </div>
               <div class="absolute -top-2 -right-2 flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-[11px] font-extrabold shadow-md border-2 border-white dark:border-slate-900">
                 ${badgeText}

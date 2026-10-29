@@ -38,7 +38,7 @@ export const visits = pgTable(
     userId: uuid("user_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    countryCode: varchar("country_code", { length: 2 }).notNull(), // 'ES', 'TR', 'IT' vb.
+    countryCode: varchar("country_code", { length: 10 }).notNull(), // 'ES', 'TR', 'KKTC' vb.
     countryName: text("country_name").notNull(),
     cityName: text("city_name").notNull(),
     districtName: text("district_name"), // İlçe bilgisi (Opsiyonel: Kadıköy, Bodrum vb.)
@@ -145,7 +145,7 @@ export const tripStops = pgTable(
       .notNull(),
     visitId: uuid("visit_id").references(() => visits.id, { onDelete: "set null" }),
     cityName: text("cityName").notNull(),
-    countryCode: varchar("country_code", { length: 2 }).notNull(),
+    countryCode: varchar("country_code", { length: 10 }).notNull(),
     latitude: doublePrecision("latitude").notNull(),
     longitude: doublePrecision("longitude").notNull(),
     stopOrder: integer("stop_order").notNull(), // 0: origin, 1..N: stops, N+1: return

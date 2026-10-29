@@ -1242,6 +1242,70 @@ baseCity: varchar("base_city", { length: 100 }).default("İstanbul"),
 - **TypeScript Denetimi (`npx tsc --noEmit`):** 0 hata ile tamamlandı.
 - **Turbopack Build (`npm run build`):** 6.1 saniyede tüm 14 rota hatasız derlendi (Exit code 0).
 
+---
+
+## 26. Kuzey Kıbrıs Türk Cumhuriyeti (KKTC) Harita ve Egemenlik Katmanı Analizi
+
+### 26.1. Problem ve Hassasiyet Analizi
+- **Mevcut Durum:** Uluslararası küresel harita sağlayıcıları (OpenStreetMap, CartoDB Voyager, Positron, Dark Matter vb.), Kıbrıs adasını BM/Batı siyasi sınır standartlarına göre tümüyle "Cyprus" (Güney Kıbrıs) olarak etiketlemekte, adanın kuzey kesiminde bağımsız bir KKTC devleti sınırını ve adını göstermemektedir.
+- **Kullanıcı Geri Bildirimi:** *"Bizim bu haritada Kuzey Kıbrıs Türk Cumhuriyeti yok ben bu siteyi açtığımda beni tefe koyarlar. Haritanın o kısmını değiştirme şansın var mı? Önce analiz yapalım sadece."*
+- **Kritik Milli ve Kullanıcı Hassasiyeti:** Türkiye merkezli bir seyahat ve topluluk platformunda Kuzey Kıbrıs'ın haritada yok sayılması veya Girne/Lefkoşa şehirlerinin Rum bayrağı (`🇨🇾`) altında sunulması kesinlikle kabul edilemez bir eksikliktir.
+
+### 26.2. Haritanın İlgili Kısmını Değiştirme Yöntemleri (Mimari Çözüm Seçenekleri)
+
+Leaflet harita motorunda haritanın istenen bölgesini özelleştirmek ve üzerine yerli/milli katmanlar giydirmek mümkündür. 3 temel katmanda çözüm tasarlanmıştır:
+
+#### 1. Harita Görsel Katmanı (Leaflet Visual Overlay & Labels):
+- **A. Yeşil Hat ve KKTC Sınır Çizgisi (GeoJSON / Polyline Layer):**
+  - Kıbrıs adasını ikiye bölen Birleşmiş Milletler tampon bölgesi / 1974 Ateşkes Hattı (Yeşil Hat: Erenköy, Lefke, Güzelyurt güneyi, Lefkoşa merkezi, Gazimağusa güneyi) harita üzerine resmi sınır olarak çizilir.
+  - KKTC toprakları (Girne, Lefkoşa'nın kuzeyi, Gazimağusa, İskele, Güzelyurt ve Karpaz Yarımadası) hafif, zarif bir açık kırmızı/beyaz veya pastel sınır çizgisi ve saydam dolgu ile bağımsız bir ülke olarak vurgulanır.
+- **B. Kalıcı KKTC Başlık ve Bayrak Rozeti (Permanent Map Badge):**
+  - Akdeniz'in üzerinde, Kuzey Kıbrıs topraklarının tam ortasında (`35.25° N, 33.55° E`) harita üzerinde her temada kalıcı olarak duran resmi **Kuzey Kıbrıs Türk Cumhuriyeti (KKTC)** rozeti ve KKTC bayrağı yerleştirilir.
+  - Yakınlaşıldığında (Zoom >= 7): **Lefkoşa**, **Girne**, **Gazimağusa**, **Güzelyurt**, **İskele**, **Lefke** ve **Ercan Havalimanı** etiketleri Türkçe olarak görünür hale gelir.
+
+#### 2. Ülke Kataloğu ve Bayrak Sistemi (`lib/world-cities.ts` & `lib/country-flags.ts`):
+- **Ayrı Ülke Tanımı:**
+  - `KKTC`: **Kuzey Kıbrıs Türk Cumhuriyeti (KKTC)**
+    - Kod: `KKTC`
+    - Bayrak: Resmi KKTC Bayrağı (Beyaz zemin, kırmızı çift yatay şerit, kırmızı hilal ve yıldız).
+    - Şehirler: Girne, Lefkoşa (Kuzey), Gazimağusa, Güzelyurt, İskele, Lefke.
+  - `CY`: **Güney Kıbrıs Rum Yönetimi (GKRY)** olarak netleştirilir.
+- **Arama ve Otomatik Tamamlama (Autocomplete):**
+  - Kullanıcı seyahat eklerken veya arama kutusuna "Kıbrıs", "KKTC", "Girne", "Lefkoşa", "Magusa" yazdığında ilk sırada doğrudan **"Kuzey Kıbrıs Türk Cumhuriyeti (KKTC)"** çıkar.
+
+#### 3. Harita Tıklama ve Tersine Coğrafi Kodlama (Reverse Geocoding Guard):
+- Harita üzerinde Kıbrıs'ın kuzey koordinatlarına (Enlem: `35.12 - 35.75`, Boylam: `32.75 - 34.65`) sağ tıklandığında veya bayrak bırakıldığında:
+  - Global harita API'leri (OpenStreetMap/Nominatim) "Cyprus" yanıtı verse dahi, istemci tarafındaki güvenlik filtresi (guard) bu koordinatların KKTC olduğunu tespit eder ve ülkeyi otomatik olarak **"Kuzey Kıbrıs Türk Cumhuriyeti (KKTC)"** olarak doldurur.
+
+### 26.3. Uygulanan Geliştirmeler ve Mimari Entegrasyon (Kural 1, 8, 10)
+1. **Veritabanı Şeması ve Geri Alınabilir Migrasyon (Kural 8, 10):**
+   - Google Cloud SQL PostgreSQL üzerinde `visits.country_code` ve `trip_stops.country_code` sütunları `varchar(10)` olarak genişletildi.
+   - Geri alma scripti `scripts/rollback_country_code_length.sql` hazırlandı.
+   - `lib/db/schema.ts` ve Server Action Zod şemaları (`lib/actions/visits.ts`, `lib/actions/trips.ts`) `varchar(10)` desteğine uyarlandı.
+2. **Katalog ve Şehirler ([lib/world-cities.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/world-cities.ts) & [lib/country-flags.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/country-flags.ts)):**
+   - `KKTC`: Kuzey Kıbrıs Türk Cumhuriyeti (KKTC) bağımsız ülke olarak eklendi.
+   - Kullanıcının talep ettiği tüm Türkçe şehir adları resmi koordinatlarıyla eklendi:
+     - **Lefkoşa** (Başkent)
+     - **Girne**
+     - **Gazimağusa**
+     - **Güzelyurt**
+     - **İskele**
+     - **Lefke**
+   - Rum kesimi `Güney Kıbrıs Rum Yönetimi (GKRY)` olarak sınırlandırıldı.
+3. **Leaflet Harita Egemenlik Katmanı ([components/map/world-map.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/map/world-map.tsx)):**
+   - KKTC sınır poligonu ve 1974 Yeşil Hat ateşkes sınırı çizildi.
+   - **Görsel Bütünlük ve Sadeleşme:** Haritadaki diğer tüm ülke logoları gibi (İspanya, İtalya, Almanya vb.), KKTC de üzerinde hiçbir yazı ("KKTC") olmadan, yalnızca resmi KKTC SVG Bayrağını barındıran beyaz yuvarlatılmış (rounded-2xl) kart olarak haritaya işlendi.
+   - Kullanıcı KKTC ziyareti eklediğinde ziyaret kartında otomatik olarak resmi KKTC SVG bayrağı ve şehir sayısı rozeti gösterilir; mükerrer işaretçi oluşması engellendi.
+   - Yakınlaşıldığında (Zoom >= 6.5) Türkçe şehir etiketleri (Lefkoşa 🏛️, Girne, Gazimağusa, Güzelyurt, İskele, Lefke) harita üzerinde net şekilde görünür ve tıklanabilir kılındı.
+4. **Tersine Coğrafi Kodlama Koruması ([lib/actions/visits.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/visits.ts)):**
+   - Harita üzerinde Kıbrıs'ın kuzey koordinatlarına tıklandığında OSM/Nominatim yanıtı ne olursa olsun otomatik olarak KKTC ve ilgili Türkçe şehir atanması sağlandı.
+
+### 26.4. Kalite Kapısı Doğrulaması (Kural 12)
+- **TypeScript Denetimi (`npx tsc --noEmit`):** 0 hata ile tamamlandı.
+- **Turbopack Build (`npm run build`):** 7.3 saniyede tüm 14 rota hatasız derlendi (Exit code 0).
+- **GitHub & Deployment:** Kural 2 ve Kural 3 uyarınca otomatik gönderim ve dağıtım yapılmamıştır.
+
+
 
 
 

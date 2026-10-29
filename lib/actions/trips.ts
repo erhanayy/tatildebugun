@@ -10,7 +10,7 @@ import { z } from "zod";
 // Zod Doğrulama Şeması (Kural 10 - Katı Tip & Runtime Kontrolü)
 const tripStopInputSchema = z.object({
   cityName: z.string().min(1, "Şehir adı zorunludur"),
-  countryCode: z.string().length(2, "Geçerli ülke kodu gereklidir"),
+  countryCode: z.string().min(2, "Geçerli ülke kodu gereklidir").max(10),
   latitude: z.number(),
   longitude: z.number(),
   stopOrder: z.number().int(),

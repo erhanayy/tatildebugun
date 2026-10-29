@@ -10,7 +10,7 @@ import { z } from "zod";
 // Zod Doğrulama Şeması (Kural 10 - Katı Tip ve Runtime Doğrulama)
 const createVisitSchema = z
   .object({
-    countryCode: z.string().length(2, "Geçerli bir ülke kodu (2 harf) gereklidir"),
+    countryCode: z.string().min(2, "Geçerli bir ülke kodu gereklidir").max(10),
     countryName: z.string().min(1, "Ülke adı zorunludur"),
     cityName: z.string().min(1, "Şehir adı zorunludur"),
     districtName: z.string().optional().nullable(),
@@ -286,6 +286,37 @@ export async function reverseGeocodeLocation(
 
     const countryName = address.country || "Bilinmeyen Ülke";
     const countryCode = (address.country_code || "TR").toUpperCase();
+
+    // 0. Kuzey Kıbrıs Türk Cumhuriyeti (KKTC) Özel Coğrafi Koruması
+    const isNorthernCyprus =
+      (lat >= 35.10 && lat <= 35.75 && lng >= 32.70 && lng <= 34.65) ||
+      (countryCode === "CY" && lat >= 35.15);
+
+    if (isNorthernCyprus) {
+      let kktcCity = "Lefkoşa";
+      const rawText = `${address.city || ""} ${address.town || ""} ${address.county || ""} ${address.suburb || ""} ${address.state || ""}`.toLowerCase();
+
+      if (rawText.includes("girne") || rawText.includes("kyrenia") || (lat >= 35.28 && lng <= 33.55 && lng >= 33.15)) {
+        kktcCity = "Girne";
+      } else if (rawText.includes("magusa") || rawText.includes("mağusa") || rawText.includes("famagusta") || (lat <= 35.25 && lng >= 33.75)) {
+        kktcCity = "Gazimağusa";
+      } else if (rawText.includes("güzelyurt") || rawText.includes("guzelyurt") || rawText.includes("morphou") || (lng < 33.15 && lat >= 35.15)) {
+        kktcCity = "Güzelyurt";
+      } else if (rawText.includes("iskele") || rawText.includes("trikomo") || (lat > 35.25 && lng >= 33.75)) {
+        kktcCity = "İskele";
+      } else if (rawText.includes("lefke") || (lng < 32.90)) {
+        kktcCity = "Lefke";
+      } else {
+        kktcCity = "Lefkoşa";
+      }
+
+      return {
+        countryName: "Kuzey Kıbrıs Türk Cumhuriyeti (KKTC)",
+        countryCode: "KKTC",
+        cityName: kktcCity,
+        districtName: address.suburb || address.town || undefined,
+      };
+    }
 
     // 1. Türkiye İçin Özel İl/İlçe Çözümlemesi
     if (countryCode === "TR") {
