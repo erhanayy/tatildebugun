@@ -37,6 +37,7 @@ Bu dokümanda projenin Git/GitHub süreçleri, repository bilgileri, dal (branch
 
 | Tarih | Commit Özeti | Dal (Branch) | Onaylayan | Notlar |
 | :--- | :--- | :--- | :--- | :--- |
+| 2026-10-30 | `feat: Tatildeyim canli tur rehberi, POI katalogu, zaman damgali gezi gunlugu, beyaz-sari yildiz derecelendirmesi ve Cloud Run canli yayin hazirligi eklendi` | `main` | Erhan Ayyıldız | Canlı tur rehberi (Tatildeyim), Wikidata POI kataloğu, Wikipedia fallback motoru, zaman damgalı gezi günlüğü, çift renkli yıldız puanlama (beyaz/sarı) ve tatilde.bugunai.com canlı dağıtım hazırlıkları işlendi. |
 | 2026-10-30 | `feat: KKTC egemenlik sinirlari, resmi bayrak karti, Turkce sehirleri ve cografi tersine kodlama korumasi eklendi` | `main` | Erhan Ayyıldız | Kullanıcının açık talimatı ile KKTC Yeşil Hat sınırı, resmi KKTC SVG bayrak kartı, Türkçe şehirler (Lefkoşa, Girne, Gazimağusa, Güzelyurt, İskele, Lefke) ve reverse geocoding koruması gönderildi. |
 | 2026-10-30 | `feat: TatildeBugun platformu tum mimari, harita, rota, sosyal ve eslesme modulleri ile baslatildi` (`7673494`) | `main` | Erhan Ayyıldız | Kullanıcının açık onayı ile `tatildebugun` reposu oluşturuldu; tüm kod tabanı, migrasyonlar ve analiz dokümanları gönderildi. |
 

@@ -18,6 +18,7 @@ import {
   MessageCircle,
   X,
   User,
+  Luggage,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/navigation/notification-bell";
@@ -63,17 +64,21 @@ export function AppHeader({ user }: AppHeaderProps) {
     },
     {
       href: "/feed",
-      label: "Gezgin Akışı",
+      label: "Gezgin Akışı & Rotalar",
       icon: Compass,
       active: pathname.startsWith("/feed"),
-      badge: "Yeni",
     },
     {
       href: "/match",
       label: "Gezgin Eşleşmesi (Radar)",
       icon: Radar,
       active: pathname.startsWith("/match"),
-      badge: "Radar",
+    },
+    {
+      href: "/tatildeyim",
+      label: "Tatildeyim (Tur Rehberim)",
+      icon: Luggage,
+      active: pathname.startsWith("/tatildeyim"),
     },
   ];
 
@@ -92,7 +97,7 @@ export function AppHeader({ user }: AppHeaderProps) {
               </span>
             </Link>
 
-            {/* Masaüstü Navigasyon Sekmeleri (Zarif İkon Butonları) */}
+            {/* Masaüstü Navigasyon Sekmeleri (Zarif İkon Butonları & Tooltip) */}
             <nav className="hidden md:flex items-center gap-1.5">
               {navLinks.map((link) => {
                 const Icon = link.icon;
@@ -100,7 +105,6 @@ export function AppHeader({ user }: AppHeaderProps) {
                   <Link
                     key={link.href}
                     href={link.href}
-                    title={link.label}
                     aria-label={link.label}
                     className={`p-2.5 rounded-xl transition-all relative flex items-center justify-center cursor-pointer group ${
                       link.active
@@ -109,11 +113,12 @@ export function AppHeader({ user }: AppHeaderProps) {
                     }`}
                   >
                     <Icon className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    {link.badge && (
-                      <span className="absolute -top-1 -right-1 px-1 rounded-full text-[8px] font-black bg-cyan-500 text-slate-950 uppercase tracking-wider">
-                        {link.badge}
-                      </span>
-                    )}
+
+                    {/* Zarif İpucu (Tooltip) */}
+                    <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
+                      {link.label}
+                      <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
+                    </span>
                   </Link>
                 );
               })}
@@ -126,11 +131,16 @@ export function AppHeader({ user }: AppHeaderProps) {
             <button
               type="button"
               onClick={() => setIsInviteModalOpen(true)}
-              className="p-2 rounded-xl text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center justify-center"
-              title="Arkadaşını Davet Et"
+              className="relative p-2 rounded-xl text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center justify-center group"
               aria-label="Arkadaşını Davet Et"
             >
-              <UserPlus className="w-5 h-5" />
+              <UserPlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
+
+              {/* Tooltip */}
+              <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
+                Arkadaşını Davet Et 🎁
+                <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
+              </span>
             </button>
 
             {/* Bildirim Çanı & Rozeti */}
@@ -142,24 +152,34 @@ export function AppHeader({ user }: AppHeaderProps) {
             {/* Kullanıcı Profili Bağlantısı (Kompakt Avatar) */}
             <Link
               href="/profile"
-              className="p-1 rounded-xl hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition-all cursor-pointer group flex items-center"
-              title={`${user.name || "Gezgin"} (Profilim & Ayarlar)`}
+              className="relative p-1 rounded-xl hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition-all cursor-pointer group flex items-center"
               aria-label="Profilim & Ayarlar"
             >
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform">
                 {user.name ? user.name.slice(0, 2).toUpperCase() : "🌴"}
               </div>
+
+              {/* Tooltip */}
+              <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
+                {user.name || "Gezgin"} (Profilim & Ayarlar)
+                <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
+              </span>
             </Link>
 
             {/* Çıkış Yap (Kompakt İkon) */}
             <form action={logoutAction}>
               <button
                 type="submit"
-                className="p-2 rounded-xl text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 transition-colors cursor-pointer flex items-center justify-center"
-                title="Çıkış Yap"
-                aria-label="Çıkış Yap"
+                className="relative p-2 rounded-xl text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 transition-colors cursor-pointer flex items-center justify-center group"
+                aria-label="Güvenli Çıkış Yap"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
+
+                {/* Tooltip (Sağ sınıra taşmaması için sağa hizalı) */}
+                <span className="absolute top-full mt-2.5 right-0 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
+                  Güvenli Çıkış Yap
+                  <span className="absolute -top-1 right-3 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
+                </span>
               </button>
             </form>
           </div>

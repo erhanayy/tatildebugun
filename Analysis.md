@@ -1305,6 +1305,348 @@ Leaflet harita motorunda haritanın istenen bölgesini özelleştirmek ve üzeri
 - **Turbopack Build (`npm run build`):** 7.3 saniyede tüm 14 rota hatasız derlendi (Exit code 0).
 - **GitHub & Deployment:** Kural 2 ve Kural 3 uyarınca otomatik gönderim ve dağıtım yapılmamıştır.
 
+---
+
+## 27. Üst Menü Sadeleştirme ve Zengin İpucu (Tooltip) Sistemi Mimarisi
+
+### 27.1. Problem ve Kullanıcı İhtiyacı
+- **Mevcut Durum:** Üst gezinti çubuğunda (Header Navbar) seyahat akışı ve radar simgelerinin üzerinde "YENİ" ve "RADAR" yazılı parlak rozetler (badge) yer almaktadır. Bu durum görsel kalabalık oluşturmakta ve ikonların minimalist şıklığını gölgelemektedir.
+- **Kullanıcı Geri Bildirimi:** *"Üstteki menüde Yeni ve Radar yazmasına gerek yok ikonlar yeterli. Tabi tüm ikonların üzerine gelince adı gözüksün ona ne deniyordu tam hatırlayamadım"*
+- **Kavram:** Kullanıcının hatırlamaya çalıştığı bu arayüz bileşenine **Tooltip (İpucu Baloncuğu)** denir.
+- **Beklenti:**
+  1. Menü ikonlarının tepesindeki "YENİ" ve "RADAR" metin rozetleri tamamen kaldırılmalı, yalnızca yalın ve şık ikonlar kalmalıdır.
+  2. Tarayıcının varsayılan, gecikmeli ve ilkel `title` niteliği yerine; farenin ikon üzerine gelmesiyle (hover) anında ve akıcı bir mikro animasyonla beliren modern, koyu temalı bir **Tooltip (İpucu)** sistemi tüm butonlara entegre edilmelidir.
+
+### 27.2. Tasarlanan Mimari ve Arayüz Çözümü
+
+#### 1. Rozetlerin (Badge) Kaldırılması:
+- `components/navigation/app-header.tsx` içerisindeki `navLinks` tanımlarından `badge: "Yeni"` ve `badge: "Radar"` özellikleri temizlenir.
+- İkonlar sade, modern ve simetrik bir görünüme kavuşturulur.
+
+#### 2. Modern Tooltip (İpucu) Bileşeni Tasarımı:
+- **Konumlandırma:** İkonun alt merkezinde (`top-full mt-2.5 left-1/2 -translate-x-1/2 z-50`), küçük bir üçgen ok (caret) ile ikonla bağ kuran yapı.
+- **Görsel Tasarım:**
+  - Zemin: Koyu füme/gece mavisi glassmorphism (`bg-slate-900/95 backdrop-blur-md border border-slate-700/80 shadow-2xl`).
+  - Tipografi: `text-xs font-semibold text-slate-100 whitespace-nowrap px-2.5 py-1 rounded-lg`.
+  - Mikro Animasyon: CSS transition ile `opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-150`.
+- **Uygulanacak İkonlar:**
+  1. 🌐 **Dünya Haritam** (`/dashboard`)
+  2. 🧭 **Gezgin Akışı & Rotalar** (`/feed`)
+  3. 📡 **Gezgin Eşleşmesi (Radar)** (`/match`)
+  4. 👥 **Arkadaşını Davet Et** (Modal açıcı)
+  5. 🔔 **Bildirimler** (Açılır bildirim zili)
+  6. 💬 **Gezgin Sohbeti** (`/messages`)
+  7. 👤 **Profilim & Ayarlar** (`/profile`)
+  8. 🚪 **Çıkış Yap** (Oturum kapatma)
+
+### 27.3. Uygulanan Geliştirmeler ve Kalite Kapısı Doğrulaması (Kural 1, 4, 12)
+1. **Rozetlerin Temizlenmesi ([components/navigation/app-header.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/app-header.tsx)):**
+   - Gezgin Akışı üzerindeki `YENİ` ve Gezgin Eşleşmesi üzerindeki `RADAR` rozetleri kaldırıldı.
+   - İkonlar Dünya Haritası simgesiyle aynı hizaya ve yalınlığa getirildi.
+2. **Karanlık Glassmorphism Tooltip Sistemi:**
+   - [components/navigation/app-header.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/app-header.tsx): Dünya Haritam, Gezgin Akışı & Rotalar, Gezgin Eşleşmesi (Radar), Arkadaşını Davet Et 🎁, Profilim & Ayarlar ve Güvenli Çıkış Yap butonlarına uygulandı.
+   - [components/navigation/notification-bell.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/notification-bell.tsx): Bildirim zili üzerine gelindiğinde ok işaretli dinamik tooltip (`Bildirimler (2 yeni)`) eklendi; bildirim dropdown'ı açıldığında çakışmayı önlemek için otomatik gizlendi.
+   - [components/navigation/chat-badge.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/chat-badge.tsx): Gezgin Sohbeti ikonu üzerine gelindiğinde `Gezgin Sohbeti` ve varsa yeni mesaj sayısını içeren şık tooltip eklendi.
+3. **Kalite Kapısı (Kural 12):**
+   - `npx tsc --noEmit`: 0 hata.
+   - `npm run build`: Turbopack ile tüm 14 rota 6.8 saniyede başarıyla derlendi (Exit code 0).
+   - Canlı tarayıcı testinde kaldırılan rozetler ve hover ipuçları doğrulandı.
+
+---
+
+## 28. Şehir Bazlı Turistik Noktalar (Points of Interest - POI) ve Görülen Yerleri İşaretleme Mimarisi Analizi
+
+### 28.1. Problem ve Kullanıcı İhtiyacı
+- **Kullanıcı Sorusu / Beklenti:**
+  > *"Gidilen bu şehirlerdeki turistik yerlerin listesini bir yerden alabilir miyiz? Böylece artık gittiğim yerlerde gördüğüm yerleri de işaretleyebileyim. Tüm ülke ve şehirler için bunları alabileceğimiz bir yer var mı? Geliştirme yapma analiz yapıyoruz"*
+- **Amaç:** Gezginlerin yalnızca "Paris'e veya Roma'ya gittim" demekle kalmayıp, o şehirdeki ikonik simge yapıları, müzeleri, tarihi anıtları ve popüler gezi noktalarını (örn. Eyfel Kulesi, Louvre Müzesi, Kolezyum, Galata Kulesi, Selimiye Camii vb.) kontrol listesi (checklist / bucket list) şeklinde tek tek işaretleyebilmesini sağlamak.
+
+---
+
+### 28.2. Küresel Açık Veri ve API Kaynaklarının Karşılaştırmalı Analizi
+
+Tüm dünyadaki şehirlerin turistik ve tarihi yerlerini çekebileceğimiz 5 temel kaynak ve teknik özellikleri:
+
+| Veri Kaynağı | Kapsam & Çeşitlilik | Maliyet & Kota | Güvenilirlik & Hız | Avantajlar | Dezavantajlar |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. OpenTripMap API** | Küresel (Tüm dünya şehirleri) | Ücretsiz (1.000 istek/gün) | Yüksek (Özel Turizm API'si) | OSM + Wikipedia harmanı; popülerlik puanı (`rate: 1-3`) var; kategorilere ayrılmış (`cultural`, `historic`, `natural`). | Günde 1.000 sorgu sınırı; yüksek trafikte önbellek (cache) zorunlu. |
+| **2. Wikidata & Wikipedia API** | Küresel (Milyonlarca madde) | %100 Ücretsiz & Sınırsız | Orta-Yüksek (Wikimedia CDN) | **Türkçe adlar**, görsel (Wikimedia Commons), koordinatlar ve özet açıklamalar doğrudan hazır. | SPARQL ve GeoSearch sorguları karmaşık; önemsiz maddeleri elemek için kategori filtresi gerekir. |
+| **3. OpenStreetMap (Overpass API)** | Dünyanın en detaylı POI haritası | %100 Ücretsiz | Düşük-Orta (Kamu sunucuları yoğun saatlerde 502/timeout verebilir) | Her anıt, müze, kale, manzara noktası kayıtlı (`tourism=attraction`). | Aşırı ayrıntılı (sokak heykelleri, çeşmeler vb. gürültü yaratır); canlı sorgu yerine periyodik aktarım gerekir. |
+| **4. Google Places API** | En güncel, yorumlu ve fotoğraflı | Ücretli ($17-$32 / 1000 istek) | Çok Yüksek (Google Altyapısı) | Zengin fotoğraflar, çalışma saatleri, puanlar. | Yüksek maliyet; ücretsiz kota tükendiğinde doğrudan faturalandırma. |
+| **5. Hibrit Model (Önbellekli Çekirdek Set + Dinamik Keşif)** | Popüler 200+ Şehir Çekirdek Seti + İhtiyaç Anında Canlı Çekim | Sıfır Maliyet | Anlık & 0 Gecikme | Temiz, kürate edilmiş, hatasız Türkçe ikonik yerler; yeni şehirler açıldıkça otomatik veritabanına eklenir. | İlk kurulumda popüler noktaların tohumlanması (seeding) gerekir. |
+
+---
+
+### 28.3. Önerilen En İyi Mimari Yaklaşım: "Akıllı Hibrit POI Sistemi"
+
+Kullanıcı deneyimini (UX) en üst seviyeye çıkarmak ve sıfır harici API bağımlılığı/gecikmesi sağlamak için **3 Katmanlı Hibrit Mimari** önerilmektedir:
+
+#### 1. Veritabanı Şeması (Google Cloud SQL PostgreSQL & Drizzle ORM):
+```ts
+// 1. Turistik Noktalar Kataloğu (Genel Havuz)
+export const placesOfInterest = pgTable("places_of_interest", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  countryCode: varchar("country_code", { length: 10 }).notNull(),
+  cityName: varchar("city_name", { length: 100 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),           // Örn: "Eyfel Kulesi"
+  category: varchar("category", { length: 50 }).notNull(),   // "monument", "museum", "historic", "nature", "view"
+  imageUrl: text("image_url"),                               // Örnek fotoğraf
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  popularityScore: integer("popularity_score").default(1),    // 1-5 yıldız popülerlik
+  isCurated: boolean("is_curated").default(true),             // Sistem tarafından onaylı mı?
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 2. Kullanıcının Gördüğü Yerler (Kişisel İşaretlemeler)
+export const userVisitedPlaces = pgTable("user_visited_places", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  placeId: uuid("place_id").references(() => placesOfInterest.id, { onDelete: "cascade" }).notNull(),
+  visitId: uuid("visit_id").references(() => visits.id, { onDelete: "set null" }),
+  visitedAt: timestamp("visited_at"),
+  userRating: integer("user_rating"),                         // 1-5 puan
+  userNote: text("user_note"),                                // "Sabah erken gitmek gerek, sıra çoktu"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+```
+
+#### 2. Şehir Açıldığında Akıllı Yükleme Akışı (On-Demand Fetch & Cache):
+1. **Veritabanı Kontrolü:** Kullanıcı bir şehri (örn. *Barselona* veya *Girne*) açtığında, sistem önce yerel `places_of_interest` tablosuna bakar.
+2. **Kayıt Varsa:** Anında (10-20 ms) yerel veritabanından en popüler 10-20 turistik yer listelenir.
+3. **Kayıt Yoksa (Yeni/Egzotik Şehir):**
+   - Sunucu tarafında (Server Action) ücretsiz **OpenTripMap / Wikidata** API'sine o şehrin koordinatlarıyla bir kez istek atılır.
+   - En popüler 10-15 turistik nokta çekilip yerel veritabanına otomatik kaydedilir.
+   - Bundan sonra o şehre giren hiçbir kullanıcı için dış API çağrısı yapılmaz (sonsuz önbellek & sıfır maliyet).
+4. **Kullanıcı Katkısı (Topluluk Gücü):** Kullanıcı listede olmayan özel bir yeri (örn: "Karaköy Balıkçısı", "Girne Batık Gemi Müzesi") tek tıkla listeye ekleyebilir. Bu sayede platform zamanla dünyanın en zengin Türkçe gezi rehberine dönüşür.
+
+---
+
+### 28.4. Kullanıcı Arayüzü (Gezgin Deneyimi ve Gezi Karnesi)
+
+Kullanıcı haritada bir şehre veya seyahat kartına tıkladığında açılacak **"Görülecek Yerler & İkonik Noktalar"** modülü:
+
+1. **Gezgin Kontrol Listesi (Checklist):**
+   - Şehirdeki yerler görsel kartlar veya temiz bir liste halinde sunulur:
+     - `[✓] Eyfel Kulesi` *(Gördüm)*
+     - `[✓] Louvre Müzesi` *(Gördüm)*
+     - `[ ] Zafer Takı` *(Görmedim)*
+     - `[ ] Sacré-Cœur` *(Görmedim)*
+2. **Şehir Keşif İlerlemesi (Gamification & Yüzde Göstergesi):**
+   - *"Paris'in %50'sini keşfettiniz! (5/10 İkonik Nokta) 🏆"*
+   - İlerleme çubuğu ile gezginin motivasyonu artırılır.
+3. **Rozetler ve Pasaport Başarımları:**
+   - Örn: "Dünya Müzeleri Avcısı (10+ dünya müzesi ziyaret edildi)", "Antik Kent Kaşifi (5+ antik kent)".
+4. **Sosyal Akışta Paylaşım:**
+   - Gezgin bir şehirde gördüğü yerleri işaretlediğinde akışta şık bir özet paylaşılabilir:
+     > *"Erhan Ayyıldız, Roma seyahatinde 7 ikonik noktayı (Kolezyum, Trevi, Pantheon...) tamamladı! 🏛️"*
+
+---
+
+### 28.5. Sonuç ve Özet Değerlendirme
+- **Cevap:** Evet! Tüm dünya ülkeleri ve şehirleri için turistik yerleri alabileceğimiz hazır, açık kaynaklı ve ücretsiz veri kaynakları (OpenTripMap, Wikidata/Wikipedia) mevcuttur.
+- **En Doğru Strateji:** Dış servisleri her seferinde canlı çağırmak yerine; **Akıllı Hibrit Model** ile çekirdek popüler yerleri veritabanımızda tutmak, yeni ziyaret edilen yerleri ise arka planda OpenTripMap/Wikidata'dan çekip veritabanına otomatik doldurmaktır. Bu yöntem sıfır maliyet, anlık açılış hızı ve kesintisiz çalışma garantisi sağlar.
+
+---
+
+## 29. "Tatildeyim" Canlı Tur Rehberi, Zaman Damgalı Gezi Günlüğü (Timeline) ve Özel Mekan Ekleme Mimarisi Analizi
+
+### 29.1. Problem ve Kullanıcı İhtiyacı
+- **Kullanıcı Talebi / Senaryo:**
+  > *"Harika şimdi şöyle bir ekran hayal etsek: Ben Turumu planladım, tur zamanı geldi. Bir tane yeni ekran hayal ediyorum, üstte logosu var. Giriyorum orada turum geliyor. Sağdan ikonu var tıklıyorum, tüm o şehirdeki turistik yerlerin adları geliyor. Gördüklerime tik atıyorum. Tik attıklarım kaydediliyor, hatta tik attığım tarih ve saat de arkada loglanıyor. Çünkü ileride bu Tatilim üzerine baktığımda tarih ve saat sırasıyla 'şuraya gittiniz ardından buraya gittiniz' diye gösterecek bana. API'den gelen ID'yi de tutması önemli, belki ileride o ID ile eşleştirilmiş analizler yapma imkanı da olur. Analize devam, varsa soruların sor. Bir de hatta elle Cafe, Shop ekleme alanı da olsun. 'Şu Cafeye gittim' gibi."*
+
+- **Temel Hedefler:**
+  1. **Yeni Üst Menü Ekranı ("Tatildeyim" / "Aktif Tur Rehberi" - `/active-trip` veya `/turum`):** Gezgin seyahatteyken doğrudan cebinden/ekranından aktif turunu, o anki durağını ve sıradaki şehirlerini gördüğü operasyonel bir seyahat kokpiti.
+  2. **Şehir İkonuna Tıklayınca Açılan Turistik Yerler Paneli (Drawer / Modal):** O duraktaki popüler turistik yerlerin listelenmesi ve tek dokunuşla `[✓ Gördüm]` işaretlenmesi.
+  3. **Milimetrik Zaman Damgası (`visited_at` Timestamp):** Her tik atıldığında o anki gerçek tarih-saat (`YYYY-MM-DD HH:mm:ss`) kaydedilir. Böylece seyahat bittiğinde otomatik bir **"Seyahat Zaman Çizelgesi (Travel Timeline)"** üretilir.
+  4. **Harici API ID Saklama (`external_api_id`):** Wikidata (`QID: Q243`) veya OpenTripMap (`XID: R12345`) ID'si saklanarak ileride küresel veri analizlerine, yapay zeka önerilerine ve zengin ansiklopedik detaylara zemin hazırlanması.
+  5. **Serbest Mekan / Kafe / Dükkan Ekleme (Custom POI):** Sadece tarihi anıtlar değil; gezginin mola verdiği kahveci, alışveriş yaptığı butik dükkan, tatlıcı vb. mekanları da kategori seçerek (`cafe`, `shop`, `restaurant`, `bar`, `activity`) günlüğüne işleyebilmesi.
+
+---
+
+### 29.2. Veritabanı ve Şema Mimarisi (Google Cloud SQL PostgreSQL & Drizzle ORM)
+
+Mevcut `trips` ve `trip_stops` tablolarımızla tam entegre çalışacak 2 yeni tablo tasarlanmıştır:
+
+```ts
+// 1. Turistik ve Özel Mekanlar Kataloğu (Hibrit POI Havuzu)
+export const placesOfInterest = pgTable("places_of_interest", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  externalApiId: varchar("external_api_id", { length: 100 }), // Wikidata QID (örn: "Q243") veya OpenTripMap XID
+  apiSource: varchar("api_source", { length: 50 }).default("wikidata"), // "wikidata", "opentripmap", "custom_user"
+  countryCode: varchar("country_code", { length: 10 }).notNull(),
+  cityName: varchar("city_name", { length: 100 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),             // Örn: "Eyfel Kulesi" veya "Café de Flore"
+  category: varchar("category", { length: 50 }).notNull(),     // "monument", "museum", "historic", "cafe", "restaurant", "shop", "nature", "view"
+  description: text("description"),                             // Kısa özet veya kullanıcı açıklaması
+  imageUrl: text("image_url"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  isCustom: boolean("is_custom").default(false),               // Kullanıcı tarafından elle mi eklendi?
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 2. Tur Günlüğü ve Zaman Damgalı Durak Ziyaretleri (Travel Timeline Events)
+export const tripPlaceVisits = pgTable("trip_place_visits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tripId: uuid("trip_id").references(() => trips.id, { onDelete: "cascade" }).notNull(),
+  stopId: uuid("stop_id").references(() => tripStops.id, { onDelete: "set null" }), // Hangi durakta ziyaret edildi?
+  placeId: uuid("place_id").references(() => placesOfInterest.id, { onDelete: "cascade" }).notNull(),
+  visitedAt: timestamp("visited_at").defaultNow().notNull(),    // Tıklandığı anın tam tarih ve saati
+  notes: text("notes"),                                         // Kullanıcının o anki özel notu
+  userRating: integer("user_rating"),                           // 1-5 puan
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+```
+
+---
+
+### 29.3. Yeni Ekran ("Tatildeyim" / Canlı Gezi Kokpiti) Tasarım Detayları
+
+#### 1. Üst Menü Butonu (Navbar):
+- İkon: 🧳 (`Luggage` / Bavul İkonu) veya 🌴 (`Palmtree`)
+- Tooltip: **"Tatildeyim (Aktif Tur Rehberim)"**
+- Tıklandığında: `/tatildeyim` sayfasına yönlendirilir.
+
+#### 2. Ekranın İçeriği (Gezgin Kokpiti):
+- **Aktif Tur Kartı:**
+  - Tur Adı: *"Büyük Avrupa Turu ✈️"*
+  - Durum: *Devam Ediyor (3. Gün / Paris Durağı)*
+  - Şehir Akışı: `[İstanbul 🇹🇷] ➔ [Paris 🇫🇷 (Şu An)] ➔ [Roma 🇮🇹] ➔ [Viyana 🇦🇹]`
+- **Şehir Kartı ve Turistik Yerler İkonu (Akordeon Liste Yapısı):**
+  - Kullanıcı tercihi doğrultusunda: Şehir kartının sağındaki ikona tıklandığında, **şehir kartının hemen altında pürüzsüzce genişleyen Akordeon (Açılır/Kapanır Liste)** görünümü kullanılır.
+- **Akordeon İçeriği (Şehir Keşif Paneli):**
+  - **1. Canlı Arama ve Hızlı Filtreleme Çubuğu (Search Bar):**
+    - Akordeonun en üstünde şık bir arama kutusu yer alır:
+      `🔍 Mekan veya turistik yer ara... (örn: Kol, Eyf, Müze)`
+    - İlk 2-3 karakter yazıldığı an (`searchTerm.length >= 2`), liste anında harf duyarsız ve Türkçe karakter uyumlu olarak filtrelenir.
+  - **2. Büyütecin Yanında Ziyaret Durumu Filtresi (Keşif Durumu Segmenti):**
+    - Arama çubuğunun hemen yanında/altında gezginin o anki ihtiyacına göre geçiş yapabileceği 3 durum düğmesi:
+      - `[ Tümü (20) ]` : Tüm yerleri listeler.
+      - `[ ⏳ Görülmeyenler (14) ]` *(Sarı Vurgulu)* : Şehirde gezerken *"Atladığımız veya henüz görmediğimiz neresi kaldı?"* diye bakmak için doğrudan görülmemiş yerleri listeler.
+      - `[ ✓ Görülenler (6) ]` *(Yeşil Vurgulu)* : Şimdiye kadar nerelere gidildiğini özet görmek için sadece tik atılan yerleri listeler.
+  - **3. Kategori Filtreleri:** `Tümü | 🏛️ Tarihi & Müze | ☕ Kafe & Yeme-İçme | 🛍️ Alışveriş & Butik`
+  - **4. Renk Kodlu Mekan Kartları ve 5 Yıldızlı Puanlama:**
+    - **Yeşil Kartlar (Görülen Yerler):**
+      - Zümrüt Yeşili tema (`border-emerald-500/40 bg-emerald-950/20 text-emerald-400`).
+      - `[✓] Louvre Müzesi` *(Bugün 10:45'te işaretlendi)* ✏️ *(Zamanı Düzenle)*
+      - **Hemen Altında İnteraktif 5 Yıldız Seçimi:** `⭐⭐⭐⭐⭐` (Kullanıcı dilerse tıklar: 1-5 yıldız verir).
+    - **Sarı Kartlar (Henüz Görülmeyen Yerler / Gezilmeyi Bekleyenler):**
+      - Sıcak Kehribar Sarısı tema (`border-amber-500/40 bg-amber-950/20 text-amber-300`).
+      - `[ ] Kolezyum` *(Gezilmeyi bekliyor; tek dokunuşla tik atılır ve anında yeşile döner)*
+  - **5. Zaman Damgası Yönetimi:**
+    - Tik atıldığı an o anki saat (örn: 14:15) otomatik olarak atanır.
+    - Kullanıcı dilerse yanındaki küçük kalem ✏️ simgesine tıklayarak saati/tarihi geriye dönük düzeltebilir ("Aslında 11:30'da gitmiştim").
+  - **6. "+ Özel Mekan Ekle" Butonu:**
+    - Akordeon içinde pratik form: Mekan Adı (örn: *Le Petit Vintage*), Kategori (Kafe/Shop), Not (İsteğe bağlı), Başlangıç Yıldızı.
+    - Kaydet dendiğinde hem veritabanına eklenir hem de o anki saatle gezgin günlüğüne işlenir.
+
+
+---
+
+### 29.4. Geleceğe Yatırım: "Seyahat Zaman Tüneli (Travel Timeline Story)"
+
+Tik atılan her yer `visited_at` zaman damgası ve `user_rating` puanıyla saklandığı için, tur bittiğinde gezgine sunulacak harika özellikler:
+
+1. **Kronolojik Seyahat Hikayesi ve Yıldızlı Özet:**
+   - *14 Mayıs 2026, Çarşamba (Paris):*
+     - `10:15` 🏛️ **Louvre Müzesi** gezildi — `⭐⭐⭐⭐⭐` (5 Yıldız)
+     - `13:30` ☕ **Café de Flore** mola verildi — `⭐⭐⭐⭐` (4 Yıldız)
+     - `15:45` 🗼 **Eyfel Kulesi** zirveye çıkıldı — `⭐⭐⭐⭐⭐` (5 Yıldız)
+     - `19:00` 🛍️ **Champs-Élysées** butikleri turladı — `⭐⭐⭐` (3 Yıldız)
+2. **Kişisel Favoriler Listesi:**
+   - Gezgin ileride profilinde *"Roma'da En Beğendiğim 5 Yıldızlı Yerler"* veya *"Paris'in En İyi Kafeleri"* şeklinde kendi kürasyonunu filtreleyebilir.
+3. **Fotoğraf Albümü ve Anı Kitabı Entegrasyonu:**
+   - Gezgin ileride bu zaman damgalı durakların altına çektiği fotoğrafları ekleyebilir.
+4. **API ID Sayesinde Akıllı Öneriler:**
+   - `externalApiId` sayesinde sistem şunu bilecek: *"Eyfel Kulesi'ni ziyaret ettiniz. Yanındaki Champ de Mars parkına ve Seine Nehri tekne turuna sadece 300 metre mesafedesiniz!"*
+
+---
+
+## 30. "Tatildeyim" Canlı Tur Rehberi, Zaman Damgalı Gezi Günlüğü ve 5 Yıldızlı Puanlama Geliştirmesi (Uygulama Raporu)
+
+### 30.1. Veritabanı Şeması ve Geri Alma (Rollback) Güvencesi (Kural 8 & Kural 10)
+1. **Google Cloud SQL PostgreSQL Şema Genişletmesi (`lib/db/schema.ts`):**
+   - `placesOfInterest`: Şehir bazlı turistik ve özel mekanlar (id, externalApiId, apiSource: 'wikidata'|'opentripmap'|'custom_user', countryCode, cityName, name, category, description, imageUrl, latitude, longitude, isCustom, createdByUserId).
+   - `tripPlaceVisits`: Kullanıcının tur esnasında gördüğü yerler ve zaman damgalı gezi günlüğü (id, userId, tripId, stopId, placeId, visitedAt: defaultNow, notes, userRating: 1..5).
+   - İndeksler: `places_city_idx`, `places_external_api_idx`, `trip_visits_user_trip_idx`, `trip_visits_place_idx`, `trip_visits_timeline_idx`.
+2. **Cloud SQL Uygulaması:** `npx drizzle-kit push` komutu çalıştırılarak tablolar ve indeksler Google Cloud SQL üzerindeki canlı PostgreSQL veritabanına sorunsuz uygulandı.
+3. **Rollback Scripti (`scripts/rollback_places_and_visits.sql`):** Kural 8 gereğince olası bir geri alma durumunda veritabanını önceki stabil haline döndürecek DROP TABLE / INDEX scripti hazırlandı.
+
+### 30.2. Çekirdek POI Kataloğu ve Hibrit Veri Motoru (`lib/poi-data.ts` & `lib/actions/places.ts`)
+- Paris, Roma, İstanbul, Lefkoşa, Girne, Viyana, Londra, Lyon, Barselona vb. popüler şehirler için doğrulanmış Wikidata QID'leri, kategorileri ve Türkçe isimleriyle zengin çekirdek veri kataloğu oluşturuldu.
+- Egzotik/yeni şehirler için Wikipedia GeoSearch API yedekleme (fallback) mekanizması entegre edildi. Çekilen yerler anında Cloud SQL'e kaydedilerek sıfır gecikmeli kalıcı önbelleğe alınmaktadır.
+
+### 30.3. Server Actions ve Katı Tip Doğrulaması (Kural 10)
+- `getCityPlaces`: Şehrin tüm turistik yerlerini, kullanıcının o turdaki ziyaret durumunu, ziyaret zamanını (`visitedAt`) ve 5 yıldızlı puanını birleştirerek döner.
+- `togglePlaceVisit`: Mekana tik atıldığında o anki tam tarih ve saati (`visitedAt = new Date()`) ve varsayılan 5 yıldızı kaydeder; tik kaldırıldığında ziyareti siler.
+- `updatePlaceVisit`: Zaman damgasını (kalem ✏️ ile geriye/ileriye dönük) ve 5 yıldızlı puanı günceller.
+- `createCustomPlace`: Gezginin mola verdiği kafe, restoran, butik veya dükkanı sisteme ekler ve anında o tura "görüldü" olarak işler.
+- `getUserTripsForGuide` & `getTripGuideDetails`: Kullanıcının turlarını, şehir duraklarını ve kronolojik "Zaman Tüneli (Timeline)" hikayesini çeker.
+
+### 30.4. Kullanıcı Deneyimi ve Arayüz Tasarımı (`components/places/`)
+1. **Şehir Akordeonu (`city-places-accordion.tsx`):**
+   - Şehir kartının hemen altında açılan, ekranı bölmeyen pürüzsüz akordeon.
+   - **Canlı Arama Çubuğu:** İlk 2-3 harf girildiğinde (`searchTerm.length >= 2`) anında Türkçe karakter uyumlu filtreleme.
+   - **Keşif Durumu Segment Filtresi:**
+     - `[ Tümü ]`
+     - `[ ⏳ Görülmeyenler ]` (Sarı rozet — Şehirde atlanan yerleri tek bakışta yakalamak için)
+     - `[ ✓ Görülenler ]` (Zümrüt yeşili rozet)
+   - **Renk Kodlu Mekan Kartları:**
+     - Görülen Yerler: Zümrüt Yeşili zemin ve kenarlık (`border-emerald-500/40 bg-emerald-950/20`), tik simgesi, ziyaret saati etiketi (örn: `11:45`), zaman düzenleme kalemi (✏️) ve **hemen altında interaktif 5 yıldız seçimi (`⭐⭐⭐⭐⭐`)**.
+     - Henüz Görülmeyen Yerler: Kehribar Sarısı zemin ve kenarlık (`border-amber-500/40 bg-amber-950/20`), boş daire simgesi.
+   - **Özel Mekan Ekleme Modalı:** Kafe, dükkan, restoran ekleme, ilk puanı ve notu belirleme formu.
+2. **Gezgin Kokpiti & Zaman Tüneli (`tatildeyim-view.tsx` & `app/tatildeyim/page.tsx`):**
+   - Tur seçici, şehir durakları ilerleme çubuğu ve durak kartları.
+   - **Zaman Tüneli (Travel Timeline):** Ziyaret edilen yerlerin saat sırasına göre dizildiği, yıldız puanlarının ve notlarının yer aldığı kronolojik seyahat günlüğü.
+3. **Üst Menü Navigasyonu (`components/navigation/app-header.tsx`):**
+   - 🧳 Bavul ikonu ve zengin tooltip: *"Tatildeyim (Tur Rehberim)"*.
+
+### 30.5. Kalite Kapısı ve Canlı Test Doğrulaması (Kural 12)
+- **TypeScript Katı Tip Denetimi (`npx tsc --noEmit`):** 0 Hata ile tamamlandı.
+- **Turbopack Derlemesi (`npm run build`):** Tüm 15 rota 8.1 saniyede başarıyla derlendi (`├ ƒ /tatildeyim`).
+- **Canlı Tarayıcı Testi:**
+  - `erhanayyildiz@gmail.com` oturumuyla Paris Turu test edildi.
+  - Louvre Müzesi'ne tik atıldı ➔ Anında zümrüt yeşiline döndü, saat damgası işlendi (`11:45`), 5 yıldız verildi.
+  - "Görülmeyenler" filtresi seçildi ➔ Görülen Louvre Müzesi listeden gizlendi, gezilecek diğer yerler gösterildi.
+  - Arama kutusuna "Eyf" yazıldı ➔ Anında Eyfel Kulesi filtrelendi.
+- **Kural 2 Uyarınca:** GitHub'a otomatik push yapılmamıştır.
+
+### 30.6. İnteraktif Yıldız Derecelendirmesi Kontrast ve UX İyileştirmesi (Beyaz & Sarı Yıldız Modeli)
+1. **Sorun ve Kullanıcı Geri Bildirimi:**
+   - *"Seçilmemiş yıldızlar beyaz olsa, seçilince sarı olsa. Böyle anlaşılmıyor seçip seçmediğim."*
+   - Önceki yapıda bir mekan tiklendiğinde otomatik olarak 5 yıldız atanmakta ve 5 yıldız birden sarıya dönmekteydi. Seçilmemiş yıldızlar ise `text-slate-600` (koyu füme) stilinde olduğu için koyu yeşil/mavi zeminde kaybolmakta, kullanıcının puan verip vermediği anlaşılamamaktaydı.
+2. **Uygulanan Çözüm ve Görsel Hiyerarşi:**
+   - **Seçilmemiş Yıldızlar (Beyaz):** Parlak beyaz dış çizgi ve yarı saydam beyaz iç dolgu (`text-white fill-white/15 stroke-[1.75]`) ile koyu kart zemininde kusursuz kontrast sağlandı.
+   - **Seçilmiş Yıldızlar (Altın Sarısı):** Sıcak ve ışıltılı sarı dolgu (`text-amber-400 fill-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]`) ile seçilmiş yıldızlar anında fark edilir hale getirildi.
+   - **Varsayılan Puan Mantığı:** Mekan yeni tiklendiğinde otomatik 5 yıldız ataması kaldırıldı. Kullanıcı puan verene kadar `(Puan Seç)` etiketi ve 5 beyaz yıldız gösterilir.
+   - **Canlı Önizleme (Hover Preview):** Fare yıldızların üzerinde gezdirildiğinde yıldızlar anlık olarak sarıya dönerek interaktif bir dokunuş hissi kazandırıldı.
+   - **Puan Sıfırlama (Toggle):** Seçili olan yıldıza tekrar tıklandığında puan kaldırılarak yeniden beyaz yıldızlara dönülebilmesi sağlandı.
+
+### 30.7. Yıldız Puanı Kalıcılığı ve `setPlaceRating` Doğrudan Eşleştirme Motoru
+1. **Sorun ve Kullanıcı Geri Bildirimi:**
+   - *"Yıldızlar ve renkleri geldi ama işaretleyemiyorum, tıklıyorum renkler doluyor ama kalmıyor, tekrar seçilmemiş gibi gözüküyor."*
+2. **Kök Neden Analizi:**
+   - `handleToggle` ile bir mekana yeni tik atıldığında sunucu `visitId` üretmesine rağmen yerel `places` state'indeki ilgili mekanın `visitId` alanı `null` kalıyordu.
+   - Kullanıcı ardından yıldıza bastığında `handleRatingChange` fonksiyonundaki `if (!place.visitId) return;` koruması çalışarak işlemi erken sonlandırıyor ve sunucuya hiçbir puan kaydı gönderemiyordu.
+   - Fare yıldız üzerindeyken `hoveredRatings` state'i aktif olduğu için sarı renk görünmekte, ancak tıklama işlenemediği için fare çekildiği anda (`onMouseLeave`) hover state silinip yıldızlar tekrar seçilmemiş (beyaz) hale dönmekteydi.
+3. **Uygulanan Mimari Çözüm:**
+   - **Doğrudan Rota-Mekan Eşleştirmesi (`setPlaceRating`):** `lib/actions/places.ts` içerisine `visitId` bağımlılığını tamamen ortadan kaldıran yeni bir server action kodlandı. Sadece `(tripId, placeId, userRating)` alarak kullanıcının o turdaki ziyaretini bulur ve puanı anında günceller.
+   - **Otomatik Ziyaret Açma:** Eğer kullanıcı henüz mekana tik atmadan doğrudan yıldıza tıklarsa, sistem mekanı otomatik olarak o an ziyaret edilmiş sayıp seçilen puanla birlikte kaydeder.
+   - **İyimser UI ve Kilitlenme:** Tıklama anında `places` state'i `userRating = newRating` olarak anında güncellenir ve `hoveredRatings` sıfırlanır; böylece fare başka yere çekildiğinde dahi seçilen yıldızlar sarı olarak kilitli kalır.
+   - `handleToggle` içerisine `action === "added"` ve `action === "removed"` durumları için `place.visitId` tam senkronizasyonu eklendi.
+
+
+
+
+
+
+
+
+
+
 
 
 

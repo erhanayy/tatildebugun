@@ -291,4 +291,65 @@ export const messages = pgTable(
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 
+// --- 11. Turistik ve Özel Mekanlar Kataloğu (Places of Interest - POI) ---
+export const placesOfInterest = pgTable(
+  "places_of_interest",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    externalApiId: varchar("external_api_id", { length: 100 }), // Wikidata QID veya OpenTripMap XID
+    apiSource: varchar("api_source", { length: 50 }).default("wikidata"), // 'wikidata' | 'opentripmap' | 'custom'
+    countryCode: varchar("country_code", { length: 10 }).notNull(),
+    cityName: varchar("city_name", { length: 100 }).notNull(),
+    name: varchar("name", { length: 200 }).notNull(),
+    category: varchar("category", { length: 50 }).default("monument").notNull(), // 'monument' | 'museum' | 'historic' | 'cafe' | 'restaurant' | 'shop' | 'nature' | 'view' | 'other'
+    description: text("description"),
+    imageUrl: text("image_url"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    isCustom: boolean("is_custom").default(false).notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    poiCityIdx: index("places_of_interest_city_idx").on(table.cityName, table.countryCode),
+    poiExternalIdx: index("places_of_interest_external_idx").on(table.externalApiId),
+    poiCategoryIdx: index("places_of_interest_category_idx").on(table.category),
+  })
+);
+
+export type PlaceOfInterest = typeof placesOfInterest.$inferSelect;
+export type NewPlaceOfInterest = typeof placesOfInterest.$inferInsert;
+
+// --- 12. Tur Gezi Günlüğü ve Zaman Damgalı Mekan Ziyaretleri (Trip Place Visits) ---
+export const tripPlaceVisits = pgTable(
+  "trip_place_visits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    tripId: uuid("trip_id")
+      .references(() => trips.id, { onDelete: "cascade" })
+      .notNull(),
+    stopId: uuid("stop_id").references(() => tripStops.id, { onDelete: "set null" }),
+    placeId: uuid("place_id")
+      .references(() => placesOfInterest.id, { onDelete: "cascade" })
+      .notNull(),
+    visitedAt: timestamp("visited_at").defaultNow().notNull(), // Tıklandığı anın tam zaman damgası
+    notes: text("notes"),
+    userRating: integer("user_rating"), // 1-5 yıldız puanlama
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    tpvUserTripIdx: index("trip_place_visits_user_trip_idx").on(table.userId, table.tripId),
+    tpvTripStopIdx: index("trip_place_visits_trip_stop_idx").on(table.tripId, table.stopId),
+    tpvPlaceIdx: index("trip_place_visits_place_idx").on(table.placeId),
+    tpvVisitedAtIdx: index("trip_place_visits_visited_at_idx").on(table.visitedAt),
+  })
+);
+
+export type TripPlaceVisit = typeof tripPlaceVisits.$inferSelect;
+export type NewTripPlaceVisit = typeof tripPlaceVisits.$inferInsert;
+
+
 
