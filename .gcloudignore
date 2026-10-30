@@ -1,0 +1,8 @@
+node_modules/
+.git/
+.next/
+.env
+.env.*
+env.secret.yaml
+sifreler.md
+*.log
