@@ -1664,7 +1664,12 @@ Tik atılan her yer `visited_at` zaman damgası ve `user_rating` puanıyla sakla
    - **Tür:** `CNAME`
    - **Host / İsim:** `tatilde`
    - **Hedef:** `ghs.googlehosted.com.`
-3. DNS kaydı yönlendirildiğinde Google Cloud SSL sertifikasını (Let's Encrypt / Google Trust Services) otomatik olarak üretecek ve `https://tatilde.bugunai.com` üzerinden servis vermeye başlayacaktır.
+3. **DNS ve SSL Durumu:**
+   - CNAME kaydı başarıyla eklendi ve doğrulandı (`tatilde.bugunai.com` ➔ `ghs.googlehosted.com.` / Google IP: `192.178.194.121`).
+   - Google Cloud Run `Ready: True`, `CertificateProvisioned: True` ve `DomainRoutable: True` durumuna geçti.
+   - Google Trust Services (WR3) tarafından yönetilen 3 aylık otomatik yenilenen SSL sertifikası devreye girdi.
+   - NextAuth reverse proxy oturum açma hatası (`UntrustedHost`) `auth.config.ts` (`trustHost: true`) ve Cloud Run ortam değişkeni (`AUTH_TRUST_HOST=true`) ile giderildi (`tatilde-bugun-00002-4qs`).
+   - `https://tatilde.bugunai.com` üzerinden güvenli HTTPS erişimi ve kullanıcı oturum açma akışları başarıyla doğrulandı.
 
 
 

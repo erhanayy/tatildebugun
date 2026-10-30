@@ -66,6 +66,6 @@ DNS yönetim panelinde (Cloudflare / Registrar) şu kayıt açılır:
 
 | Sürüm | Tarih | Ortam | Değişiklik Özeti | Durum |
 | :--- | :--- | :--- | :--- | :--- |
-| v1.0.0 | 2026-10-30 | Production (`tatilde.bugunai.com`) | Cloud Run üzerinde canlı yayına alma (`tatilde-bugun-00001-7bn`), Tatildeyim modülü ve tüm platform özellikleri | Canlıda (Başarılı - DNS CNAME Bekleniyor) |
+| v1.0.0 | 2026-10-30 | Production (`tatilde.bugunai.com`) | Cloud Run üzerinde canlı yayına alma (`tatilde-bugun-00002-4qs`), Google Trust Services SSL sertifikası, NextAuth trustHost yapılandırması ve Tatildeyim modülü | Canlıda & Aktif (100% Çalışır Durumda) |
 | v0.0.1 | 2026-10-29 | Planlama | Dağıtım altyapı dokümantasyonu oluşturuldu | Hazır |
 
