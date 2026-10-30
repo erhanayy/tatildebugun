@@ -1638,6 +1638,35 @@ Tik atılan her yer `visited_at` zaman damgası ve `user_rating` puanıyla sakla
    - **İyimser UI ve Kilitlenme:** Tıklama anında `places` state'i `userRating = newRating` olarak anında güncellenir ve `hoveredRatings` sıfırlanır; böylece fare başka yere çekildiğinde dahi seçilen yıldızlar sarı olarak kilitli kalır.
    - `handleToggle` içerisine `action === "added"` ve `action === "removed"` durumları için `place.visitId` tam senkronizasyonu eklendi.
 
+---
+
+## 31. Canlıya Çıkış (Production Deployment), Google Cloud Run ve `tatilde.bugunai.com` Entegrasyonu (Kural 1, 3, 5, 6, 12)
+
+### 31.1. Altyapı Kararı ve BurstaBugun Uyumu (Kural 5 & 6)
+- Kullanıcının açık izniyle `../BurstaBugun` projesinin canlı dağıtım mimarisi incelendi.
+- `dernekte.bugunai.com` ve `sirkette.bugunai.com` gibi diğer BugunAI platformlarıyla birebir uyumlu olacak şekilde:
+  - **Bulut Sağlayıcı:** Google Cloud Platform (GCP)
+  - **GCP Projesi:** `dernektebugun-492221`
+  - **Dağıtım Motoru:** Google Cloud Run (Bölge: `europe-west1`)
+  - **Veritabanı:** Google Cloud SQL (`Dernek-db-v2` - `34.38.207.47:5432`, `tatilde-bugun` veritabanı)
+
+### 31.2. Dağıtım ve Yayınlama Süreci (Kural 3 & 12)
+1. **Kalite Kapısı:** `npx tsc --noEmit` 0 hata; `npm run build` 13.7s ile tüm rotalar hatasız derlendi.
+2. **GitHub Senkronizasyonu (Kural 2):** Tüm yeni modüller, testler ve dokümanlar `origin main` dalına itildi (`7f0064c`).
+3. **Cloud Run Dağıtımı:** `tatilde-bugun` servisi `europe-west1` bölgesinde 1GiB bellek ve güvenli ortam değişkenleriyle (Cloud SQL bağlantısı, NextAuth, Resend e-posta motoru) yayına alındı.
+   - **Canlı Servis URL'i:** `https://tatilde-bugun-51645421078.europe-west1.run.app`
+   - **Test Sonucu:** HTTP 200 / 307 (NextAuth Güvenlikli Rota Yönlendirmeleri) başarıyla doğrulandı.
+
+### 31.3. Özel Alan Adı Eşlemesi (`tatilde.bugunai.com`)
+1. Cloud Run üzerinde alan adı eşlemesi oluşturuldu:
+   `gcloud beta run domain-mappings create --service tatilde-bugun --domain tatilde.bugunai.com`
+2. **Gereken DNS Kaydı:**
+   - **Tür:** `CNAME`
+   - **Host / İsim:** `tatilde`
+   - **Hedef:** `ghs.googlehosted.com.`
+3. DNS kaydı yönlendirildiğinde Google Cloud SSL sertifikasını (Let's Encrypt / Google Trust Services) otomatik olarak üretecek ve `https://tatilde.bugunai.com` üzerinden servis vermeye başlayacaktır.
+
+
 
 
 
