@@ -138,6 +138,7 @@ export async function createVisit(input: CreateVisitInput): Promise<{
     const inserted = await db.insert(visits).values(recordsToInsert).returning();
 
     revalidatePath("/dashboard");
+    revalidatePath("/tatildeyim");
     return {
       success: true,
       visit: inserted[0],
@@ -223,6 +224,7 @@ export async function updateVisit(
     }
 
     revalidatePath("/dashboard");
+    revalidatePath("/tatildeyim");
     return { success: true, visit: updated[0], visits: updated };
   } catch (error: any) {
     console.error("Ziyaret güncelleme hatası:", error);
@@ -248,6 +250,7 @@ export async function deleteVisit(visitId: string): Promise<{ success: boolean; 
       .where(and(eq(visits.id, visitId), eq(visits.userId, session.user.id)));
 
     revalidatePath("/dashboard");
+    revalidatePath("/tatildeyim");
     return { success: true };
   } catch (error) {
     console.error("Ziyaret silme hatası:", error);

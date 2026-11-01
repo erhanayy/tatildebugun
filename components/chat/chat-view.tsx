@@ -394,8 +394,8 @@ export function ChatView({
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Hızlı Seyahat İfadeleri (Pills) */}
-            <div className="px-4 sm:px-6 py-2 border-t border-slate-800/60 bg-slate-950/40 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {/* Hızlı Seyahat İfadeleri (Pills - Mobil-First: flex-wrap, sıfır yatay kaydırma) */}
+            <div className="px-4 sm:px-6 py-2 border-t border-slate-800/60 bg-slate-950/40 flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => handleQuickPrompt("📍 Nerede buluşalım?")}

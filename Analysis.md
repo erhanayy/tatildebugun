@@ -1671,21 +1671,121 @@ Tik atılan her yer `visited_at` zaman damgası ve `user_rating` puanıyla sakla
    - NextAuth reverse proxy oturum açma hatası (`UntrustedHost`) `auth.config.ts` (`trustHost: true`) ve Cloud Run ortam değişkeni (`AUTH_TRUST_HOST=true`) ile giderildi (`tatilde-bugun-00002-4qs`).
    - `https://tatilde.bugunai.com` üzerinden güvenli HTTPS erişimi ve kullanıcı oturum açma akışları başarıyla doğrulandı.
 
+---
 
+## 32. Canlı Saha Deneyimi Geri Bildirimleri ve Mimari İyileştirme Analizi (4 Kritik Madde)
 
+31 Ekim - 1 Kasım 2026 tarihlerinde `https://tatilde.bugunai.com` canlı ortamında yapılan gerçek kullanıcı testlerinde tespit edilen 4 temel UX ve iş mantığı konusu aşağıda analiz edilmiştir:
 
+### 32.1. Madde 1: Tarihli Tekil Şehir Ziyaretlerinin (Visits) "Tatildeyim" Rehberine Dahil Edilmesi
+- **Mevcut Durum:** "Tatildeyim" rehber ekranı (`/tatildeyim`) yalnızca `trips` (çok duraklı rotalar) tablosunu sorgulamaktadır (`getUserTripsForGuide`). Kullanıcı haritadan bir şehir (örn: Roma) için bugünü kapsayan kesin tarihli (`dateType = 'exact'`, `startDate <= BUGÜN <= endDate`) bir ziyaret bayrağı eklediğinde bu kayıt `visits` tablosunda kalmakta, rehberde listelenmemektedir.
+- **Mimari Çözüm:** 
+  1. `getUserTripsForGuide` servisi genişletilecek; kullanıcının `trips` kayıtlarının yanı sıra, tarih aralığı tanımlanmış (özellikle bugünü kapsayan veya aktif) `visits` kayıtları da tek duraklı bir seyahat olarak listeye dahil edilecektir.
+  2. Veritabanı referans bütünlüğü (`tripPlaceVisits` tablosunun `tripId` ve `stopId` foreign key zorunluluğu) bozulmadan, tarihli tekil ziyaretler için otomatik olarak senkronize bir tur ve durak kaydı (`tripStops`) garanti edilecek ya da sanal adaptör ile tura bağlanacaktır.
+  3. Kullanıcı "Tatildeyim" ekranına girdiğinde bugün tarihli tekil ziyareti varsa en başta otomatik seçili gelecektir.
 
+### 32.2. Madde 2: Roma ve Popüler Şehirlerdeki Mekan Kataloğunun Zenginleştirilmesi
+- **Mevcut Durum:** Roma için çekirdek katalogda (`CURATED_PLACES`) sadece 8 adet mekan bulunmaktaydı ve `ensureCityPlacesSeeded` kontrolü şehirde kayıt varsa yeni mekan eklemeyi durduruyordu.
+- **Mimari Çözüm:**
+  1. Roma için mekan listesi 45+ popüler ve turistik noktaya çıkarılacaktır:
+     - Galleria Borghese, Capitoline Müzeleri, Vatikan Müzeleri & Sistine Şapeli, MAXXI.
+     - Campo de' Fiori, Piazza del Popolo, Piazza Venezia & Altare della Patria, Piazza Barberini & Triton Çeşmesi.
+     - Caracalla Hamamları, Circo Massimo, Bocca della Verità (Hakikat Ağzı), Ara Pacis, Catacombe di San Callisto, Via Appia Antica.
+     - Santa Maria Maggiore, San Pietro in Vincoli (Musa Heykeli), San Giovanni in Laterano, Santa Maria del Popolo.
+     - Villa Borghese Bahçeleri, Gianicolo Tepesi panoraması, Giardino degli Aranci (Portakal Bahçesi / Aventino Anahtar Deliği).
+     - Trastevere, Monti ve Testaccio tarihi sokakları ve gastronomi noktaları.
+  2. `ensureCityPlacesSeeded` mantığı "eksik olanları tamamla" (UPSERT / NOT IN) şeklinde güncellenerek daha önce 8 mekan yüklenmiş olsa bile yeni eklenen mekanların canlı veritabanına otomatik eklenmesi sağlanacaktır.
 
+### 32.3. Madde 3: Seyahat Başlangıç ve Bitiş Noktası Kullanıcının Profil Şehri İse Gizlenmesi
+- **Mevcut Durum:** Rota oluşturulurken kullanıcının ana şehri (örn: İstanbul) `origin` (başlangıç) ve `return` (dönüş) durağı olarak kaydedilmektedir. Tatildeyim ekranında her durak bir akordeon olarak açıldığı için kullanıcı Roma tatilindeyken listede İstanbul (Başlangıç) ve İstanbul (Dönüş) duraklarını da görmekte ve kalabalık oluşturmaktadır.
+- **Mimari Çözüm:**
+  1. `getTripGuideDetails` veya akordeon render motorunda kullanıcının profil ana şehri (`user.baseCity`) kontrol edilecektir.
+  2. Eğer bir durağın `stopType` değeri `'origin'` veya `'return'` ise VE `cityName === baseCity` ise bu durak gezi akordeonundan filtrelenecek, yalnızca gezilecek hedef şehirler (örn: Roma, Floransa) gösterilecektir.
 
+### 32.4. Madde 4: Mobil Ekran Uyumluluğu ve Buton Hiyerarşisi
+- **Mevcut Durum:** Arama çubuğu, keşif durumu segmentleri, kategori butonları ve "Özel Mekan / Kafe Ekle" butonu tek bir yatay satıra sıkıştırılmış ve `overflow-x-auto` ile gizlenmiştir. Küçük ekranlı mobil cihazlarda kullanıcı "Kafe Ekle" butonuna veya diğer filtrelere ulaşmak için ekranı sağa-sola kaydırmak (tutup çekmek) zorunda kalmaktadır.
+- **Mimari Çözüm (Mobil-First Tasarım):**
+  1. **Arama Çubuğu:** Mobilde tam genişlik (`w-full`) olarak en üste alınacak.
+  2. **Durum Butonları (Tümü / Görülmeyenler / Görülenler):** Mobilde 3 eşit sütunlu (`grid grid-cols-3 gap-1.5`) dokunmatik buton kümesine dönüştürülecek.
+  3. **"Özel Mekan / Kafe Ekle" Butonu:** Yatay kaydırma arkasından çıkarılıp, mobilde dikkat çeken tam genişlikte bir hızlı aksiyon butonu haline getirilecek.
+  4. **Kategori Filtreleri:** Yatay kaydırma yerine ekrana doğal olarak sığan `flex flex-wrap gap-1.5` yapısına kavuşturulacak.
+  5. Mekan satırlarında mobilde buton ve yıldız tıklama alanları büyütülecek, parmakla rahat basılması sağlanacaktır.
 
+## 33. Canlı Saha İyileştirmeleri ve Mobil-First Uygulaması (Tamamlandı)
 
+Kullanıcı onayı doğrultusunda canlı saha testlerinde tespit edilen 4 kritik gereksinim ve Rule 13 (Mobil-First ve Sıfır Yatay Kaydırma Disiplini) eksiksiz olarak geliştirilmiş ve test edilmiştir:
 
+### 33.1. Yapılan Geliştirmeler
+1. **Tekil Tarihli Seyahatlerin (Visits) Tatildeyim Ekranına Entegrasyonu:**
+   - [lib/actions/places.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/places.ts) içerisindeki `getUserTripsForGuide()` fonksiyonu genişletildi. Kullanıcının `visits` tablosunda kayıtlı `dateType = 'exact'` ve `startDate` içeren tüm ziyaretleri sorgulanır.
+   - İlgili seyahate ait `trips` ve `tripStops` köprüsü bulunmuyorsa otomatik olarak tek duraklı aktif tur kaydı oluşturulur ve `tripStops.visitId` ilişkilendirilir.
+   - Aktif seyahat sıralaması iyileştirilerek bugünün tarihini kapsayan seyahatler en üste getirilir.
+   - [lib/actions/visits.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/visits.ts) içerisinde ziyaret ekleme, güncelleme ve silme işlemlerine `revalidatePath("/tatildeyim")` eklendi.
 
+2. **Mekan Listelerinin Zenginleştirilmesi ve Dinamik Yükleme Mimarisi:**
+   - [lib/poi-data.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/poi-data.ts) içerisindeki Roma şehri için küratörlü mekan sayısı 8'den 46'ya çıkarıldı (Tüm önemli müzeler, meydanlar, parklar, tarihi yapılar, sokaklar).
+   - [lib/actions/places.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/places.ts) `ensureCityPlacesSeeded()` fonksiyonu idempotent ve tamamlayıcı hale getirildi. Veritabanında daha önce 8 mekan bulunsa dahi eksik olan yeni 38 mekan `NOT IN` filtresiyle tek tek eklenir, mükerrer kayıt oluşmaz.
+   - Dünyadaki diğer tüm şehirler için önceden toplu veri çekmek yerine; kullanıcı bir şehri ziyaret ettiğinde veya açtığında Wikipedia GeoSearch API üzerinden 40-50 popüler turistik noktayı anlık (on-demand) çekip veritabanına ekleyen dinamik motor devreye sokuldu.
 
+3. **Başlangıç ve Dönüş Noktalarının Tatildeyim Akordeonundan Gizlenmesi:**
+   - [lib/actions/places.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/places.ts) `getTripGuideDetails()` fonksiyonu güncellendi.
+   - Kullanıcının `users.baseCity` bilgisi sorgulanır. Bir durağın tipi `origin` veya `return` ise VE şehir adı kullanıcının profilindeki `baseCity` ile eşleşiyorsa, bu durak Tatildeyim gezi akordeonundan elenir. Yalnızca tatil yapılan şehirler gösterilir.
 
+4. **Mobil-First Tasarım ve Sıfır Yatay Kaydırma (Zero Horizontal Scroll):**
+   - [components/places/city-places-accordion.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/places/city-places-accordion.tsx):
+     - Arama kutusu tam genişlik (`w-full`) yapıldı.
+     - Keşif durumu butonları mobilde 3 eşit sütunlu (`grid grid-cols-3 w-full sm:w-auto`) kompakt ve şık bir segmente dönüştürüldü.
+     - Kategori filtreleri yatay taşma (`overflow-x-auto`) yerine `flex flex-wrap gap-1.5` ile doğal aşağı kaydırmaya dönüştürüldü.
+     - "Özel Mekan / Kafe Ekle" butonu mobilde tam genişlikte (`w-full sm:w-auto`), belirgin ve kolay basılabilir hale getirildi; sağa kaydırma gereksinimi tamamen ortadan kaldırıldı.
+     - Yıldız puanlama ve zaman damgası butonları dokunmatik ekranlar için büyütülüp touch-manipulation ve flex-wrap desteğine kavuşturuldu.
+   - [components/places/tatildeyim-view.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/places/tatildeyim-view.tsx):
+     - Rota akış şeridindeki `overflow-x-auto` kaldırıldı; tüm şehir rozetleri `flex flex-wrap gap-2` ile aşağıya doğru sarmalanacak şekilde düzenlendi.
+     - Tur seçici ve zaman tüneli butonları mobilde dikey (`flex-col sm:flex-row w-full sm:w-auto`) hizalandı.
+   - [components/chat/chat-view.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/chat/chat-view.tsx):
+     - Hızlı seyahat hapları `flex flex-wrap` ile sarmalandı.
+   - [app/globals.css](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/globals.css):
+     - `html, body` etiketlerine `max-width: 100%; overflow-x: hidden;` kuralı eklenerek tüm sayfalarda sağa kayma engellendi.
 
+### 33.2. Kalite ve Tip Güvenliği
+- `npx tsc --noEmit`: Hatasız (0 hata) tamamlandı.
+- `npm run build`: Başarıyla tamamlandı.
 
+---
 
+## 34. Bağdat Mekan Tohumlama & Tatildeyim Aktif Tarih Filtresi Düzeltmesi (Tamamlandı)
 
+Kullanıcının canlı test geri bildirimleri doğrultusunda iki önemli sorun kök nedenleriyle çözülmüştür:
 
+### 34.1. Kök Neden Analizi
+1. **Bağdat Mekanlarının Gelmeme Nedeni:**
+   - Wikipedia GeoSearch API'sinde `gsradius` parametresi için 15000 (15 km) değeri kullanılmıştı. Wikipedia API standartları gereği maksimum kabul edilen yarıçap 10.000 metredir (10 km). 15000 girildiğinde Wikipedia `outofrange` hatası döndürmüş ve sonuç listesi boş kalmıştır.
+   - Ayrıca Türkçe/İngilizce karakter eşleşmelerinde ("Bağdat" vs "Baghdad") esneklik bulunmamaktaydı.
 
+2. **Açılan Listede Chicago (2022), Paris (2014) ve Paris Turu'nun (Gelecek) Çıkma Nedeni:**
+   - Önceki `getUserTripsForGuide()` fonksiyonu kullanıcının tüm tarihli ziyaretlerini (`visits`) taramış ve geçmişteki (2014, 2022 vb.) ziyaretler için de otomatik tur oluşturup listeye eklemişti.
+   - Ayrıca kullanıcının gelecekteki turları (örn: 21 Kasım Paris Turu) veya tarihi bugünü kapsamayan geziler de listeye dahil edilmiş, sadece bugünü kapsayanlar üste sıralanmıştı.
+   - Kullanıcı haklı olarak "Tatildeyim" ekranında yalnızca **bugünün tarihini kapsayan** aktif tatillerin listelenmesini, geçmiş/gelecek veya zamansız ziyaretlerin kesinlikle bu ekranda çıkmamasını talep etmiştir.
+
+### 34.2. Yapılan Düzeltmeler
+1. **Bağdat İkonik Mekanları ve Wikipedia GeoSearch Düzeltmesi:**
+   - [lib/poi-data.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/poi-data.ts) içerisine Bağdat için 21 ikonik mekan eklendi (El-Müstansıriyye Medresesi, Abbasi Sarayı, Irak Ulusal Müzesi, Şehitler Anıtı, Tahrir Meydanı, Abdülkadir Geylani Külliyesi, İmam Ebu Hanife Camii, Şabender Kahvehanesi, El-Mutenebbi Caddesi, Firdevs Meydanı, El-Zevra Parkı vb.).
+   - [lib/actions/places.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/places.ts) `ensureCityPlacesSeeded()` fonksiyonunda `gsradius` değeri 10.000'e çekildi.
+   - Wikipedia aramalarında turistik olmayan olayların (saldırı, patlama vb.) filtrelenmesi için negatif anahtar kelime filtresi eklendi.
+   - Şehir adı karşılaştırmasında Türkçe karakter normalizasyonu (ğ->g, ı->i, ş->s) yapılarak "Bağdat" ve "Baghdad" uyumluluğu sağlandı.
+   - Bağdat için 21 mekan veritabanına başarıyla aktarıldı.
+
+2. **Tatildeyim Sadece Bugünü Kapsayan Aktif Tatil Filtresi:**
+   - [lib/actions/places.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/places.ts) içerisine `isDateCoveringToday()` fonksiyonu eklendi.
+   - `getUserTripsForGuide()` fonksiyonu güncellendi:
+     - SADECE `startDate <= bugun <= endDate` kuralına uyan aktif seyahatler taranır.
+     - Zamansız ziyaretler (`dateType = 'timeless'`) kesinlikle tura köprülenmez.
+     - Geçmiş tarihli (örn: 2014 Paris, 2022 Chicago) ve gelecek tarihli (örn: 21 Kasım Paris Turu) seyahatler Tatildeyim rehber listesinden elenir.
+     - Açılan dropdown menüsünde yalnızca o an aktif olan tatiller (örn: Bağdat Seyahati ve Roma Tatili) gösterilir.
+   - Veritabanındaki önceki hatalı köprülemeyle otomatik oluşmuş 2014 ve 2022 tekil seyahat kayıtları temizlendi.
+
+### 34.3. Test ve Doğrulama
+- `npx tsc --noEmit`: 0 hata.
+- `npm run build`: Başarıyla derlendi.
+- Aktif seyahat sorgusu doğrulandı: Sadece bugünün tarihini (2 Kasım 2026) kapsayan Roma ve Bağdat listelenmektedir.
+
+---

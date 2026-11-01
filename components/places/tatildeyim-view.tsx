@@ -150,8 +150,8 @@ export function TatildeyimView({
           </div>
         </div>
 
-        {/* Sağ Üst Aksiyonlar: Tur Seçici + Zaman Tüneli Aç */}
-        <div className="flex items-center gap-2.5 self-end sm:self-center shrink-0">
+        {/* Sağ Üst Aksiyonlar: Tur Seçici + Zaman Tüneli Aç (Mobilde tam genişlikte dikey yerleşim) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto shrink-0">
           {userTrips.length > 1 && (
             <select
               value={selectedTripId}
@@ -159,7 +159,7 @@ export function TatildeyimView({
                 setSelectedTripId(e.target.value);
                 window.location.href = `/tatildeyim?tripId=${e.target.value}`;
               }}
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
+              className="w-full sm:w-auto bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
             >
               {userTrips.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -172,7 +172,7 @@ export function TatildeyimView({
           <button
             type="button"
             onClick={() => setShowTimeline((prev) => !prev)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               showTimeline
                 ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30"
                 : "bg-slate-800/80 text-cyan-400 border border-cyan-500/30 hover:bg-slate-800"
@@ -184,14 +184,14 @@ export function TatildeyimView({
         </div>
       </div>
 
-      {/* 2. Rota Şehir Akışı Şeridi (Visual Breadcrumbs) */}
-      <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 flex items-center gap-2 overflow-x-auto text-xs">
+      {/* 2. Rota Şehir Akışı Şeridi (Visual Breadcrumbs - Mobil-First: flex-wrap, sıfır yatay kaydırma) */}
+      <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
           Rota Akışı:
         </span>
         {stops.map((stop, index) => (
-          <div key={stop.id} className="flex items-center gap-1.5 shrink-0">
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 font-medium">
+          <div key={stop.id} className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 font-medium">
               <span>{getCountryFlagEmoji(stop.countryCode)}</span>
               <span>{stop.cityName}</span>
             </div>

@@ -49,3 +49,9 @@ Bu dosya, TatildeBugun projesinde çalışan yapay zeka asistanının ve gelişt
 ## 12. Dağıtım Öncesi Otomatik Kalite Kapısı (Pre-Deploy Quality Gate)
 - Kullanıcıdan dağıtım komutu gelse dahi; build, linter ve birim testler başarıyla tamamlanmadan dağıtım başlatılamaz. Hata durumunda dağıtım durdurulup kullanıcıya raporlanacaktır.
 
+## 13. Mobil-First ve Sıfır Yatay Kaydırma Disiplini (Strict Mobile-First & Zero-Horizontal-Scroll)
+- Projedeki tüm arayüzler ve bileşenler öncelikli olarak mobil ekranlarda (360px - 430px) kusursuz çalışacak şekilde tasarlanacaktır.
+- Arayüzlerde kullanıcıyı sağa kaydırmaya / ekranı tutup çekmeye zorlayan yatay kaydırma çubuğu (`overflow-x-auto/scroll`) KESİNLİKLE kullanılmayacaktır.
+- Tüm butonlar, filtreler ve arama alanları ekrana sığacak şekilde satır satır alta inecek (`flex-wrap`, `grid`), akış her zaman aşağı doğru dikey (vertical) olacaktır.
+- Tıklanabilir buton ve simgeler dokunmatik ekran standartlarına uygun (min 44px dokunma hedefi) tasarlanacaktır.
+

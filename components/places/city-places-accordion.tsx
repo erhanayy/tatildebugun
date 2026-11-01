@@ -360,12 +360,12 @@ export function CityPlacesAccordion({
           )}
         </div>
 
-        {/* Keşif Durumu Butonları: Tümü / Görülmeyenler / Görülenler */}
-        <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 shrink-0">
+        {/* Keşif Durumu Butonları: 3 Kolonlu Responsive Segment (Mobilde tam sığar, yatay kaydırma yapmaz) */}
+        <div className="grid grid-cols-3 gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 w-full sm:w-auto shrink-0">
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-center transition-all cursor-pointer ${
               statusFilter === "all"
                 ? "bg-slate-800 text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
@@ -377,36 +377,37 @@ export function CityPlacesAccordion({
           <button
             type="button"
             onClick={() => setStatusFilter("unvisited")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
               statusFilter === "unvisited"
                 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm"
                 : "text-amber-400/80 hover:text-amber-300"
             }`}
             title="Henüz ziyaret edilmemiş yerler"
           >
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span>Görülmeyenler ({unvisitedCount})</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <span className="truncate">Görülmeyen ({unvisitedCount})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setStatusFilter("visited")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
               statusFilter === "visited"
                 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm"
                 : "text-emerald-400/80 hover:text-emerald-300"
             }`}
             title="Gezilmiş ve işaretlenmiş yerler"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>Görülenler ({visitedCount})</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+            <span className="truncate">Görülen ({visitedCount})</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Kategori Filtre Butonları + Özel Mekan Ekle Butonu */}
-      <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 text-xs">
-        <div className="flex items-center gap-1.5 shrink-0">
+      {/* 2. Kategori Filtre Butonları + Özel Mekan Ekle Butonu (Mobil-First: flex-wrap, sıfır yatay kaydırma) */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+        {/* Kategori Hapları */}
+        <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: "all", label: "Tümü" },
             { id: "historic", label: "🏛️ Tarih & Müze" },
@@ -418,9 +419,9 @@ export function CityPlacesAccordion({
               key={cat.id}
               type="button"
               onClick={() => setCategoryFilter(cat.id)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-medium transition-colors cursor-pointer ${
                 categoryFilter === cat.id
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
                   : "bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800/60"
               }`}
             >
@@ -429,13 +430,13 @@ export function CityPlacesAccordion({
           ))}
         </div>
 
-        {/* Özel Mekan Ekle Düğmesi */}
+        {/* Özel Mekan Ekle Düğmesi (Mobilde tam genişlikte alt satırda, desktopta sağda) */}
         <button
           type="button"
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-cyan-600/20 transition-all cursor-pointer shrink-0"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-cyan-600/20 transition-all cursor-pointer shrink-0"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="w-4 h-4" />
           <span>Özel Mekan / Kafe Ekle</span>
         </button>
       </div>
@@ -511,7 +512,7 @@ export function CityPlacesAccordion({
                   </div>
 
                   {/* Sağ: Kategori Rozeti ve Zaman Damgası */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                     <div
                       className="p-1 rounded-lg bg-slate-900/80 border border-slate-800"
                       title={place.category}
@@ -530,7 +531,7 @@ export function CityPlacesAccordion({
                             e.stopPropagation();
                             openEditModal(place);
                           }}
-                          className="ml-1 text-emerald-400 hover:text-emerald-200 cursor-pointer"
+                          className="ml-1 p-0.5 text-emerald-400 hover:text-emerald-200 cursor-pointer"
                           title="Ziyaret zamanını düzenle"
                         >
                           <Edit3 className="w-3 h-3" />
@@ -542,12 +543,12 @@ export function CityPlacesAccordion({
 
                 {/* Alt Kısım: İnteraktif 5 Yıldızlı Puanlama (Görülen Yerler İçin) */}
                 {isGreen && (
-                  <div className="mt-2.5 pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs">
+                  <div className="mt-2.5 pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="text-[10px] text-emerald-400/90 font-medium">
                       Puanınız:
                     </span>
                     <div
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 touch-manipulation"
                       onMouseLeave={() =>
                         setHoveredRatings((prev) => ({ ...prev, [place.id]: null }))
                       }
@@ -570,7 +571,7 @@ export function CityPlacesAccordion({
                               e.stopPropagation();
                               handleRatingChange(place, star);
                             }}
-                            className="p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                            className="p-1 sm:p-0.5 hover:scale-125 active:scale-110 transition-transform cursor-pointer"
                             title={`${star} Yıldız Ver`}
                           >
                             <Star

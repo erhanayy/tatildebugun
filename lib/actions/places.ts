@@ -7,11 +7,13 @@ import {
   tripPlaceVisits,
   trips,
   tripStops,
+  visits,
+  users,
   type PlaceOfInterest,
   type TripPlaceVisit,
 } from "@/lib/db/schema";
 import { CURATED_PLACES } from "@/lib/poi-data";
-import { eq, and, sql, desc, asc, ilike } from "drizzle-orm";
+import { eq, and, sql, desc, asc, ilike, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -68,15 +70,25 @@ export interface CityPlaceItem extends PlaceOfInterest {
 }
 
 /**
- * Şehir için kürate edilmiş yerleri garanti eder (yoksa veritabanına ekler).
+ * Şehir için kürate edilmiş yerleri ve eksik mekanları garanti eder (yoksa veritabanına ekler).
+ * Herhangi bir yeni şehir için Wikipedia GeoSearch API'sinden 40-50 mekan dinamik olarak çekilir.
  */
-async function ensureCityPlacesSeeded(cityName: string, countryCode: string, latitude?: number, longitude?: number) {
+export async function ensureCityPlacesSeeded(
+  cityName: string,
+  countryCode: string,
+  latitude?: number,
+  longitude?: number
+) {
   const normalizedCity = cityName.trim();
   const normalizedCountry = countryCode.trim().toUpperCase();
 
-  // 1. Önce bu şehir için veritabanında kayıt var mı kontrol et
-  const existing = await db
-    .select({ count: sql<number>`count(*)` })
+  // 1. Önce bu şehir için veritabanında mevcut mekanları çek (isimler ve API ID'ler)
+  const existingPlaces = await db
+    .select({
+      id: placesOfInterest.id,
+      name: placesOfInterest.name,
+      externalApiId: placesOfInterest.externalApiId,
+    })
     .from(placesOfInterest)
     .where(
       and(
@@ -85,21 +97,30 @@ async function ensureCityPlacesSeeded(cityName: string, countryCode: string, lat
       )
     );
 
-  if (Number(existing[0]?.count || 0) > 0) {
-    return;
-  }
-
-  // 2. Kürate listemizde bu şehir var mı?
-  const matched = CURATED_PLACES.filter(
-    (p) =>
-      p.cityName.toLowerCase() === normalizedCity.toLowerCase() &&
-      p.countryCode.toUpperCase() === normalizedCountry
+  const existingNameSet = new Set(existingPlaces.map((p) => p.name.trim().toLowerCase()));
+  const existingApiIdSet = new Set(
+    existingPlaces.map((p) => p.externalApiId).filter((id): id is string => Boolean(id))
   );
 
-  if (matched.length > 0) {
-    // Toplu ekle
+  // 2. Kürate listemizde bu şehir için eklenmemiş yeni yerler var mı?
+  const cityKey = normalizedCity.toLowerCase().replace(/ğ/g, "g").replace(/ı/g, "i").replace(/ş/g, "s");
+  const matchedCurated = CURATED_PLACES.filter(
+    (p) => {
+      const pKey = p.cityName.toLowerCase().replace(/ğ/g, "g").replace(/ı/g, "i").replace(/ş/g, "s");
+      return (pKey === cityKey || p.cityName.toLowerCase() === normalizedCity.toLowerCase()) &&
+        p.countryCode.toUpperCase() === normalizedCountry;
+    }
+  );
+
+  const missingCurated = matchedCurated.filter(
+    (m) =>
+      !existingNameSet.has(m.name.trim().toLowerCase()) &&
+      (!m.externalApiId || !existingApiIdSet.has(m.externalApiId))
+  );
+
+  if (missingCurated.length > 0) {
     await db.insert(placesOfInterest).values(
-      matched.map((m) => ({
+      missingCurated.map((m) => ({
         externalApiId: m.externalApiId,
         apiSource: "wikidata",
         countryCode: m.countryCode,
@@ -112,45 +133,129 @@ async function ensureCityPlacesSeeded(cityName: string, countryCode: string, lat
         isCustom: false,
       }))
     );
-    return;
+    for (const m of missingCurated) {
+      existingNameSet.add(m.name.trim().toLowerCase());
+      if (m.externalApiId) existingApiIdSet.add(m.externalApiId);
+    }
   }
 
-  // 3. Egzotik/yeni şehir ve koordinatlar mevcut ise Wikipedia GeoSearch'ten dinamik çekim dene
-  if (latitude && longitude) {
+  // 3. Eğer toplam mekan sayısı 20'den azsa ve koordinatlar varsa, Wikipedia API'den dinamik çekim yap!
+  const currentTotal = existingPlaces.length + missingCurated.length;
+  if (currentTotal < 20 && latitude && longitude) {
     try {
-      const geoUrl = `https://tr.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${latitude}|${longitude}&gsradius=10000&gslimit=10&format=json`;
-      const res = await fetch(geoUrl, {
+      // Wikipedia GeoSearch maksimum gsradius sınırı 10.000 metredir (10km)
+      const trUrl = `https://tr.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${latitude}|${longitude}&gsradius=10000&gslimit=50&format=json`;
+      const trRes = await fetch(trUrl, {
         headers: { "User-Agent": "TatildeBugunApp/1.0" },
         next: { revalidate: 86400 },
       });
-      if (res.ok) {
-        const data = await res.json();
-        const results = data?.query?.geosearch || [];
-        if (Array.isArray(results) && results.length > 0) {
-          const validItems = results
-            .filter((r: { title?: string }) => r.title && !r.title.toLowerCase().includes(normalizedCity.toLowerCase()))
-            .slice(0, 10);
 
-          if (validItems.length > 0) {
-            await db.insert(placesOfInterest).values(
-              validItems.map((v: { pageid: number; title: string; lat: number; lon: number }) => ({
-                externalApiId: `WP_${v.pageid}`,
-                apiSource: "wikipedia",
-                countryCode: normalizedCountry,
-                cityName: normalizedCity,
-                name: v.title,
-                category: "monument" as const,
-                description: `${normalizedCity} bölgesinde tarihi/turistik ilgi noktası`,
-                latitude: v.lat,
-                longitude: v.lon,
-                isCustom: false,
-              }))
-            );
+      let items: Array<{ pageid: number; title: string; lat: number; lon: number }> = [];
+
+      if (trRes.ok) {
+        const trData = await trRes.json();
+        const trResults = trData?.query?.geosearch || [];
+        if (Array.isArray(trResults)) {
+          items = trResults;
+        }
+      }
+
+      // Eğer Türkçe sonuç 15'ten azsa İngilizce Wikipedia GeoSearch ile zenginleştir
+      if (items.length < 15) {
+        const enUrl = `https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${latitude}|${longitude}&gsradius=10000&gslimit=50&format=json`;
+        const enRes = await fetch(enUrl, {
+          headers: { "User-Agent": "TatildeBugunApp/1.0" },
+          next: { revalidate: 86400 },
+        });
+        if (enRes.ok) {
+          const enData = await enRes.json();
+          const enResults = enData?.query?.geosearch || [];
+          if (Array.isArray(enResults)) {
+            items = [...items, ...enResults];
           }
         }
       }
+
+      // Turistik olmayan ve olumsuz olayları (saldırı, patlama vb.) filtrele
+      const excludedWords = [
+        "bombing", "bomb", "blast", "attack", "kill", "massacre", "shooting", "terror",
+        "saldırı", "patlama", "katliam", "ölüm", "terör", "cinayet", "muharebe", "kuşatma", "siege",
+        "governorate", "vilayet", "province"
+      ];
+
+      // Şehir adını tek başına içeren veya halihazırda var olanları filtrele
+      const validItems = items
+        .filter((r) => {
+          if (!r.title) return false;
+          const lower = r.title.trim().toLowerCase();
+          if (lower === normalizedCity.toLowerCase()) return false;
+          if (excludedWords.some((w) => lower.includes(w))) return false;
+          if (existingNameSet.has(lower)) return false;
+          const apiId = `WP_${r.pageid}`;
+          if (existingApiIdSet.has(apiId)) return false;
+          return true;
+        })
+        .slice(0, 40);
+
+      if (validItems.length > 0) {
+        await db.insert(placesOfInterest).values(
+          validItems.map((v) => {
+            const titleLower = v.title.toLowerCase();
+            let cat: "monument" | "museum" | "historic" | "nature" | "view" | "other" = "monument";
+            if (titleLower.includes("müze") || titleLower.includes("museum") || titleLower.includes("galer")) {
+              cat = "museum";
+            } else if (
+              titleLower.includes("saray") ||
+              titleLower.includes("palace") ||
+              titleLower.includes("castle") ||
+              titleLower.includes("kale") ||
+              titleLower.includes("antik") ||
+              titleLower.includes("cami") ||
+              titleLower.includes("kilise") ||
+              titleLower.includes("church") ||
+              titleLower.includes("basilica") ||
+              titleLower.includes("cathedral") ||
+              titleLower.includes("temple")
+            ) {
+              cat = "historic";
+            } else if (
+              titleLower.includes("park") ||
+              titleLower.includes("bahçe") ||
+              titleLower.includes("garden") ||
+              titleLower.includes("lake") ||
+              titleLower.includes("göl") ||
+              titleLower.includes("forest")
+            ) {
+              cat = "nature";
+            } else if (
+              titleLower.includes("tepe") ||
+              titleLower.includes("hill") ||
+              titleLower.includes("square") ||
+              titleLower.includes("meydan") ||
+              titleLower.includes("piazza") ||
+              titleLower.includes("köprü") ||
+              titleLower.includes("bridge")
+            ) {
+              cat = "view";
+            }
+
+            return {
+              externalApiId: `WP_${v.pageid}`,
+              apiSource: "wikipedia",
+              countryCode: normalizedCountry,
+              cityName: normalizedCity,
+              name: v.title,
+              category: cat,
+              description: `${normalizedCity} bölgesinde tarihi veya turistik ilgi noktası`,
+              latitude: v.lat,
+              longitude: v.lon,
+              isCustom: false,
+            };
+          })
+        );
+      }
     } catch (e) {
-      console.warn("Wikipedia GeoSearch fallback sessizce atlandı:", e);
+      console.warn("Wikipedia GeoSearch dinamik çekim sessizce atlandı:", e);
     }
   }
 }
@@ -481,23 +586,132 @@ export async function createCustomPlace(input: {
 }
 
 /**
- * Kullanıcının turlarını (rehberde seçebilmek için) getirir.
+ * Verilen tarih aralığının bugünü kapsayıp kapsamadığını kontrol eder.
+ */
+function isDateCoveringToday(startDate?: Date | string | null, endDate?: Date | string | null): boolean {
+  if (!startDate) return false;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const start = new Date(startDate);
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+
+  if (startDay > today) {
+    return false; // Başlangıç gelecekte (örn: 21 Kasım)
+  }
+
+  if (endDate) {
+    const end = new Date(endDate);
+    const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    if (endDay < today) {
+      return false; // Bitiş geçmişte (örn: 2022)
+    }
+  } else {
+    // Bitiş tarihi belirtilmemişse, yalnızca başlangıç günü ile aynı gün ise
+    if (startDay.getTime() !== today.getTime()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Kullanıcının turlarını ve haritadan eklenen tarihli seyahatlerini getirir.
+ * SADECE bugünü kapsayan aktif seyahatler Tatildeyim rehberine gelir.
+ * Zamansız girilenler, geçmiş veya gelecek seyahatler canlı rehber listesine dahil edilmez.
  */
 export async function getUserTripsForGuide() {
   const session = await auth();
   if (!session?.user?.id) return [];
 
-  const userTrips = await db
+  const userId = session.user.id;
+
+  // 1. Kullanıcının mevcut turlarını çek
+  const allUserTrips = await db
     .select()
     .from(trips)
-    .where(eq(trips.userId, session.user.id))
+    .where(eq(trips.userId, userId))
     .orderBy(desc(trips.createdAt));
 
-  return userTrips;
+  // 2. Kullanıcının SADECE bugünü kapsayan kesin tarihli ziyaretlerini (visits) çek
+  // Zamansız olanlar (timeless) ve geçmiş/gelecek tarihler köprülenmez!
+  const datedVisits = await db
+    .select()
+    .from(visits)
+    .where(
+      and(
+        eq(visits.userId, userId),
+        eq(visits.dateType, "exact"),
+        isNotNull(visits.startDate)
+      )
+    )
+    .orderBy(desc(visits.startDate));
+
+  const activeVisitsToday = datedVisits.filter((v) => isDateCoveringToday(v.startDate, v.endDate));
+
+  // 3. Her aktif ziyaret için trips tablosunda karşılığı var mı kontrol et; yoksa otomatik seyahat köprüsü kur
+  for (const v of activeVisitsToday) {
+    if (!v.startDate) continue;
+
+    const existingStops = await db
+      .select({ tripId: tripStops.tripId })
+      .from(tripStops)
+      .where(eq(tripStops.visitId, v.id))
+      .limit(1);
+
+    if (existingStops.length === 0) {
+      // Halihazırda bu şehir için aynı tarihlerde bir tur yoksa otomatik oluştur
+      const matchingTrip = allUserTrips.find(
+        (t) =>
+          t.startDate &&
+          new Date(t.startDate).toDateString() === new Date(v.startDate!).toDateString() &&
+          t.title.toLowerCase().includes(v.cityName.toLowerCase())
+      );
+
+      if (!matchingTrip) {
+        const [autoTrip] = await db
+          .insert(trips)
+          .values({
+            userId,
+            title: `📍 ${v.cityName} Seyahati`,
+            description: `${v.cityName} için haritadan eklenen tatil ziyareti.`,
+            status: "planned",
+            transportType: "flight",
+            startDate: v.startDate,
+            endDate: v.endDate,
+          })
+          .returning();
+
+        await db.insert(tripStops).values({
+          tripId: autoTrip.id,
+          visitId: v.id,
+          cityName: v.cityName,
+          countryCode: v.countryCode,
+          latitude: v.latitude,
+          longitude: v.longitude,
+          stopOrder: 1,
+          stopType: "stop",
+          arrivalDate: v.startDate,
+          departureDate: v.endDate,
+          notes: "Harita Ziyareti",
+        });
+
+        allUserTrips.unshift(autoTrip);
+      }
+    }
+  }
+
+  // 4. SADECE bugünü kapsayan turları döndür (Kullanıcının talimatı: tarih aralığı bugüne düşmeyenler ve zamansızlar gelmemeli)
+  const activeTripsToday = allUserTrips.filter((t) => isDateCoveringToday(t.startDate, t.endDate));
+
+  return activeTripsToday;
 }
 
 /**
  * Bir turun tüm duraklarını ve durak bazlı görülen mekan istatistiğini getirir.
+ * Kural 3: Eğer rota başlangıç veya dönüş durağı kullanıcının profil ana şehriyse gizlenir.
  */
 export async function getTripGuideDetails(tripId: string) {
   const session = await auth();
@@ -511,14 +725,35 @@ export async function getTripGuideDetails(tripId: string) {
 
   if (!trip) return null;
 
-  const stops = await db
+  // Kullanıcının profil ana şehrini çek
+  const [currentUser] = await db
+    .select({ baseCity: users.baseCity })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+
+  const baseCity = currentUser?.baseCity?.trim().toLowerCase();
+
+  const allStops = await db
     .select()
     .from(tripStops)
     .where(eq(tripStops.tripId, tripId))
     .orderBy(asc(tripStops.stopOrder));
 
+  // Madde 3: Eğer durak başlangıç (origin) veya dönüş (return) durağı ise VE kullanıcının profil ana şehriyse rehberde gizle!
+  const destinationStops = allStops.filter((stop) => {
+    const isOriginOrReturn = stop.stopType === "origin" || stop.stopType === "return";
+    const matchesBaseCity = baseCity && stop.cityName.trim().toLowerCase() === baseCity;
+    if (isOriginOrReturn && matchesBaseCity) {
+      return false;
+    }
+    return true;
+  });
+
+  const stops = destinationStops.length > 0 ? destinationStops : allStops;
+
   // Bu turda işaretlenen toplam mekan ziyaretleri
-  const visits = await db
+  const visitsList = await db
     .select({
       placeId: tripPlaceVisits.placeId,
       stopId: tripPlaceVisits.stopId,
@@ -536,6 +771,6 @@ export async function getTripGuideDetails(tripId: string) {
   return {
     trip,
     stops,
-    timeline: visits,
+    timeline: visitsList,
   };
 }
