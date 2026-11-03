@@ -66,6 +66,7 @@ DNS yönetim panelinde (Cloudflare / Registrar) şu kayıt açılır:
 
 | Sürüm | Tarih | Ortam | Değişiklik Özeti | Durum |
 | :--- | :--- | :--- | :--- | :--- |
+| v1.2.1 | 2026-11-04 | Production (`tatilde.bugunai.com`) | Mobil React Portal mimarisi (ekran donması/bulanık kalma fix), butona tıklandığında anında açılan yerel galeri seçici (UX) ve fotoğraftan tespit edilen yerler için Mavi (Sky Blue) renk kodlama, rozet ve tek tıkla onaylama sistemi | Canlıda & Aktif (`tatilde-bugun-00005-299`) |
 | v1.2.0 | 2026-11-04 | Production (`tatilde.bugunai.com`) | Mekan kartları Wikimedia kapak fotoğrafları & Lightbox modalı, DB-first önbellek mimarili 1-5 günlük akıllı yürüyüş rotaları (Roma 5 gün, Bağdat 2 gün), doğrudan rotadan check-in desteği ve istemci tarafı sıfır kotalı EXIF GPS fotoğraf eşleme sihirbazı | Canlıda & Aktif (`tatilde-bugun-00004-znh`) |
 | v1.1.0 | 2026-11-02 | Production (`tatilde.bugunai.com`) | Mobil-First tasarım & sıfır yatay kaydırma (Kural 13), zenginleştirilmiş Roma (46) ve Bağdat (21) mekanları, Wikipedia GeoSearch dinamik mekan motoru ve Tatildeyim sadece bugünü kapsayan aktif tatil filtrelemesi | Canlıda & Aktif (`tatilde-bugun-00003-fm5`) |
 | v1.0.0 | 2026-10-30 | Production (`tatilde.bugunai.com`) | Cloud Run üzerinde canlı yayına alma (`tatilde-bugun-00002-4qs`), Google Trust Services SSL sertifikası, NextAuth trustHost yapılandırması ve Tatildeyim modülü | Canlıda & Aktif (100% Çalışır Durumda) |
