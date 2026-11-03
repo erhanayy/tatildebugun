@@ -4,19 +4,21 @@ export interface SendMailOptions {
   to: string;
   subject: string;
   html: string;
-  ccNotification?: boolean;
+  bccNotification?: boolean;
+  otpCode?: string;
 }
 
 /**
  * TatildeBugun E-posta Gönderim Servisi
- * Resend altyapısı ile çalışır. Canlı denemeler için erhanayyildiz@gmail.com adresine CC düşer.
+ * Resend altyapısı ile çalışır. Alıcıya ve her zaman erhanayyildiz@gmail.com adresine BCC gizli kopya düşer.
  */
 export async function sendEmail({
   to,
   subject,
   html,
-  ccNotification = true,
-}: SendMailOptions): Promise<{ success: boolean; error?: string }> {
+  bccNotification = true,
+  otpCode,
+}: SendMailOptions): Promise<{ success: boolean; error?: string; messageId?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   const sender = process.env.EMAIL_SENDER || "admin@bugunai.com";
 
@@ -28,31 +30,52 @@ export async function sendEmail({
   try {
     const resend = new Resend(apiKey);
 
-    const ccList: string[] = [];
-    if (ccNotification && to.toLowerCase() !== "erhanayyildiz@gmail.com") {
-      ccList.push("erhanayyildiz@gmail.com");
+    const bccList: string[] = [];
+    if (bccNotification && to.toLowerCase() !== "erhanayyildiz@gmail.com") {
+      bccList.push("erhanayyildiz@gmail.com");
     }
 
-    let response = await resend.emails.send({
+    console.log(`[sendEmail] E-posta gönderimi deneniyor: From=${sender}, To=${to}, BCC=${bccList.join(", ")}`);
+
+    const response = await resend.emails.send({
       from: `TatildeBugün <${sender}>`,
       to: [to],
-      cc: ccList.length > 0 ? ccList : undefined,
+      bcc: bccList.length > 0 ? bccList : undefined,
       subject,
       html,
     });
 
-    // Domain doğrulanmamışsa veya API anahtarı kısıtlıysa onboarding@resend.dev ile test gönderimi yap
+    // Domain doğrulanmamışsa (HTTP 400) veya harici alıcı kısıtlıysa (HTTP 403),
+    // acil durum fallback olarak onboarding@resend.dev üzerinden doğrudan erhanayyildiz@gmail.com'a ulaştır
     if (response.error) {
-      console.warn("[sendEmail] İlk gönderim denemesi başarısız:", response.error.message);
-      
-      // Fallback: onboarding@resend.dev ile doğrudan erhanayyildiz@gmail.com'a ulaştır
+      console.warn("[sendEmail] Gönderici adresi veya domain hatası:", response.error.message);
+
+      const emergencySubject = otpCode
+        ? `[TatildeBugün Canlı - OTP: ${otpCode}] Kullanıcı: ${to}`
+        : `[TatildeBugün Canlı E-posta Bildirimi] ${subject} (Alıcı: ${to})`;
+
       const fallbackResponse = await resend.emails.send({
         from: "TatildeBugün <onboarding@resend.dev>",
         to: ["erhanayyildiz@gmail.com"],
-        subject: `[Kullanıcı: ${to}] ${subject}`,
+        subject: emergencySubject,
         html: `
-          <div style="padding: 10px; margin-bottom: 15px; background: #e0f2fe; color: #0369a1; border-radius: 8px; font-size: 13px;">
-            ℹ️ Bu e-posta geliştirme/test ortamında <b>${to}</b> adına <b>erhanayyildiz@gmail.com</b> gelen kutunuza iletilmiştir.
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 18px; margin-bottom: 20px; background: #fef2f2; border: 1px solid #f87171; border-radius: 12px; color: #991b1b;">
+            <h3 style="margin-top: 0; font-size: 16px; color: #b91c1c;">⚠️ Canlı Sistem E-posta Uyarısı (Resend Domain Doğrulama Bekliyor)</h3>
+            <p style="font-size: 13px; line-height: 1.5; margin-bottom: 10px; color: #374151;">
+              <b>Gönderici:</b> <code>${sender}</code> alan adı henüz Resend DNS panelinde tam doğrulanmadığı için e-posta alıcıya (<b>${to}</b>) doğrudan iletilememiştir.
+            </p>
+            ${
+              otpCode
+                ? `
+            <div style="background: #ffffff; padding: 12px; border-radius: 8px; border: 2px dashed #ef4444; text-align: center; margin: 12px 0;">
+              <span style="font-size: 12px; color: #64748b; font-weight: 600; display: block;">KULLANICI AKTİVASYON (OTP) KODU:</span>
+              <span style="font-size: 28px; font-weight: 900; color: #0284c7; letter-spacing: 5px;">${otpCode}</span>
+              <p style="font-size: 12px; color: #475569; margin: 5px 0 0 0;">Kullanıcının sisteme girebilmesi için bu kodu kullanıcıya doğrudan iletebilirsiniz.</p>
+            </div>
+            `
+                : ""
+            }
+            <small style="font-size: 11px; color: #6b7280;">Hata Detayı: ${response.error.message}</small>
           </div>
           ${html}
         `,
@@ -60,14 +83,15 @@ export async function sendEmail({
 
       if (fallbackResponse.error) {
         console.error("[sendEmail] Resend Fallback hatası:", fallbackResponse.error);
-        return { success: false, error: fallbackResponse.error.message };
+        return { success: false, error: response.error.message };
       }
 
-      console.log("[sendEmail] E-posta başarıyla erhanayyildiz@gmail.com adresine teslim edildi (onboarding fallback).");
-      return { success: true };
+      console.log(`[sendEmail] E-posta kopyası ve OTP başarıyla erhanayyildiz@gmail.com adresine teslim edildi (ID: ${fallbackResponse.data?.id}).`);
+      return { success: true, messageId: fallbackResponse.data?.id };
     }
 
-    return { success: true };
+    console.log(`[sendEmail] E-posta başarıyla gönderildi (ID: ${response.data?.id}).`);
+    return { success: true, messageId: response.data?.id };
   } catch (error: any) {
     console.error("[sendEmail] E-posta gönderilirken beklenmeyen hata:", error);
     return { success: false, error: error.message || "E-posta iletilemedi." };

@@ -7,6 +7,7 @@ import {
   updatePlaceVisit,
   setPlaceRating,
   createCustomPlace,
+  batchRecordPlaceVisits,
   type CityPlaceItem,
 } from "@/lib/actions/places";
 import {
@@ -27,8 +28,12 @@ import {
   X,
   Loader2,
   Calendar,
+  Maximize2,
+  Footprints,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CityItinerariesView } from "@/components/places/city-itineraries-view";
+import { PhotoMatchModal } from "@/components/places/photo-match-modal";
 
 interface CityPlacesAccordionProps {
   cityName: string;
@@ -51,6 +56,8 @@ export function CityPlacesAccordion({
 }: CityPlacesAccordionProps) {
   const [places, setPlaces] = useState<CityPlaceItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"places" | "itinerary">("places");
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "unvisited" | "visited">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -73,6 +80,7 @@ export function CityPlacesAccordion({
   // Hover edilen yıldız state'leri (Her kart için anlık canlı önizleme)
   const [hoveredRatings, setHoveredRatings] = useState<Record<string, number | null>>({});
   const [customRatingHover, setCustomRatingHover] = useState<number | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   // Mekanları Yükle
   async function loadPlaces() {
@@ -337,8 +345,69 @@ export function CityPlacesAccordion({
 
   return (
     <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-4">
-      {/* 1. Üst Kontrol Barı: Canlı Arama + Keşif Durumu Segment Butonları */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+      {/* 0. Üst Mod Değiştirici: Gezilecek Yerler vs 1-5 Günlük Akıllı Rotalar + Fotoğraflardan Bul */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <div className="flex-1 flex items-center gap-1.5 p-1 bg-slate-950/90 border border-slate-800 rounded-2xl">
+          <button
+            type="button"
+            onClick={() => setViewMode("places")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              viewMode === "places"
+                ? "bg-slate-800 text-white shadow-md border border-slate-700/60"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Landmark className="w-4 h-4 text-cyan-400" />
+            <span>Gezilecek Yerler ({totalCount})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode("itinerary")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              viewMode === "itinerary"
+                ? "bg-gradient-to-r from-cyan-600/30 to-blue-600/30 text-cyan-300 shadow-md border border-cyan-500/40"
+                : "text-slate-400 hover:text-cyan-300"
+            }`}
+          >
+            <Footprints className="w-4 h-4 text-cyan-400 animate-pulse" />
+            <span>Akıllı Yürüyüş Rotaları</span>
+            <span className="hidden sm:inline px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-extrabold uppercase">
+              YENİ
+            </span>
+          </button>
+        </div>
+
+        {/* Fotoğraflardan Bul (EXIF GPS) Butonu */}
+        <button
+          type="button"
+          onClick={() => setIsPhotoModalOpen(true)}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer shrink-0 min-h-[44px]"
+          title="Çektiğiniz tatil fotoğraflarının GPS konumlarından mekanları otomatik tespit edin"
+        >
+          <Camera className="w-4 h-4" />
+          <span>Fotoğraflardan Bul</span>
+          <span className="px-1.5 py-0.5 rounded-md bg-slate-950/20 text-[9px] font-extrabold uppercase">
+            EXIF GPS
+          </span>
+        </button>
+      </div>
+
+      {viewMode === "itinerary" ? (
+        <CityItinerariesView
+          cityName={cityName}
+          countryCode={countryCode}
+          tripId={tripId}
+          visitedPlaceIds={new Set(places.filter((p) => p.isVisited).map((p) => p.id))}
+          onToggleVisit={(placeId) => {
+            const target = places.find((p) => p.id === placeId);
+            if (target) handleToggle(target);
+          }}
+        />
+      ) : (
+        <>
+          {/* 1. Üst Kontrol Barı: Canlı Arama + Keşif Durumu Segment Butonları */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
         {/* Canlı Arama Input'u */}
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -470,14 +539,14 @@ export function CityPlacesAccordion({
               >
                 {/* Üst Kısım: Checkbox + İsim + Kategori + Saat / Kalem */}
                 <div className="flex items-start justify-between gap-2.5">
-                  {/* Sol: Tik Butonu ve Mekan Adı */}
+                  {/* Sol: Tik Butonu, Küçük Resim ve Mekan Adı */}
                   <div
                     onClick={() => handleToggle(place)}
                     className="flex items-start gap-2.5 cursor-pointer flex-1 min-w-0"
                   >
                     <button
                       type="button"
-                      className="mt-0.5 shrink-0 transition-transform active:scale-90"
+                      className="mt-1 shrink-0 transition-transform active:scale-90"
                       aria-label={isGreen ? "Ziyareti kaldır" : "Ziyaret edildi olarak işaretle"}
                     >
                       {isGreen ? (
@@ -487,7 +556,33 @@ export function CityPlacesAccordion({
                       )}
                     </button>
 
-                    <div className="min-w-0">
+                    {/* Mekan Küçük Resmi (Thumbnail) veya İkon */}
+                    {place.imageUrl ? (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewImage({ url: place.imageUrl!, title: place.name });
+                        }}
+                        className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden shrink-0 border border-slate-700/80 shadow-md group/img cursor-zoom-in"
+                        title="Fotoğrafı büyüt"
+                      >
+                        <img
+                          src={place.imageUrl}
+                          alt={place.name}
+                          className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                          <Maximize2 className="w-3.5 h-3.5 text-white drop-shadow" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-center shrink-0 text-slate-500 shadow-inner">
+                        {getCategoryIcon(place.category)}
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
                           className={`text-xs font-bold leading-tight ${
@@ -504,7 +599,7 @@ export function CityPlacesAccordion({
                       </div>
 
                       {place.description && (
-                        <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                        <p className="text-[11px] text-slate-400 line-clamp-1 sm:line-clamp-2 mt-0.5">
                           {place.description}
                         </p>
                       )}
@@ -600,6 +695,8 @@ export function CityPlacesAccordion({
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* 4. Tarih ve Saat Düzenleme Modalı */}
@@ -809,6 +906,70 @@ export function CityPlacesAccordion({
           </div>
         </div>
       )}
+
+      {/* 4. Görsel Büyütme Modalı (Lightbox) */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-lg w-full bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-4 sm:p-5 flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-3 right-3 p-1.5 rounded-full bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="w-full aspect-[4/3] rounded-2xl overflow-hidden mb-3 bg-slate-950 border border-slate-800/80">
+              <img
+                src={previewImage.url}
+                alt={previewImage.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <h4 className="text-sm font-bold text-slate-100 text-center">{previewImage.title}</h4>
+            <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+              <span>📷 Kaynak: Wikimedia Commons</span>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Fotoğraf Eşleşme Modalı (EXIF GPS) */}
+      <PhotoMatchModal
+        isOpen={isPhotoModalOpen}
+        onClose={() => setIsPhotoModalOpen(false)}
+        cityName={cityName}
+        places={places}
+        onConfirmMatches={async (matches) => {
+          const res = await batchRecordPlaceVisits({
+            tripId,
+            stopId,
+            visits: matches,
+          });
+
+          if (res.success && res.visits) {
+            setPlaces((prev) =>
+              prev.map((p) => {
+                const match = res.visits?.find((v) => v.placeId === p.id);
+                if (match) {
+                  return {
+                    ...p,
+                    isVisited: true,
+                    visitId: match.visitId,
+                    visitedAt: match.visitedAt,
+                  };
+                }
+                return p;
+              })
+            );
+          }
+        }}
+      />
     </div>
   );
 }

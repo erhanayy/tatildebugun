@@ -13,8 +13,19 @@ export interface LogOtpOptions {
  * Üretilen OTP kodlarını geliştirici/canlı test için sifreler.md dosyasına güvenle kaydeder.
  */
 export async function logOtpToPasswordFile(options: LogOtpOptions): Promise<void> {
+  const { type, targetUser, identifier, otpCode, expiresInMinutes = 15 } = options;
+
+  // Canlı ortamda container dosya sistemi geçici olduğundan ve kullanıcı erişemediğinden
+  // dosya yazmak yerine yapısal konsol logu atılır.
+  if (process.env.LIVE_ENV === "true") {
+    console.log(
+      `[OTP Log - Canlı] ${type} | Kullanıcı: ${targetUser} (${identifier}) | Kod: ${otpCode} | Süre: ${expiresInMinutes}dk`
+    );
+    return;
+  }
+
+  // Yerel geliştirme ortamında sifreler.md dosyasına kaydet
   try {
-    const { type, targetUser, identifier, otpCode, expiresInMinutes = 15 } = options;
     const filePath = path.join(process.cwd(), "sifreler.md");
 
     const now = new Date();

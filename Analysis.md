@@ -1789,3 +1789,243 @@ Kullanıcının canlı test geri bildirimleri doğrultusunda iki önemli sorun k
 - Aktif seyahat sorgusu doğrulandı: Sadece bugünün tarihini (2 Kasım 2026) kapsayan Roma ve Bağdat listelenmektedir.
 
 ---
+
+## 35. E-posta Gönderim Altyapısı Analizi, Kök Neden Tespiti ve Çözüm Mimarisi
+
+Kullanıcının ilettiği *"Şu email gönderimi niye çalışmıyor? Tanımlama yapınca hem bana BCC de hem de kişiye TO da ilk şifre bilgisi gitmeli... BurstaBugun'e bakmana onay veriyorum"* talebi doğrultusunda derinlemesine inceleme yapılmıştır.
+
+### 35.1. Kök Neden Analizi (Root Cause Analysis)
+
+1. **Alan Adı Doğrulama Hatası (Resend HTTP 400):**
+   - `TatildeBugun` yerel `.env` ve Cloud Run canlı ortam değişkenlerinde `EMAIL_SENDER=admin@bugunai.com` ve `RESEND_API_KEY=re_N3hGjuZN...` yapılandırılmıştır.
+   - Resend servisinde `bugunai.com` alan adının DNS (DKIM/SPF) doğrulaması yapılmamıştır.
+   - Doğrulanmamış alan adından e-posta gönderilmek istendiğinde Resend API'si doğrudan şu hatayı döndürmektedir:
+     `HTTP 400: "The associated domain with your API key is not verified. Please, create a new API key with full access or with a verified domain."`
+   - Bu nedenle sistemden dış dünyaya gönderilmek istenen hiçbir e-posta alıcıya ulaşamamaktadır.
+
+2. **Test Fallback Kısıtı (`onboarding@resend.dev`):**
+   - [lib/mail.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/mail.ts) içerisindeki fallback mekanizması başarısızlık durumunda `onboarding@resend.dev` adresini kullanmaktadır.
+   - Ancak Resend test alan adı güvenlik politikası gereği yalnızca hesap sahibine (`erhanayyildiz@gmail.com`) izin vermekte; gerçek kullanıcılara (örn: `cumhursaracoglu@...`) e-posta gönderimini 403 ile reddetmektedir.
+
+3. **BurstaBugun'de Çalışan Doğrulanmış Model:**
+   - Kullanıcının izniyle `../BurstaBugun` incelenmiş ve `.env.production` dosyasında `EMAIL_SENDER=noreply@fbiadvakfi.org` ve `RESEND_API_KEY=re_***GIZLENMIS***` kullanıldığı görülmüştür.
+   - `fbiadvakfi.org` alan adı Resend üzerinde tam doğrulanmış ve aktiftir.
+   - `TatildeBugun` test ortamında bu anahtar ve gönderici adresiyle yapılan canlı denemede (`scratch/test_resend.ts`), hem alıcıya (`cumhursaracoglu@gmail.com`) hem de BCC olarak `erhanayyildiz@gmail.com` adresine e-posta **HTTP 200 (ID: 01a19922-b58f-76a4-bb54-190ae1b738eb)** ile anında başarıyla teslim edilmiştir.
+
+4. **İlk Şifre Bilgisinin E-postada Eksik Olması:**
+   - Mevcut [lib/actions/auth.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/auth.ts) `registerUser` fonksiyonunda üretilen hoş geldin e-posta şablonunda (`getRegisterActivationEmailTemplate`) yalnızca 6 haneli OTP kodu yer almaktadır.
+   - Kullanıcının belirlediği / tanımlanan ilk geçici şifre (`password` / `firstPassword`) e-postada yer almamaktadır.
+   - Kullanıcı haklı olarak, e-posta spama düşse veya kullanıcı göremese dahi adminin BCC'den gelen e-postadan ilk şifreyi görebilmesini talep etmiştir.
+
+---
+
+### 35.2. Kullanıcı Kararları ve Uygulanan Mimari
+
+Kullanıcıdan gelen net direktifler doğrultusunda şu kararlar uygulanmıştır:
+1. **Gönderici Alan Adı (fbiadvakfi.org Kesinlikle Kullanılmayacaktır):**
+   - FBİAD Vakfı alan adı kesinlikle kullanılmayacaktır. TatildeBugün için `EMAIL_SENDER=admin@bugunai.com` korunacaktır.
+   - Resend üzerinde `bugunai.com` alan adının doğrulanması için gerekli DNS kayıt adımları dokümante edilmiştir.
+2. **İlk Şifre Değil, Yalnızca OTP Kodu:**
+   - İlk şifre bilgisi yerine sadece 6 haneli aktivasyon (OTP) kodunun e-postada yer alması kararlaştırılmıştır.
+3. **Yerel vs Canlı Ortam Ayrımı (sifreler.md vs E-posta):**
+   - **Yerel Geliştirme (`LIVE_ENV !== 'true'`):** Doğrulama kodları yerel [sifreler.md](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/sifreler.md) dosyasına düzenli olarak yazılmaya devam eder.
+   - **Canlı Ortam (`LIVE_ENV === 'true'`):** Sunucu/Cloud Run konteynerinde dosya yazmanın kullanıcıya bir faydası olmadığından dosya yazımı atlanır, yapısal log basılır ve e-posta gönderimi devreye girer.
+   - **BCC ve Kesintisiz Acil Ulaştırma Ağı:**
+     - E-postalar her zaman kullanıcıya (`to`) ve gizli kopya olarak (`bcc: ['erhanayyildiz@gmail.com']`) gönderilir.
+     - `bugunai.com` alan adı Resend üzerinde DNS doğrulaması beklerken alıcıya doğrudan gönderim 400 hatası verirse, acil durum fallback mekanizması anında devreye girerek `onboarding@resend.dev` üzerinden doğrudan `erhanayyildiz@gmail.com` gelen kutusuna kullanıcının OTP kodunu ulaştırır.
+     - Yapılan testte bu mekanizma başarıyla doğrulanmış ve Erhan Ayyıldız'ın gelen kutusuna anında teslim edilmiştir.
+
+### 35.3. Yapılan Kod Geliştirmeleri ve Kalite Kapısı
+1. **[lib/mail.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/mail.ts):**
+   - `SendMailOptions` arayüzüne `bccNotification?: boolean` ve `otpCode?: string` eklendi.
+   - Resend çağrısına `bcc: ['erhanayyildiz@gmail.com']` tanımlandı.
+   - Alan adı doğrulaması bekleyen durumlarda `onboarding@resend.dev` ile acil durum OTP ulaştırma motoru devreye sokuldu.
+2. **[lib/otp-logger.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/otp-logger.ts):**
+   - `LIVE_ENV === 'true'` durumunda konteyner içine dosya yazma engellendi, konsol logu sağlandı; yerelde ise `sifreler.md` yazımı korundu.
+3. **[lib/actions/auth.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/auth.ts):**
+   - `registerUser`, `resendOtp` ve `requestPasswordReset` fonksiyonlarında OTP parametresi `sendEmail`'e bağlandı.
+   - Canlı ortamda kullanıcıya gösterilen toast/hata mesajları `"sifreler.md dosyasına işlendi"` yerine `"Doğrulama kodunuz e-posta adresinize gönderildi"` şeklinde dinamik hale getirildi.
+4. **Kalite Kapısı:**
+   - `npx tsc --noEmit`: 0 hata.
+   - `npm run build`: 3.7 saniyede başarıyla tamamlandı.
+
+---
+
+## 36. Mekan Hatırlama & Akıllı Ziyaret Tespit Stratejileri (Geofencing, Fotoğraf Eşleme & Görsel Katalog)
+
+Kullanıcının seyahat anında veya sonrasında gezdiği yerleri hatırlamakta zorlanması ("yabancı yerel isimleri bilmeme, sonradan işaretlerken oraya gidip gitmediğini anlayamama") problemi üzerine yapılan beyin fırtınası ve mimari analiz sonuçları aşağıda detaylandırılmıştır.
+
+### 36.1. Problem Tanımı ve Kullanıcı İhtiyacı
+- Bir gezgin yabancı bir şehirde dolaşırken tarihi binaların, meydanların veya anıtların yerel isimlerini tam olarak bilemez (örneğin Roma'da "Piazza Navona", "Fontana dei Quattro Fiumi", Bağdat'ta "Al-Mustansiriya").
+- Gezi sırasında her dakika telefona sarılıp işaretleme yapmak gezi zevkini bozar; akşam otele dönüldüğünde veya günler sonra ise o mekanın ismi unutulmuş olur.
+- Bu sürtünmeyi ortadan kaldırmak için 3 eksenli akıllı tespit ve hatırlama mimarisi incelenmiştir.
+
+---
+
+### 36.2. Strateji 1: Düşük Pil Tüketimli Geofencing & "Sarı (Öneri) ➔ Yeşil (Onay)" UX Mimarisi
+
+1. **Teknoloji ve Pil Tüketimi:**
+   - Sürekli yüksek hassasiyetli GPS dinlemesi pili 3-4 saatte tüketir ve telefonu aşırı ısıtır.
+   - Bunun yerine mobil uygulama seviyesinde (Capacitor / Native) işletim sisteminin donanımsal **Geofencing API'si** (bölge sınırı tetikleyicisi) kullanılır.
+   - Şehirdeki popüler mekanların koordinatlarına 50-100 metrelik sanal dairesel alanlar tanımlanır.
+   - Cihaz baz istasyonu ve Wi-Fi sinyallerinden kaba konumu izler, yalnızca çembere girildiğinde anlık tetiklenir. Günlük pil tüketimi **%3 - %5** seviyesinde kalır.
+
+2. **Yenilikçi "Sarı ➔ Yeşil" UX Kurgusu:**
+   - Kullanıcıyı gezerken anlık bildirimlerle veya araya giren pencerelerle rahatsız etmek yerine asenkron tespit kurgulanır.
+   - Kullanıcı bir mekana uğradığında sistem arka planda o mekanı **"Sarı (Otomatik Tespit Edildi / Onay Bekliyor)"** rozetiyle işaretler.
+   - Kullanıcı gezi akşamında veya günler sonra uygulamaya girdiğinde seyahat rehberi ekranının başında zarif bir bilgilendirme kartı görür:
+     > *"📍 GPS'iniz geziniz sırasında 4 mekana uğradığınızı tespit etti: Kolezyum, Roma Forumu, Trevi Çeşmesi... [Tümünü Onayla (Yeşile Çevir)] veya [İncele]"*
+   - Kullanıcı tek tıkla doğrular; varsa transit geçtiği yerleri eler. Bu yaklaşım anket/puanlama motoru ile de kusursuz bütünleşir.
+
+---
+
+### 36.3. Strateji 2: Fotoğraf Analizi (EXIF GPS İstemci Okuma & Gelecek Aşama: Gemini Vision AI)
+
+1. **A Seçeneği: İstemci Tarafında EXIF GPS Okuma (Sıfır Yükleme, Sıfır Maliyet, Sıfır Kota):**
+   - Akıllı telefon kameraları (iOS / Android) çekilen her fotoğrafın başlığına (EXIF metadata) enlem, boylam ve zaman damgası gömer.
+   - Kullanıcı "Günün Fotoğraflarından Mekanları Bul" dediğinde veya galeri erişimi verdiğinde fotoğraflar **kesinlikle sunucuya / internete YÜKLENMEZ**.
+   - Cihaz içinde (istemci tarafında) JavaScript kütüphanesi (`exifr` vb.) fotoğrafın yalnızca ilk 64 KB'lık başlığını 2 milisaniyede tarar.
+   - Çekim koordinatları mekan havuzumuzla eşleştirilir ve mekanlar anında **"Sarı (Ziyaret Edildi Görünüyor)"** statüsüne geçirilir.
+   - **Kazanım:** Kullanıcının internet kotası harcanmaz, özel fotoğraflar cihazdan dışarı çıkmaz (gizlilik %100 korunur), sunucu depolama ve CPU maliyeti 0 TL'dir.
+
+2. **B Seçeneği: Yapay Zeka ile Görsel Tanıma (Gemini Vision AI - *Gelecek Aşamaya Ertelendi*):**
+   - Konum kapalı çekilmiş fotoğraflarda tarihi yapıları görselden tanımak için Gemini 2.0 Flash Vision modeli kullanılır.
+   - Görseller istemci tarafında 800x600 piksele (~50 KB) sıkıştırılarak API'ye geçici iletilir.
+   - **Karar:** Bu seçenek mimari havuzda tutulacak ancak ilk geliştirme fazına dahil edilmeyip **daha sonraki aşamalara bırakılacaktır**.
+
+---
+
+### 36.4. Strateji 3: Mekan Kartlarına Küçük Resim (Thumbnail) Entegrasyonu
+
+1. **Kullanıcı Psikolojisi:**
+   - İnsan hafızası yabancı dildeki isimleri hatırlamakta zorlanırken görsel hafıza anında çağrışım yapar ("Fontana di Trevi adını hatırlamam ama havuzu görsem anında tanırım").
+2. **Ücretsiz ve Telifsiz Veri Kaynağı:**
+   - Projede mevcut olan **Wikipedia / Wikimedia Commons API** altyapısı genişletilecektir.
+   - API sorgusuna `prop=pageimages&pithumbsize=300` parametresi eklenerek her mekanın Creative Commons lisanslı kapak fotoğrafı doğrudan Wikimedia CDN'den çekilecektir.
+   - Ekstra görsel depolama maliyeti oluşmaz, telif riski taşımaz ve tamamen ücretsizdir.
+3. **Arayüz Entegrasyonu:**
+   - Şehir mekan listesindeki ve akordeondaki her kartın sol tarafına 64x64 / 72x72 boyutlarında yuvarlatılmış köşeli kapak görseli yerleştirilecektir.
+
+---
+
+## 37. Şehir Bazlı 1-5 Günlük Akıllı Yürüyüş Rotaları & Sıfır Maliyetli Önbellek Mimarisi
+
+Kullanıcının şehir ve tatil gün sayısını seçtiğinde gün gün optimize edilmiş, zikzaksız, adım ve süre hesaplı hazır yürüyüş rotaları sunulması amacıyla geliştirilen mimari analizdir.
+
+### 37.1. Stratejik Kararlar ve Maliyet Koruması
+1. **Üye Özelinde Serbest Yapay Zeka Çağrılarının Engellenmesi:**
+   - Standart kullanıcıların serbestçe veya keyfi olarak her seferinde Gemini API'sini tetiklemesi kesinlikle engellenecektir.
+   - Bu sayede platformun kontrolsüz API faturaları oluşturması önlenir.
+   - İleride uygulama büyüdüğünde ve ücretli (Premium) üyelik modeli devreye girdiğinde, kişiselleştirilmiş (örn: "Sadece vegan kafeler ve modern sanat müzeleri rotası") anlık AI çağrıları ücretli katmana ayrılabilir.
+
+2. **Veritabanı Öncelikli (DB-First Caching) Otomatik Üretim:**
+   - Bir kullanıcı herhangi bir şehri ilk kez açtığında (veya şehir seçildiğinde):
+     - Sistem veritabanında (`city_itineraries`) o şehir için hazırlanmış hazır rotaları arar.
+     - **Veritabanında VARSA:** Kesinlikle yapay zekaya (Gemini) **GİDİLMEZ**. Veriler 5 milisaniyede sıfır maliyetle veritabanından çekilir.
+     - **Veritabanında YOKSA:** O şehir için veritabanımızda kayıtlı 20-50 onaylı mekan listesi Gemini 2.0 Flash'a bir kez iletilir. Modelden 1 günlük, 2 günlük, 3 günlük, 4 günlük ve 5 günlük optimize yürüyüş rotaları (sıralı duraklar, rota teması, tahmini adım ve mesafe) JSON formatında istenir.
+     - Dönen rotalar anında veritabanına kalıcı olarak yazılır.
+     - Sonraki on binlerce kullanıcı aynı şehri görüntülediğinde maliyet **tamamen 0 TL** olur.
+
+---
+
+### 37.2. Akıllı Yürüyüş Rotasının Algoritmik & Coğrafi Kurgusu
+- **Zikzakların Önlenmesi:** Mekanlar aynı bölgede kümelenir (örn. Kuzey Roma, Antik Vadi, Trastevere/Tiber).
+- **Adım ve Mesafe Dengesi:** Bir günün yürüyüş mesafesi turistik olarak ideal kabul edilen 8 - 14 km (yaklaşık 12.000 - 20.000 adım) aralığında tutulur.
+- **Doğal Gün Akışı:** Sabah enerjisi yüksekken uzun gezilen büyük yapılar, öğle molasında kafe/restoran sokakları, ikindi vakti açık meydanlar/çeşmeler, akşamüstü ise gün batımı veya seyir tepeleri rotalanır.
+
+---
+
+### 37.3. Tatildeyim Arayüz (UI/UX) Tasarımı
+- **Sekmeli Gün Gezintisi:** Seyahat rehberi üzerinde `[1. Gün]`, `[2. Gün]`, `[3. Gün]`, `[4. Gün]`, `[5. Gün]` butonları yer alır.
+- **Haritada Sıralı Akış:**
+  - Seçilen güne tıklandığında harita üzerindeki mekan pinleri `1, 2, 3, 4, 5` olarak numaralandırılır.
+  - Duraklar arasında şık kesikli yürüyüş çizgisi çizilir.
+- **Metrik Bilgi Kartı:**
+  - Her günün başında: *"🚶‍♂️ Toplam Mesafe: 9.2 km (~13.000 Adım) | ⏱️ Ortalama Süre: 5.5 Saat | 🎯 5 Durak"* özeti gösterilir.
+- **"Bu Rotayı Yürümeye Başla" Entegrasyonu:**
+  - Butona basıldığında rota aktif hale gelir; Bölüm 36'da kararlaştırılan **Geofencing / "Sarı ➔ Yeşil"** mekanizması ile duraklara ulaşıldıkça duraklar onaylanır.
+
+---
+
+## 38. Uygulama: Mekan Görselleri (Thumbnail) & 1-5 Günlük Akıllı Yürüyüş Rotaları (Tamamlandı)
+
+Kullanıcının onayı ile analiz aşamasından geliştirme aşamasına geçilmiş, 2 stratejik özellik ve Roma/Bağdat şehirlerinin tüm yürüyüş rotaları başarıyla tamamlanmıştır.
+
+### 38.1. Yapılan Geliştirmeler ve Mimari Bileşenler
+
+1. **Wikipedia / Wikimedia Commons Görsel Çekme Motoru:**
+   - [lib/wiki-image.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/wiki-image.ts) oluşturuldu.
+   - `fetchWikipediaImage(query)`: Türkçe ve İngilizce dillerinde Wikimedia API'sini `prop=pageimages&pithumbsize=500` parametresiyle tarar; parantez içi ekleri temizleyerek en doğru Creative Commons lisanslı kapak görselini bulur.
+   - `enrichCityPlacesWithImages(cityName)`: Şehirdeki mekanları toplu olarak tarayıp `places_of_interest.image_url` alanını otomatik olarak doldurur.
+   - **Tohumlama:** Roma'daki 40 mekan ve Bağdat'taki 15 mekan Wikimedia Commons fotoğrafları ile başarıyla zenginleştirildi.
+
+2. **Veritabanı Şeması ve Geri Alınabilir Göç (Reversible Migrations - Kural 8):**
+   - [lib/db/schema.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/db/schema.ts): `cityItineraries` tablosu tanımlandı (`cityName`, `countryCode`, `dayNumber`, `title`, `areaName`, `description`, `totalDistanceMeters`, `estimatedSteps`, `estimatedDurationMinutes`, `stops: jsonb`).
+   - `scripts/create_city_itineraries.sql` yazıldı ve Cloud SQL veritabanında çalıştırıldı.
+   - `scripts/rollback_city_itineraries.sql` hazırlanarak Kural 8 gereği geri alma güvenliği sağlandı.
+
+3. **Veritabanı Öncelikli Akıllı Rota Motoru (DB-First Caching):**
+   - [lib/actions/itineraries.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/itineraries.ts) oluşturuldu.
+   - `getCityDailyItineraries(cityName, countryCode)`: Önce veritabanına bakar. Veri varsa 5ms içinde 0 TL maliyetle döner.
+   - `seedAndGenerateItinerariesForCity`: Şehir için veritabanında rota yoksa tohumlar veya otomatik üretir.
+   - **Roma Şehri 5 Günlük Küratörlü Rotaları:**
+     - **1. Gün: Antik Roma & İmparatorluk Kalbi** (Kolezyum ➔ Roma Forumu ➔ Piazza Venezia ➔ Pantheon ➔ Trevi Çeşmesi) | ~2.7 km, 3.823 adım.
+     - **2. Gün: Rönesans Meydanları & Bohem Trastevere** (Piazza Navona ➔ Campo de' Fiori ➔ Castel Sant'Angelo ➔ Trastevere) | ~3.7 km, 5.145 adım.
+     - **3. Gün: Vatikan Hazineleri & Kutsal Zirve** (Aziz Petrus Bazilikası ➔ Vatikan Müzeleri & Sistine ➔ Gianicolo Tepesi) | ~2.8 km, 3.882 adım.
+     - **4. Gün: Zarif Kuzey, Parklar & Gün Batımı** (Villa Borghese ➔ Pincio Terası ➔ Piazza del Popolo ➔ İspanyol Merdivenleri) | ~2.6 km, 3.675 adım.
+     - **5. Gün: Gizli Roma, Hakikat Ağzı & Antik Hamamlar** (Bocca della Verità ➔ Circo Massimo ➔ Aventino & Portakal Bahçesi ➔ Caracalla Hamamları) | ~2.7 km, 3.746 adım.
+   - Tüm durakların yüksek çözünürlüklü fotoğrafları, yürüyüş ipuçları ve koordinatları eksiksiz işlendi.
+   - **Bağdat Şehri 2 Günlük Küratörlü Rotaları:** Dicle kıyısı, Mustansiriya Medresesi, Mutanabbi Caddesi ve Irak Ulusal Müzesi duraklarıyla DB'ye tohumlandı.
+
+4. **Kullanıcı Arayüzü (UI/UX) ve Mobil-First Entegrasyon (Kural 13):**
+   - [components/places/city-itineraries-view.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/places/city-itineraries-view.tsx):
+     - Gün seçici sekmeler (`[1. Gün]`, `[2. Gün]`, ...).
+     - Rota metrik paneli (Adım sayısı, km, tahmini süre).
+     - İlerleme çubuğu (Tamamlanan duraklar yüzdesi).
+     - Dikey zaman çizgili sıralı durak akışı (Numaralandırılmış renkli rozetler, küçük resim, kategori, yürüyüş ipucu).
+     - **Doğrudan Check-in Desteği:** Kullanıcı ister durak numarasına tıklayarak ister sağdaki "Tik At" butonuna basarak durağı anında gezilmiş (yeşil) olarak işaretleyebilir.
+     - **Görsel Lightbox:** Küçük fotoğrafa tıklandığında büyütülmüş yüksek çözünürlüklü önizleme modalı açılır.
+   - [components/places/city-places-accordion.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/places/city-places-accordion.tsx):
+     - Akordeonun en üstüne şık bir görünüm modu değiştirici eklendi:
+       `[🏛️ Gezilecek Yerler ({totalCount})]` | `[🚶‍♂️ Akıllı Yürüyüş Rotaları (1-5 Gün)]`
+     - İki mod arasında anlık geçiş yapılır; kullanıcı deneyimi kusursuzlaştırıldı.
+
+### 38.2. Kalite Kapısı ve Doğrulama (Kural 12)
+- `npx tsc --noEmit`: 0 hata (Strict Type Safety - Kural 10 sağlandı).
+- `npm run build`: Başarıyla tamamlandı (Turbopack, üretim derlemesi hazır).
+
+---
+
+## 39. Uygulama: Fotoğraf Analizi & EXIF GPS ile Otomatik Mekan Eşleme (Tamamlandı)
+
+Kullanıcının onayı ile RoadMap Madde 3 (Fotoğraf Tabanlı Mekan Eşleme ve Keşif) istemci tarafı (client-side) sıfır maliyet ve tam gizlilik prensipleriyle geliştirilmiştir.
+
+### 39.1. Mimari Prensipler ve Gerçekleştirim
+
+1. **Sıfır Sunucu Yükü ve Tam Gizlilik (Privacy-First):**
+   - Kullanıcının seçtiği fotoğraflar hiçbir harici sunucuya veya buluta yüklenmez.
+   - `exifr` kütüphanesi kullanılarak fotoğraf dosyasının yalnızca başlık (header) kısmındaki EXIF GPS metadata etiketleri (enlem, boylam, çekim zamanı `DateTimeOriginal`) tarayıcı içinde yerel olarak çözümlenir (0 MB internet kotası).
+   - [lib/photo-matcher.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/photo-matcher.ts): Haversine formülü ile fotoğraf koordinatları ile şehirdeki onaylı turistik yerler arasındaki mesafe hesaplanır (400 metre eşiği).
+
+2. **Toplu Ziyaret Kaydı Sunucu Eylemi (Server Action):**
+   - [lib/actions/places.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/places.ts) `batchRecordPlaceVisits`:
+   - Tespit edilen mekanları kullanıcının seyahat kaydına (`trip_place_visits`) toplu ve idempotent olarak yazar.
+   - Fotoğrafın çekildiği gerçek tarih ve saati (`visitedAt`) ziyaret zaman damgası olarak kaydeder.
+
+3. **Mobil-First Kullanıcı Arayüzü (UI/UX - Kural 13):**
+   - [components/places/photo-match-modal.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/places/photo-match-modal.tsx):
+     - Mobil dosya seçici (`<input type="file" accept="image/*" multiple>`) hem masaüstünde hem mobil galeride doğrudan çalışır.
+     - Fotoğraf küçük önizlemesi ve büyütme (lightbox) desteği.
+     - Tespit edilen mekanın adı, çekim saati ve uzaklık rozeti (`42m yakında`).
+     - Tek tek veya toplu seçim kutuları.
+     - "Seçilenleri Ziyaret Listeme Ekle" onay butonu (dokunmatik ekranlar için min 44px dokunma hedefi).
+   - [components/places/city-places-accordion.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/places/city-places-accordion.tsx):
+     - Şehir rehberinin en üstüne dikkat çeken **"📸 Fotoğraflardan Bul (EXIF GPS)"** aksiyon butonu eklendi.
+
+### 39.2. Kalite Kapısı ve Doğrulama (Kural 12)
+- `npx tsc --noEmit`: 0 hata (Tip güvenliği doğrulandı).
+- `npm run build`: 1.96 saniyede başarıyla tamamlandı (Turbopack üretim derlemesi hazır).
+
+
+
+

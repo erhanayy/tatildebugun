@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uuid, index, varchar, doublePrecision, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, uuid, index, varchar, doublePrecision, integer, jsonb } from "drizzle-orm/pg-core";
 
 // Kullanıcı Rolleri: 'admin' (Yönetici), 'host' (Otel/Tesis/Tur Sahibi), 'guest' (Tatilci/Misafir)
 export const users = pgTable(
@@ -350,6 +350,43 @@ export const tripPlaceVisits = pgTable(
 
 export type TripPlaceVisit = typeof tripPlaceVisits.$inferSelect;
 export type NewTripPlaceVisit = typeof tripPlaceVisits.$inferInsert;
+
+// --- 13. Şehir Günlük Yürüyüş Rotaları (City Daily Walking Itineraries) ---
+export const cityItineraries = pgTable(
+  "city_itineraries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    cityName: varchar("city_name", { length: 100 }).notNull(),
+    countryCode: varchar("country_code", { length: 10 }).notNull(),
+    dayNumber: integer("day_number").notNull(), // 1, 2, 3, 4, 5
+    title: varchar("title", { length: 200 }).notNull(), // Örn: 'Antik Roma ve İmparatorluk Vadisi'
+    theme: varchar("theme", { length: 100 }), // Örn: 'Antik Tarih & Arkeoloji'
+    description: text("description"), // Rota hikayesi ve günlük gezi ipuçları
+    totalDistanceMeters: integer("total_distance_meters").default(0).notNull(), // Örn: 8400 m
+    estimatedSteps: integer("estimated_steps").default(0).notNull(), // Örn: 12000 adım
+    estimatedDurationMinutes: integer("estimated_duration_minutes").default(0).notNull(), // Örn: 300 dk (5 saat)
+    stops: jsonb("stops").$type<Array<{
+      orderIndex: number;
+      placeId?: string;
+      name: string;
+      category?: string;
+      latitude: number;
+      longitude: number;
+      imageUrl?: string;
+      estimatedMinutes?: number;
+      walkingTip?: string;
+    }>>().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    cityDayIdx: index("city_itineraries_city_day_idx").on(table.cityName, table.dayNumber),
+    cityCountryIdx: index("city_itineraries_city_country_idx").on(table.cityName, table.countryCode),
+  })
+);
+
+export type CityItinerary = typeof cityItineraries.$inferSelect;
+export type NewCityItinerary = typeof cityItineraries.$inferInsert;
 
 
 

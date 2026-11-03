@@ -398,6 +398,83 @@ export async function togglePlaceVisit(input: {
 }
 
 /**
+ * Fotoğraf eşleşmesi veya geofencing ile tespit edilen mekanları toplu olarak ziyaret edildi kaydeder.
+ */
+export async function batchRecordPlaceVisits(input: {
+  tripId: string;
+  stopId?: string | null;
+  visits: Array<{
+    placeId: string;
+    visitedAt?: Date | string | null;
+  }>;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { success: false, error: "Lütfen önce giriş yapınız" };
+  }
+
+  const { tripId, stopId, visits } = input;
+  const userId = session.user.id;
+
+  try {
+    const insertedVisits: Array<{ placeId: string; visitId: string; visitedAt: Date }> = [];
+
+    for (const v of visits) {
+      const existing = await db
+        .select()
+        .from(tripPlaceVisits)
+        .where(
+          and(
+            eq(tripPlaceVisits.userId, userId),
+            eq(tripPlaceVisits.tripId, tripId),
+            eq(tripPlaceVisits.placeId, v.placeId)
+          )
+        )
+        .limit(1);
+
+      const visitDate = v.visitedAt ? new Date(v.visitedAt) : new Date();
+
+      if (existing.length > 0) {
+        if (v.visitedAt) {
+          await db
+            .update(tripPlaceVisits)
+            .set({ visitedAt: visitDate })
+            .where(eq(tripPlaceVisits.id, existing[0].id));
+        }
+        insertedVisits.push({
+          placeId: v.placeId,
+          visitId: existing[0].id,
+          visitedAt: visitDate,
+        });
+      } else {
+        const [inserted] = await db
+          .insert(tripPlaceVisits)
+          .values({
+            userId,
+            tripId,
+            stopId: stopId || null,
+            placeId: v.placeId,
+            visitedAt: visitDate,
+          })
+          .returning();
+
+        insertedVisits.push({
+          placeId: v.placeId,
+          visitId: inserted.id,
+          visitedAt: inserted.visitedAt,
+        });
+      }
+    }
+
+    revalidatePath("/tatildeyim");
+    return { success: true, visits: insertedVisits };
+  } catch (error) {
+    console.error("batchRecordPlaceVisits hatası:", error);
+    return { success: false, error: "Ziyaretler kaydedilemedi" };
+  }
+}
+
+/**
  * Ziyaret tarihini (zaman damgasını), puanını veya notunu güncelle.
  */
 export async function updatePlaceVisit(input: {

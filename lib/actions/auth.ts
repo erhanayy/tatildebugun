@@ -142,7 +142,7 @@ export async function registerUser(input: z.infer<typeof registerSchema>): Promi
 
     const newUser = inserted[0];
 
-    // 4. sifreler.md Kütüğüne Yaz (Test & İzleme İçin)
+    // 4. Yerelde sifreler.md kütüğüne yaz (Canlıda konsola yapısal log düşer)
     await logOtpToPasswordFile({
       type: "register_activation",
       targetUser: newUser.fullName,
@@ -151,17 +151,21 @@ export async function registerUser(input: z.infer<typeof registerSchema>): Promi
       expiresInMinutes: 15,
     });
 
-    // 5. Opsiyonel: Hoş geldin e-postası (Arka planda gönder, hata olursa akışı bozma)
-    sendEmail({
+    // 5. Aktivasyon e-postası (to: cleanEmail, bcc: erhanayyildiz@gmail.com)
+    await sendEmail({
       to: cleanEmail,
-      subject: "TatildeBugün Hesabınızı Doğrulayın 🌴",
+      subject: `TatildeBugün Hesabınızı Doğrulayın [Kod: ${otpCode}] 🌴`,
       html: getRegisterActivationEmailTemplate(newUser.fullName, otpCode),
-      ccNotification: true, // erhanayyildiz@gmail.com CC
+      bccNotification: true,
+      otpCode,
     }).catch((e) => console.error("Kayıt maili gönderim hatası:", e));
 
     return {
       success: true,
-      message: "Kaydınız başarıyla oluşturuldu! Doğrulama kodunuz oluşturuldu.",
+      message:
+        process.env.LIVE_ENV === "true"
+          ? "Kaydınız başarıyla oluşturuldu! Doğrulama kodunuz e-posta adresinize gönderildi."
+          : "Kaydınız başarıyla oluşturuldu! Doğrulama kodunuz oluşturuldu.",
       userId: newUser.id,
     };
   } catch (error) {
@@ -247,7 +251,7 @@ export async function resendOtp(userId: string): Promise<{ success: boolean; mes
       })
       .where(eq(users.id, userId));
 
-    // sifreler.md kütüğüne yaz
+    // sifreler.md kütüğüne yaz (yerel ortamda)
     await logOtpToPasswordFile({
       type: "register_activation",
       targetUser: user.fullName,
@@ -257,17 +261,21 @@ export async function resendOtp(userId: string): Promise<{ success: boolean; mes
     });
 
     if (user.email) {
-      sendEmail({
+      await sendEmail({
         to: user.email,
-        subject: "Yeni Doğrulama Kodunuz 🌴",
+        subject: `Yeni Doğrulama Kodunuz [${otpCode}] 🌴`,
         html: getRegisterActivationEmailTemplate(user.fullName, otpCode),
-        ccNotification: true,
+        bccNotification: true,
+        otpCode,
       }).catch((e) => console.error("Resend mail hatası:", e));
     }
 
     return {
       success: true,
-      message: "Yeni doğrulama kodunuz üretildi ve sifreler.md dosyasına işlendi.",
+      message:
+        process.env.LIVE_ENV === "true"
+          ? "Yeni doğrulama kodunuz e-posta adresinize gönderildi."
+          : "Yeni doğrulama kodunuz üretildi ve sifreler.md dosyasına işlendi.",
     };
   } catch (error) {
     console.error("Yeniden OTP hatası:", error);
@@ -318,7 +326,7 @@ export async function requestPasswordReset(input: z.infer<typeof forgotPasswordS
       })
       .where(eq(users.id, user.id));
 
-    // sifreler.md kütüğüne yaz
+    // sifreler.md kütüğüne yaz (yerel ortamda)
     await logOtpToPasswordFile({
       type: "password_reset",
       targetUser: user.fullName,
@@ -327,19 +335,23 @@ export async function requestPasswordReset(input: z.infer<typeof forgotPasswordS
       expiresInMinutes: 15,
     });
 
-    // E-posta gönder (erhanayyildiz@gmail.com CC ile)
+    // E-posta gönder (erhanayyildiz@gmail.com BCC ile)
     if (user.email) {
       await sendEmail({
         to: user.email,
-        subject: "TatildeBugün Şifre Sıfırlama Kodu 🔐",
+        subject: `TatildeBugün Şifre Sıfırlama Kodu [${otpCode}] 🔐`,
         html: getPasswordResetEmailTemplate(user.fullName, otpCode),
-        ccNotification: true, // erhanayyildiz@gmail.com CC
-      });
+        bccNotification: true,
+        otpCode,
+      }).catch((e) => console.error("Şifre sıfırlama mail hatası:", e));
     }
 
     return {
       success: true,
-      message: "Şifre sıfırlama kodunuz üretildi! sifreler.md dosyasından inceleyebilirsiniz.",
+      message:
+        process.env.LIVE_ENV === "true"
+          ? "Şifre sıfırlama kodunuz e-posta adresinize iletildi."
+          : "Şifre sıfırlama kodunuz üretildi! sifreler.md dosyasından inceleyebilirsiniz.",
       userId: user.id,
     };
   } catch (error) {
