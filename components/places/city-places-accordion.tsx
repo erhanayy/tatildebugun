@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useTransition } from "react";
+import { useState, useEffect, useMemo, useTransition, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   getCityPlaces,
   togglePlaceVisit,
@@ -54,14 +55,35 @@ export function CityPlacesAccordion({
   longitude,
   onPlacesCountChange,
 }: CityPlacesAccordionProps) {
+  const [mounted, setMounted] = useState(false);
   const [places, setPlaces] = useState<CityPlaceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"places" | "itinerary">("places");
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "unvisited" | "visited">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "unvisited" | "visited" | "photo">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isPending, startTransition] = useTransition();
+
+  // Fotoğraftan doğrudan seçim & tespit edilen mekanlar state'i (MAVİ)
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [initialPhotoFiles, setInitialPhotoFiles] = useState<File[] | null>(null);
+  const [photoDetectedPlaceIds, setPhotoDetectedPlaceIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  function handleDirectPhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    setInitialPhotoFiles(fileArray);
+    setIsPhotoModalOpen(true);
+    if (photoInputRef.current) {
+      photoInputRef.current.value = "";
+    }
+  }
 
   // Saat/Tarih Düzenleme Modalı State
   const [editingVisit, setEditingVisit] = useState<{
@@ -294,9 +316,10 @@ export function CityPlacesAccordion({
         if (!matchName && !matchDesc) return false;
       }
 
-      // 2. Durum filtresi (Tümü / Görülmeyenler / Görülenler)
+      // 2. Durum filtresi (Tümü / Görülmeyenler / Görülenler / Fotoğraftan Tespit Edilenler)
       if (statusFilter === "unvisited" && p.isVisited) return false;
       if (statusFilter === "visited" && !p.isVisited) return false;
+      if (statusFilter === "photo" && (p.isVisited || !photoDetectedPlaceIds.has(p.id))) return false;
 
       // 3. Kategori filtresi
       if (categoryFilter !== "all") {
@@ -308,11 +331,12 @@ export function CityPlacesAccordion({
 
       return true;
     });
-  }, [places, searchTerm, statusFilter, categoryFilter]);
+  }, [places, searchTerm, statusFilter, categoryFilter, photoDetectedPlaceIds]);
 
   const totalCount = places.length;
   const visitedCount = places.filter((p) => p.isVisited).length;
   const unvisitedCount = totalCount - visitedCount;
+  const photoDetectedCount = places.filter((p) => !p.isVisited && photoDetectedPlaceIds.has(p.id)).length;
 
   function getCategoryIcon(cat: string) {
     switch (cat) {
@@ -378,17 +402,25 @@ export function CityPlacesAccordion({
           </button>
         </div>
 
-        {/* Fotoğraflardan Bul (EXIF GPS) Butonu */}
+        {/* Fotoğraflardan Bul (EXIF GPS) Butonu - Mavi Tema & Doğrudan Galeri Tetikleme */}
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleDirectPhotoSelect}
+          className="hidden"
+        />
         <button
           type="button"
-          onClick={() => setIsPhotoModalOpen(true)}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer shrink-0 min-h-[44px]"
-          title="Çektiğiniz tatil fotoğraflarının GPS konumlarından mekanları otomatik tespit edin"
+          onClick={() => photoInputRef.current?.click()}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-sky-500/25 transition-all cursor-pointer shrink-0 min-h-[44px]"
+          title="Çektiğiniz tatil fotoğraflarının GPS konumlarından mekanları otomatik tespit edin (Mavi)"
         >
           <Camera className="w-4 h-4" />
           <span>Fotoğraflardan Bul</span>
-          <span className="px-1.5 py-0.5 rounded-md bg-slate-950/20 text-[9px] font-extrabold uppercase">
-            EXIF GPS
+          <span className="px-1.5 py-0.5 rounded-md bg-white/20 text-white text-[9px] font-extrabold uppercase">
+            EXIF GPS (MAVİ)
           </span>
         </button>
       </div>
@@ -429,8 +461,8 @@ export function CityPlacesAccordion({
           )}
         </div>
 
-        {/* Keşif Durumu Butonları: 3 Kolonlu Responsive Segment (Mobilde tam sığar, yatay kaydırma yapmaz) */}
-        <div className="grid grid-cols-3 gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 w-full sm:w-auto shrink-0">
+        {/* Keşif Durumu Butonları: 3 veya 4 Kolonlu Responsive Segment (Mavi Fotoğraf Tespiti Dahil) */}
+        <div className={`grid ${photoDetectedCount > 0 ? "grid-cols-4" : "grid-cols-3"} gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80 w-full sm:w-auto shrink-0`}>
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
@@ -451,11 +483,27 @@ export function CityPlacesAccordion({
                 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm"
                 : "text-amber-400/80 hover:text-amber-300"
             }`}
-            title="Henüz ziyaret edilmemiş yerler"
+            title="Henüz ziyaret edilmemiş yerler (Sarı)"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-            <span className="truncate">Görülmeyen ({unvisitedCount})</span>
+            <span className="truncate">Sarı ({unvisitedCount})</span>
           </button>
+
+          {photoDetectedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter("photo")}
+              className={`px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                statusFilter === "photo"
+                  ? "bg-sky-500/25 text-sky-300 border border-sky-400/50 shadow-sm"
+                  : "text-sky-400 hover:text-sky-300"
+              }`}
+              title="Fotoğraflardan tespit edilen mekanlar (Mavi)"
+            >
+              <Camera className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="truncate">Mavi ({photoDetectedCount})</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -465,10 +513,10 @@ export function CityPlacesAccordion({
                 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm"
                 : "text-emerald-400/80 hover:text-emerald-300"
             }`}
-            title="Gezilmiş ve işaretlenmiş yerler"
+            title="Gezilmiş ve işaretlenmiş yerler (Yeşil)"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-            <span className="truncate">Görülen ({visitedCount})</span>
+            <span className="truncate">Yeşil ({visitedCount})</span>
           </button>
         </div>
       </div>
@@ -527,6 +575,8 @@ export function CityPlacesAccordion({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           {filteredPlaces.map((place) => {
             const isGreen = place.isVisited;
+            const isPhotoDetected = photoDetectedPlaceIds.has(place.id);
+            const isBlue = !isGreen && isPhotoDetected;
 
             return (
               <div
@@ -534,6 +584,8 @@ export function CityPlacesAccordion({
                 className={`relative p-3 rounded-2xl border transition-all duration-200 flex flex-col justify-between ${
                   isGreen
                     ? "bg-emerald-950/25 border-emerald-500/40 shadow-sm shadow-emerald-500/5"
+                    : isBlue
+                    ? "bg-sky-950/30 border-sky-500/60 shadow-md shadow-sky-500/15 ring-1 ring-sky-400/40"
                     : "bg-amber-950/15 border-amber-500/35 hover:border-amber-500/60"
                 }`}
               >
@@ -547,10 +599,14 @@ export function CityPlacesAccordion({
                     <button
                       type="button"
                       className="mt-1 shrink-0 transition-transform active:scale-90"
-                      aria-label={isGreen ? "Ziyareti kaldır" : "Ziyaret edildi olarak işaretle"}
+                      aria-label={isGreen ? "Ziyareti kaldır" : isBlue ? "Fotoğraftan doğrula ve onayla" : "Ziyaret edildi olarak işaretle"}
                     >
                       {isGreen ? (
                         <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
+                      ) : isBlue ? (
+                        <div className="w-5 h-5 rounded-full border-2 border-sky-400 bg-sky-950/80 flex items-center justify-center shadow-sm shadow-sky-500/40">
+                          <Camera className="w-3 h-3 text-sky-400 animate-pulse" />
+                        </div>
                       ) : (
                         <Circle className="w-5 h-5 text-amber-400/80 hover:text-amber-300" />
                       )}
@@ -586,7 +642,7 @@ export function CityPlacesAccordion({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
                           className={`text-xs font-bold leading-tight ${
-                            isGreen ? "text-emerald-100" : "text-amber-100"
+                            isGreen ? "text-emerald-100" : isBlue ? "text-sky-100" : "text-amber-100"
                           }`}
                         >
                           {place.name}
@@ -594,6 +650,16 @@ export function CityPlacesAccordion({
                         {place.isCustom && (
                           <span className="px-1.5 py-0.2 rounded-md bg-purple-500/20 text-purple-300 text-[9px] font-semibold">
                             Özel
+                          </span>
+                        )}
+                        {isBlue && (
+                          <span className="px-1.5 py-0.2 rounded-md bg-sky-500/20 text-sky-300 border border-sky-400/40 text-[9px] font-extrabold flex items-center gap-1">
+                            📸 Fotoğraftan Bulundu (Mavi)
+                          </span>
+                        )}
+                        {isGreen && isPhotoDetected && (
+                          <span className="px-1.5 py-0.2 rounded-md bg-sky-500/20 text-sky-300 border border-sky-400/30 text-[9px] font-bold flex items-center gap-1">
+                            📸 Fotoğrafla Doğrulandı
                           </span>
                         )}
                       </div>
@@ -691,6 +757,21 @@ export function CityPlacesAccordion({
                     </div>
                   </div>
                 )}
+
+                {/* Mavi Tespit Hızlı Onay Butonu */}
+                {isBlue && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggle(place);
+                    }}
+                    className="mt-2.5 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-extrabold text-[11px] shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[38px]"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Fotoğraftan Onayla (Yeşile Döndür)</span>
+                  </button>
+                )}
               </div>
             );
           })}
@@ -699,10 +780,16 @@ export function CityPlacesAccordion({
         </>
       )}
 
-      {/* 4. Tarih ve Saat Düzenleme Modalı */}
-      {editingVisit && (
-        <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-sm bg-slate-900 rounded-3xl p-5 shadow-2xl border border-slate-800 space-y-4 animate-in zoom-in-95 duration-200">
+      {/* 4. Tarih ve Saat Düzenleme Modalı (Portal) */}
+      {mounted && editingVisit && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setEditingVisit(null)}
+        >
+          <div
+            className="relative w-full max-w-sm bg-slate-900 rounded-3xl p-5 shadow-2xl border border-slate-800 space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between">
               <div>
                 <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
@@ -769,13 +856,20 @@ export function CityPlacesAccordion({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* 5. Özel Mekan / Kafe Ekleme Modalı */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-800 space-y-4 animate-in zoom-in-95 duration-200">
+      {/* 5. Özel Mekan / Kafe Ekleme Modalı (Portal) */}
+      {mounted && isAddModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setIsAddModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-md bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-800 space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between">
               <div>
                 <h4 className="font-bold text-base text-white flex items-center gap-2">
@@ -904,13 +998,14 @@ export function CityPlacesAccordion({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* 4. Görsel Büyütme Modalı (Lightbox) */}
-      {previewImage && (
+      {/* 6. Görsel Büyütme Modalı (Lightbox Portal) */}
+      {mounted && previewImage && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
           onClick={() => setPreviewImage(null)}
         >
           <div
@@ -936,15 +1031,27 @@ export function CityPlacesAccordion({
               <span>📷 Kaynak: Wikimedia Commons</span>
             </p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* 5. Fotoğraf Eşleşme Modalı (EXIF GPS) */}
+      {/* 7. Fotoğraf Eşleşme Modalı (EXIF GPS - Portal) */}
       <PhotoMatchModal
         isOpen={isPhotoModalOpen}
-        onClose={() => setIsPhotoModalOpen(false)}
+        onClose={() => {
+          setIsPhotoModalOpen(false);
+          setInitialPhotoFiles(null);
+        }}
         cityName={cityName}
         places={places}
+        initialFiles={initialPhotoFiles}
+        onMatchesDiscovered={(matchedIds) => {
+          setPhotoDetectedPlaceIds((prev) => {
+            const next = new Set(prev);
+            matchedIds.forEach((id) => next.add(id));
+            return next;
+          });
+        }}
         onConfirmMatches={async (matches) => {
           const res = await batchRecordPlaceVisits({
             tripId,
@@ -953,6 +1060,12 @@ export function CityPlacesAccordion({
           });
 
           if (res.success && res.visits) {
+            setPhotoDetectedPlaceIds((prev) => {
+              const next = new Set(prev);
+              matches.forEach((m) => next.add(m.placeId));
+              return next;
+            });
+
             setPlaces((prev) =>
               prev.map((p) => {
                 const match = res.visits?.find((v) => v.placeId === p.id);

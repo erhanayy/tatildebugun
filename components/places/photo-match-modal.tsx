@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   matchPhotosWithPlaces,
   type PhotoMatchResult,
@@ -15,7 +16,6 @@ import {
   AlertCircle,
   MapPin,
   Clock,
-  ArrowRight,
   Sparkles,
   Info,
   Maximize2,
@@ -29,6 +29,8 @@ interface PhotoMatchModalProps {
   onClose: () => void;
   cityName: string;
   places: CityPlaceItem[];
+  initialFiles?: File[] | null;
+  onMatchesDiscovered?: (matchedPlaceIds: string[]) => void;
   onConfirmMatches: (
     matches: Array<{ placeId: string; visitedAt?: Date | null }>
   ) => Promise<void>;
@@ -39,8 +41,11 @@ export function PhotoMatchModal({
   onClose,
   cityName,
   places,
+  initialFiles,
+  onMatchesDiscovered,
   onConfirmMatches,
 }: PhotoMatchModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [results, setResults] = useState<PhotoMatchResult[] | null>(null);
   const [selectedPlaceIds, setSelectedPlaceIds] = useState<Record<string, boolean>>({});
@@ -48,21 +53,29 @@ export function PhotoMatchModal({
   const [saving, setSaving] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastProcessedRef = useRef<File[] | null>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  async function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  // Eğer dışarıdan initialFiles geldiyse hemen analizi başlat
+  useEffect(() => {
+    if (isOpen && initialFiles && initialFiles.length > 0 && lastProcessedRef.current !== initialFiles) {
+      lastProcessedRef.current = initialFiles;
+      processFiles(initialFiles);
+    }
+  }, [isOpen, initialFiles]);
 
+  async function processFiles(files: File[]) {
     setAnalyzing(true);
     setResults(null);
 
     try {
       const matchResults = await matchPhotosWithPlaces(
-        Array.from(files),
+        files,
         places,
-        400 // 400 metre eşiği
+        400 // 400 metre mesafe eşiği
       );
 
       setResults(matchResults);
@@ -76,9 +89,17 @@ export function PhotoMatchModal({
       });
       setSelectedPlaceIds(initialSelected);
 
+      const matchedIds = matchResults
+        .filter((r) => r.matchedPlace)
+        .map((r) => r.matchedPlace!.id);
+
+      if (matchedIds.length > 0) {
+        onMatchesDiscovered?.(matchedIds);
+      }
+
       const matchedCount = matchResults.filter((r) => r.matchedPlace).length;
       if (matchedCount > 0) {
-        toast.success(`🎉 ${matchedCount} fotoğraf mekanlarla başarıyla eşleştirildi!`);
+        toast.success(`🎉 ${matchedCount} fotoğraf ${cityName} mekanlarıyla eşleşti!`);
       } else {
         toast.info("Fotoğraflarda yakındaki mekanlarla eşleşen bir konum bulunamadı.");
       }
@@ -87,10 +108,15 @@ export function PhotoMatchModal({
       toast.error("Fotoğraflar taranırken bir hata oluştu.");
     } finally {
       setAnalyzing(false);
-      // Input'u sıfırla ki aynı dosyalar tekrar seçilebilsin
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+    }
+  }
+
+  async function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await processFiles(Array.from(files));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   }
 
@@ -127,7 +153,7 @@ export function PhotoMatchModal({
     setSaving(true);
     try {
       await onConfirmMatches(toSave);
-      toast.success(`${toSave.length} mekan ziyaret listenize eklendi! 🌴`);
+      toast.success(`${toSave.length} mekan gezi günlüğünüze eklendi! 🌴`);
       onClose();
     } catch (err) {
       console.error(err);
@@ -137,27 +163,35 @@ export function PhotoMatchModal({
     }
   }
 
+  if (!isOpen || !mounted) return null;
+
   const matchedResults = results?.filter((r) => r.matchedPlace) || [];
   const unmatchedResults = results?.filter((r) => !r.matchedPlace) || [];
 
-  return (
-    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl max-h-[90vh] bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-xl max-h-[92vh] bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* 1. Modal Başlığı */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-start justify-between gap-3 shrink-0">
+        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-start justify-between gap-3 shrink-0 bg-slate-900/90">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/25 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/25 shrink-0">
               <Camera className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2 flex-wrap">
                 <span>Fotoğraflardan Mekan Bul</span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold uppercase">
-                  EXIF GPS
+                <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[10px] font-extrabold uppercase">
+                  MAVİ TESBİT (EXIF GPS)
                 </span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                {cityName} seyahatinizde çektiğiniz fotoğrafları seçin, çekim konumlarından gittiğiniz yerleri otomatik bulalım.
+                {cityName} tatilinizde çektiğiniz fotoğrafların konumlarından gittiğiniz yerleri otomatik tespit edelim.
               </p>
             </div>
           </div>
@@ -165,7 +199,8 @@ export function PhotoMatchModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            aria-label="Kapat"
           >
             <X className="w-5 h-5" />
           </button>
@@ -183,26 +218,26 @@ export function PhotoMatchModal({
             className="hidden"
           />
 
-          {/* Dosya Seçim & Yükleme Alanı */}
+          {/* Dosya Seçim & Yükleme Butonu */}
           {!analyzing && (
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="p-5 sm:p-6 rounded-2xl border-2 border-dashed border-slate-700/80 hover:border-amber-500/60 bg-slate-950/50 hover:bg-slate-950/80 transition-all cursor-pointer text-center space-y-2 group"
+              className="p-5 sm:p-6 rounded-2xl border-2 border-dashed border-sky-500/40 hover:border-sky-400 bg-sky-950/20 hover:bg-sky-950/40 transition-all cursor-pointer text-center space-y-2 group"
             >
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20 flex items-center justify-center mx-auto transition-colors">
+              <div className="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-400 group-hover:bg-sky-500/30 flex items-center justify-center mx-auto transition-colors">
                 <Upload className="w-6 h-6 group-hover:scale-110 transition-transform" />
               </div>
               <div>
-                <span className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors">
-                  {results ? "Farklı Fotoğraflar Seç veya Ekle" : "Fotoğrafları Seç (Galeri / Dosyalar)"}
+                <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
+                  {results ? "Farklı Fotoğraflar Seç (Galeri / Dosyalar)" : "Galeriden Fotoğrafları Seç"}
                 </span>
                 <p className="text-[11px] text-slate-400 mt-1">
                   Birden fazla tatil fotoğrafı seçebilirsiniz.
                 </p>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900 border border-slate-800 text-[10px] text-slate-400">
-                <Info className="w-3 h-3 text-cyan-400 shrink-0" />
-                <span>Fotoğraflarınız sunucuya yüklenmez, cihaz içinde yerel taranır (0 MB Kota).</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-[10px] text-slate-400">
+                <Info className="w-3 h-3 text-sky-400 shrink-0" />
+                <span>Fotoğraflarınız sunucuya yüklenmez, telefonun içinde yerel taranır (0 MB Kota).</span>
               </div>
             </div>
           )}
@@ -210,11 +245,11 @@ export function PhotoMatchModal({
           {/* Analiz Yükleniyor Durumu */}
           {analyzing && (
             <div className="py-12 text-center space-y-3">
-              <Loader2 className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
+              <Loader2 className="w-8 h-8 text-sky-400 animate-spin mx-auto" />
               <div className="space-y-1">
                 <h4 className="text-sm font-bold text-white">Fotoğrafların Konumları Taranıyor...</h4>
                 <p className="text-xs text-slate-400">
-                  EXIF GPS başlıkları {cityName} mekan havuzumuzla eşleştiriliyor.
+                  EXIF GPS etiketleri {cityName} mekan koordinatlarıyla eşleştiriliyor.
                 </p>
               </div>
             </div>
@@ -223,23 +258,23 @@ export function PhotoMatchModal({
           {/* Eşleşme Sonuçları */}
           {results && !analyzing && (
             <div className="space-y-4">
-              {/* Başarılı Eşleşen Mekanlar */}
+              {/* Başarılı Eşleşen Mekanlar (MAVİ TEMA) */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-sky-400" />
                     <span>Tespit Edilen Mekanlar ({matchedResults.length})</span>
                   </span>
                   {matchedResults.length > 0 && (
-                    <span className="text-[11px] text-slate-400">
-                      Görüldü olarak işaretlemek istediklerinizi seçin
+                    <span className="text-[10px] text-sky-400 bg-sky-950/60 border border-sky-800/60 px-2 py-0.5 rounded-md">
+                      Mavi: Onay Bekliyor
                     </span>
                   )}
                 </div>
 
                 {matchedResults.length === 0 ? (
                   <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400">
-                    Seçtiğiniz fotoğrafların koordinatları {cityName} mekanlarına yeterince yakın bulunamadı veya fotoğraflarda GPS etiketi yer almıyor.
+                    Seçtiğiniz fotoğraflarda {cityName} mekanlarına yakın GPS konumu bulunamadı. Lütfen kamera ayarlarınızda konumun açık olduğundan emin olun.
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -253,8 +288,8 @@ export function PhotoMatchModal({
                           onClick={() => toggleSelect(place.id)}
                           className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             isSelected
-                              ? "bg-amber-500/10 border-amber-500/40 shadow-sm"
-                              : "bg-slate-950/60 border-slate-800 hover:border-slate-700 opacity-70"
+                              ? "bg-sky-950/60 border-sky-400/80 shadow-md shadow-sky-500/15"
+                              : "bg-slate-950/60 border-slate-800 hover:border-slate-700 opacity-60"
                           }`}
                         >
                           {/* Sol: Fotoğraf Thumbnail + Mekan Bilgisi */}
@@ -265,7 +300,7 @@ export function PhotoMatchModal({
                                 e.stopPropagation();
                                 setPreviewImage(r.previewUrl);
                               }}
-                              className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-slate-700/80 cursor-zoom-in group/img"
+                              className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-sky-700/60 cursor-zoom-in group/img"
                               title="Fotoğrafı büyüt"
                             >
                               <img
@@ -279,13 +314,18 @@ export function PhotoMatchModal({
                             </div>
 
                             <div className="min-w-0">
-                              <h4 className="text-xs sm:text-sm font-bold text-white leading-tight truncate">
-                                {place.name}
-                              </h4>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className="text-xs sm:text-sm font-bold text-white leading-tight truncate">
+                                  {place.name}
+                                </h4>
+                                <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[9px] font-extrabold border border-sky-500/30">
+                                  Fotoğraftan Bulundu
+                                </span>
+                              </div>
 
-                              <div className="flex items-center gap-2 flex-wrap mt-1 text-[11px] text-slate-400">
-                                <span className="inline-flex items-center gap-1 text-amber-300 font-mono">
-                                  <MapPin className="w-3 h-3" />
+                              <div className="flex items-center gap-2 flex-wrap mt-1 text-[11px]">
+                                <span className="inline-flex items-center gap-1 text-sky-300 font-mono">
+                                  <MapPin className="w-3 h-3 text-sky-400" />
                                   <span>{place.distanceMeters}m yakında</span>
                                 </span>
 
@@ -304,16 +344,16 @@ export function PhotoMatchModal({
                             </div>
                           </div>
 
-                          {/* Sağ: Seçim Rozeti / Checkbox */}
+                          {/* Sağ: Mavi Onay Kutusu */}
                           <div className="shrink-0">
                             <div
                               className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
                                 isSelected
-                                  ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30"
+                                  ? "bg-sky-500 text-slate-950 shadow-md shadow-sky-500/30"
                                   : "border-2 border-slate-700 bg-slate-900"
                               }`}
                             >
-                              {isSelected && <CheckCircle2 className="w-4 h-4 fill-slate-950 text-amber-500" />}
+                              {isSelected && <CheckCircle2 className="w-4 h-4 fill-slate-950 text-sky-500" />}
                             </div>
                           </div>
                         </div>
@@ -349,7 +389,7 @@ export function PhotoMatchModal({
                           key={idx}
                           className="p-2 rounded-xl bg-slate-950/40 border border-slate-800/60 flex items-center justify-between gap-2 text-[11px] text-slate-400"
                         >
-                          <span className="truncate max-w-[220px] font-mono">{r.fileName}</span>
+                          <span className="truncate max-w-[200px] font-mono">{r.fileName}</span>
                           <span className="text-slate-500 text-[10px] shrink-0">{r.errorNote}</span>
                         </div>
                       ))}
@@ -376,18 +416,18 @@ export function PhotoMatchModal({
               type="button"
               disabled={saving || Object.values(selectedPlaceIds).filter(Boolean).length === 0}
               onClick={handleConfirm}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 min-h-[44px]"
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-sky-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 min-h-[44px]"
             >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Kaydediliyor...</span>
+                  <span>Ziyaretlere Ekleniyor...</span>
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
-                    Seçilenleri Ziyaret Listeme Ekle ({Object.values(selectedPlaceIds).filter(Boolean).length})
+                    Onayla ve Ziyaret Listeme Ekle ({Object.values(selectedPlaceIds).filter(Boolean).length})
                   </span>
                 </>
               )}
@@ -398,7 +438,7 @@ export function PhotoMatchModal({
         {/* Büyütülmüş Fotoğraf Önizleme Modalı */}
         {previewImage && (
           <div
-            className="fixed inset-0 z-[3100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+            className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
             onClick={() => setPreviewImage(null)}
           >
             <div className="relative max-w-lg w-full max-h-[85vh] flex flex-col items-center">
@@ -420,4 +460,6 @@ export function PhotoMatchModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
