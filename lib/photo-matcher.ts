@@ -70,6 +70,99 @@ export function calculateDistanceMeters(
 }
 
 /**
+ * Her türlü EXIF / XMP / ExifReader GPS etiketini güvenle ondalık dereceye çevirir.
+ * NaN, Infinity veya bozuk formatları kesinlikle eler ve undefined döner.
+ */
+export function extractCoordinate(
+  tag: unknown,
+  refTag?: unknown
+): number | undefined {
+  if (tag === null || tag === undefined) return undefined;
+
+  // 1. Doğrudan sayı ise
+  if (typeof tag === "number") {
+    return Number.isFinite(tag) && !Number.isNaN(tag) ? tag : undefined;
+  }
+
+  let result: number | undefined;
+
+  // 2. ExifReader Tag Nesnesi veya XMP ise
+  if (typeof tag === "object") {
+    const obj = tag as Record<string, any>;
+
+    // 2a. description alanı geçerli sayı ise
+    if (typeof obj.description === "number" && Number.isFinite(obj.description) && !Number.isNaN(obj.description)) {
+      result = obj.description;
+    } else if (typeof obj.description === "string") {
+      // 2b. "41.8902" veya "41° 53' 24.5\"" gibi metin ise
+      const dms = obj.description.match(/(\d+)[^\d]+(\d+)[^\d]+([\d.]+)/);
+      if (dms) {
+        const d = parseFloat(dms[1]);
+        const m = parseFloat(dms[2]);
+        const s = parseFloat(dms[3]);
+        if (Number.isFinite(d) && Number.isFinite(m) && Number.isFinite(s)) {
+          result = d + m / 60 + s / 3600;
+        }
+      } else {
+        const directNum = parseFloat(obj.description);
+        if (Number.isFinite(directNum) && !Number.isNaN(directNum)) {
+          result = directNum;
+        }
+      }
+    }
+
+    // 2c. value alanı dizi ise (Samsung S24 Ultra veya klasik EXIF)
+    if (result === undefined && Array.isArray(obj.value) && obj.value.length >= 3) {
+      const arr = obj.value;
+      const d = typeof arr[0] === "number"
+        ? arr[0]
+        : Array.isArray(arr[0]) && arr[0].length >= 2 && arr[0][1] !== 0
+        ? arr[0][0] / arr[0][1]
+        : parseFloat(arr[0]);
+
+      const m = typeof arr[1] === "number"
+        ? arr[1]
+        : Array.isArray(arr[1]) && arr[1].length >= 2 && arr[1][1] !== 0
+        ? arr[1][0] / arr[1][1]
+        : parseFloat(arr[1]);
+
+      const s = typeof arr[2] === "number"
+        ? arr[2]
+        : Array.isArray(arr[2]) && arr[2].length >= 2 && arr[2][1] !== 0
+        ? arr[2][0] / arr[2][1]
+        : parseFloat(arr[2]);
+
+      if (Number.isFinite(d) && Number.isFinite(m) && Number.isFinite(s)) {
+        result = d + m / 60 + s / 3600;
+      }
+    }
+  }
+
+  if (result === undefined || !Number.isFinite(result) || Number.isNaN(result)) {
+    return undefined;
+  }
+
+  // Güney (S) veya Batı (W) referansı varsa negatif yap
+  if (refTag) {
+    const refObj = refTag as Record<string, any> | string;
+    const refStr = typeof refObj === "string"
+      ? refObj
+      : typeof (refObj as any)?.description === "string"
+      ? (refObj as any).description
+      : Array.isArray((refObj as any)?.value)
+      ? (refObj as any).value.join("")
+      : String((refObj as any)?.value || "");
+
+    const upperRef = refStr.trim().toUpperCase();
+    if (upperRef.startsWith("S") || upperRef.startsWith("W")) {
+      result = -Math.abs(result);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Seçilen fotoğrafların EXIF GPS başlıklarını tarar ve şehir mekanlarıyla eşleştirir
  * @param files Kullanıcının galeriden seçtiği fotoğraf dosyaları
  * @param places İlgili şehirdeki doğrulanmış mekanlar
@@ -100,9 +193,19 @@ export async function matchPhotosWithPlaces(
         const tags = ExifReader.load(arrayBuffer, { expanded: true });
 
         if (tags) {
-          if (tags.gps && typeof tags.gps.Latitude === "number" && typeof tags.gps.Longitude === "number") {
-            photoLat = tags.gps.Latitude;
-            photoLon = tags.gps.Longitude;
+          const lat =
+            extractCoordinate(tags.gps?.Latitude) ??
+            extractCoordinate(tags.exif?.GPSLatitude, tags.exif?.GPSLatitudeRef) ??
+            extractCoordinate((tags as any).GPSLatitude, (tags as any).GPSLatitudeRef);
+
+          const lon =
+            extractCoordinate(tags.gps?.Longitude) ??
+            extractCoordinate(tags.exif?.GPSLongitude, tags.exif?.GPSLongitudeRef) ??
+            extractCoordinate((tags as any).GPSLongitude, (tags as any).GPSLongitudeRef);
+
+          if (lat !== undefined && lon !== undefined) {
+            photoLat = lat;
+            photoLon = lon;
           }
 
           if (tags.exif) {
@@ -137,24 +240,32 @@ export async function matchPhotosWithPlaces(
       if (photoLat === undefined || photoLon === undefined) {
         try {
           const gps = await exifr.gps(file);
-          if (gps && typeof gps.latitude === "number" && typeof gps.longitude === "number") {
-            photoLat = gps.latitude;
-            photoLon = gps.longitude;
+          if (gps) {
+            const lat = extractCoordinate(gps.latitude);
+            const lon = extractCoordinate(gps.longitude);
+            if (lat !== undefined && lon !== undefined) {
+              photoLat = lat;
+              photoLon = lon;
+            }
           }
         } catch (gpsErr) {
           console.warn(`[EXIFR] gps() okuma uyarısı (${file.name}):`, gpsErr);
         }
       }
 
-      if (cameraModel === null || photoTime === null) {
+      if (cameraModel === null || photoTime === null || photoLat === undefined || photoLon === undefined) {
         try {
           const fullExif = await exifr.parse(file);
           if (fullExif) {
             rawTagsCount = Math.max(rawTagsCount, Object.keys(fullExif).length);
 
-            if (photoLat === undefined && typeof fullExif.latitude === "number") {
-              photoLat = fullExif.latitude;
-              photoLon = fullExif.longitude;
+            if (photoLat === undefined) {
+              const lat = extractCoordinate(fullExif.latitude);
+              const lon = extractCoordinate(fullExif.longitude);
+              if (lat !== undefined && lon !== undefined) {
+                photoLat = lat;
+                photoLon = lon;
+              }
             }
 
             if (!photoTime) {
@@ -174,8 +285,15 @@ export async function matchPhotosWithPlaces(
         }
       }
 
-      // GPS Koordinatı bulunamadıysa (İşletim sistemi tarafından silinmiş veya konumsuz)
-      if (photoLat === undefined || photoLon === undefined) {
+      // GPS Koordinatı geçerli değilse veya NaN/Infinity ise
+      if (
+        photoLat === undefined ||
+        photoLon === undefined ||
+        !Number.isFinite(photoLat) ||
+        !Number.isFinite(photoLon) ||
+        Number.isNaN(photoLat) ||
+        Number.isNaN(photoLon)
+      ) {
         results.push({
           fileName: file.name,
           fileSizeFormatted: sizeStr,
@@ -189,7 +307,7 @@ export async function matchPhotosWithPlaces(
             status: "no_gps",
             coordsFormatted: "Yok",
             thresholdMeters: maxDistanceMeters,
-            details: `EXIF'ten ${rawTagsCount} adet meta veri etiketi okundu ancak GPS (0x8825) bloğu mevcut değil.`,
+            details: `EXIF'ten ${rawTagsCount} adet meta veri etiketi okundu ancak geçerli GPS koordinatı çözülemedi.`,
           },
         });
         continue;
