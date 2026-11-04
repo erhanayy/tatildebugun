@@ -1,3 +1,4 @@
+import ExifReader from "exifreader";
 import exifr from "exifr";
 import { type CityPlaceItem } from "@/lib/actions/places";
 
@@ -93,40 +94,84 @@ export async function matchPhotosWithPlaces(
     let rawTagsCount = 0;
 
     try {
-      // 1. Önce doğrudan hızlı ve en geniş GPS okuyucusunu çağır (Filtresiz!)
+      // 1. TIER-1: ExifReader (Samsung Galaxy S24 Ultra Hareketli HEIC, Apple Live Photo, JPEG, vb.)
       try {
-        const gps = await exifr.gps(file);
-        if (gps && typeof gps.latitude === "number" && typeof gps.longitude === "number") {
-          photoLat = gps.latitude;
-          photoLon = gps.longitude;
+        const arrayBuffer = await file.arrayBuffer();
+        const tags = ExifReader.load(arrayBuffer, { expanded: true });
+
+        if (tags) {
+          if (tags.gps && typeof tags.gps.Latitude === "number" && typeof tags.gps.Longitude === "number") {
+            photoLat = tags.gps.Latitude;
+            photoLon = tags.gps.Longitude;
+          }
+
+          if (tags.exif) {
+            rawTagsCount += Object.keys(tags.exif).length;
+            const make = tags.exif.Make?.description || "";
+            const model = tags.exif.Model?.description || "";
+            if (model) {
+              cameraModel = `${make} ${model}`.trim();
+            }
+
+            const dateStr = tags.exif.DateTimeOriginal?.description || tags.exif.DateTime?.description;
+            if (dateStr) {
+              const parts = String(dateStr).split(/[: ]/);
+              if (parts.length >= 6) {
+                photoTime = new Date(
+                  Number(parts[0]),
+                  Number(parts[1]) - 1,
+                  Number(parts[2]),
+                  Number(parts[3]),
+                  Number(parts[4]),
+                  Number(parts[5])
+                );
+              }
+            }
+          }
         }
-      } catch (gpsErr) {
-        console.warn(`[EXIFR] gps() okuma uyarısı (${file.name}):`, gpsErr);
+      } catch (exifReaderErr) {
+        console.warn(`[ExifReader] okuma uyarısı (${file.name}):`, exifReaderErr);
       }
 
-      // 2. exifr.parse ile genel meta verileri (Tarih, Kamera, fallback GPS) çek (pick KULLANILMAZ!)
-      try {
-        const fullExif = await exifr.parse(file);
-        if (fullExif) {
-          rawTagsCount = Object.keys(fullExif).length;
-
-          if (photoLat === undefined && typeof fullExif.latitude === "number") {
-            photoLat = fullExif.latitude;
-            photoLon = fullExif.longitude;
+      // 2. TIER-2 FALLBACK: exifr (Klasik JPEG ve ek bloklar)
+      if (photoLat === undefined || photoLon === undefined) {
+        try {
+          const gps = await exifr.gps(file);
+          if (gps && typeof gps.latitude === "number" && typeof gps.longitude === "number") {
+            photoLat = gps.latitude;
+            photoLon = gps.longitude;
           }
-
-          if (fullExif.DateTimeOriginal) {
-            photoTime = new Date(fullExif.DateTimeOriginal);
-          } else if (fullExif.CreateDate) {
-            photoTime = new Date(fullExif.CreateDate);
-          }
-
-          if (fullExif.Model) {
-            cameraModel = `${fullExif.Make || ""} ${fullExif.Model}`.trim();
-          }
+        } catch (gpsErr) {
+          console.warn(`[EXIFR] gps() okuma uyarısı (${file.name}):`, gpsErr);
         }
-      } catch (parseErr) {
-        console.warn(`[EXIFR] parse() okuma uyarısı (${file.name}):`, parseErr);
+      }
+
+      if (cameraModel === null || photoTime === null) {
+        try {
+          const fullExif = await exifr.parse(file);
+          if (fullExif) {
+            rawTagsCount = Math.max(rawTagsCount, Object.keys(fullExif).length);
+
+            if (photoLat === undefined && typeof fullExif.latitude === "number") {
+              photoLat = fullExif.latitude;
+              photoLon = fullExif.longitude;
+            }
+
+            if (!photoTime) {
+              if (fullExif.DateTimeOriginal) {
+                photoTime = new Date(fullExif.DateTimeOriginal);
+              } else if (fullExif.CreateDate) {
+                photoTime = new Date(fullExif.CreateDate);
+              }
+            }
+
+            if (!cameraModel && fullExif.Model) {
+              cameraModel = `${fullExif.Make || ""} ${fullExif.Model}`.trim();
+            }
+          }
+        } catch (parseErr) {
+          console.warn(`[EXIFR] parse() okuma uyarısı (${file.name}):`, parseErr);
+        }
       }
 
       // GPS Koordinatı bulunamadıysa (İşletim sistemi tarafından silinmiş veya konumsuz)

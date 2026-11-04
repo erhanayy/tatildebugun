@@ -107,8 +107,11 @@ export function PhotoMatchModal({
       const matchedCount = matchResults.filter((r) => r.matchedPlace).length;
       if (matchedCount > 0) {
         toast.success(`🎉 ${matchedCount} fotoğraf ${cityName} mekanlarıyla eşleşti!`);
+        setShowUnmatched(false);
       } else {
-        toast.info("Fotoğraflarda yakındaki mekanlarla eşleşen bir konum bulunamadı.");
+        setShowUnmatched(true);
+        setDebugMode(true);
+        toast.info("Fotoğraflarda yakındaki mekanlarla eşleşen bir konum bulunamadı. Teşhis detayları açıldı.");
       }
     } catch (err) {
       console.error(err);
@@ -233,7 +236,7 @@ export function PhotoMatchModal({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif,.jpg,.jpeg"
             multiple
             onChange={handleFilesSelected}
             className="hidden"
@@ -334,9 +337,9 @@ export function PhotoMatchModal({
                     </div>
 
                     <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
-                      <strong className="text-white flex items-center gap-1">🤖 Android / Google Fotoğraflar:</strong>
+                      <strong className="text-white flex items-center gap-1">🤖 Android / Samsung Galaxy:</strong>
                       <p className="text-slate-400 mt-1">
-                        Kamera uygulamasında <span className="text-sky-300 font-bold">&ldquo;Konum Etiketleri&rdquo; (Geotagging)</span> açık olmalı ve galeriden dosya seçerken &ldquo;Paylaşırken konumu kaldır&rdquo; seçeneği kapatılmalıdır.
+                        Kamera uygulamasında <span className="text-sky-300 font-bold">&ldquo;Konum Etiketleri&rdquo;</span> açık olmalıdır. Galaxy S24 Ultra vb. cihazlarda dosya seçerken &ldquo;Gözat&rdquo; (Browse) veya &ldquo;Dosyalarım&rdquo; (My Files) üzerinden DCIM/Camera klasöründen doğrudan orijinal .heic seçildiğinde hareketli fotoğraf GPS verisi eksiksiz korunur.
                       </p>
                     </div>
                   </div>
