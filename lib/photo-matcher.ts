@@ -3,11 +3,20 @@ import { type CityPlaceItem } from "@/lib/actions/places";
 
 export interface PhotoMatchResult {
   fileName: string;
+  fileSizeFormatted: string;
+  fileType: string;
   previewUrl: string;
   latitude?: number;
   longitude?: number;
   timestamp?: Date | null;
+  cameraModel?: string | null;
   hasGps: boolean;
+  rawTagsCount: number;
+  closestPlace?: {
+    id: string;
+    name: string;
+    distanceMeters: number;
+  } | null;
   matchedPlace?: {
     id: string;
     name: string;
@@ -18,6 +27,23 @@ export interface PhotoMatchResult {
     distanceMeters: number;
   } | null;
   errorNote?: string;
+  debugInfo: {
+    status: "matched" | "distance_exceeded" | "no_gps" | "read_error";
+    coordsFormatted: string;
+    closestPlaceName?: string;
+    distanceMeters?: number;
+    thresholdMeters: number;
+    details: string;
+  };
+}
+
+/**
+ * Dosya boyutunu okunabilir biçime çevirir (örn: 2.4 MB)
+ */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**
@@ -57,33 +83,76 @@ export async function matchPhotosWithPlaces(
 
   for (const file of files) {
     const previewUrl = URL.createObjectURL(file);
+    const sizeStr = formatFileSize(file.size);
+    const fileType = file.type || "image/unknown";
+
+    let photoLat: number | undefined;
+    let photoLon: number | undefined;
+    let photoTime: Date | null = null;
+    let cameraModel: string | null = null;
+    let rawTagsCount = 0;
 
     try {
-      // EXIF verilerini oku (Yalnızca başlığı tarar, dosyanın tamamını belleğe yüklemez)
-      const exif = await exifr.parse(file, {
-        gps: true,
-        pick: ["DateTimeOriginal", "CreateDate", "latitude", "longitude"],
-      });
+      // 1. Önce doğrudan hızlı ve en geniş GPS okuyucusunu çağır (Filtresiz!)
+      try {
+        const gps = await exifr.gps(file);
+        if (gps && typeof gps.latitude === "number" && typeof gps.longitude === "number") {
+          photoLat = gps.latitude;
+          photoLon = gps.longitude;
+        }
+      } catch (gpsErr) {
+        console.warn(`[EXIFR] gps() okuma uyarısı (${file.name}):`, gpsErr);
+      }
 
-      if (!exif || exif.latitude === undefined || exif.longitude === undefined) {
+      // 2. exifr.parse ile genel meta verileri (Tarih, Kamera, fallback GPS) çek (pick KULLANILMAZ!)
+      try {
+        const fullExif = await exifr.parse(file);
+        if (fullExif) {
+          rawTagsCount = Object.keys(fullExif).length;
+
+          if (photoLat === undefined && typeof fullExif.latitude === "number") {
+            photoLat = fullExif.latitude;
+            photoLon = fullExif.longitude;
+          }
+
+          if (fullExif.DateTimeOriginal) {
+            photoTime = new Date(fullExif.DateTimeOriginal);
+          } else if (fullExif.CreateDate) {
+            photoTime = new Date(fullExif.CreateDate);
+          }
+
+          if (fullExif.Model) {
+            cameraModel = `${fullExif.Make || ""} ${fullExif.Model}`.trim();
+          }
+        }
+      } catch (parseErr) {
+        console.warn(`[EXIFR] parse() okuma uyarısı (${file.name}):`, parseErr);
+      }
+
+      // GPS Koordinatı bulunamadıysa (İşletim sistemi tarafından silinmiş veya konumsuz)
+      if (photoLat === undefined || photoLon === undefined) {
         results.push({
           fileName: file.name,
+          fileSizeFormatted: sizeStr,
+          fileType,
           previewUrl,
           hasGps: false,
-          errorNote: "Fotoğrafta GPS/konum bilgisi bulunamadı.",
+          cameraModel,
+          rawTagsCount,
+          errorNote: "Fotoğrafta GPS konumu bulunamadı. Mobil işletim sistemi (iOS/Android) galeri dosya seçicisinden aktarırken konumu sansürlemiş olabilir.",
+          debugInfo: {
+            status: "no_gps",
+            coordsFormatted: "Yok",
+            thresholdMeters: maxDistanceMeters,
+            details: `EXIF'ten ${rawTagsCount} adet meta veri etiketi okundu ancak GPS (0x8825) bloğu mevcut değil.`,
+          },
         });
         continue;
       }
 
-      const photoLat = exif.latitude;
-      const photoLon = exif.longitude;
-      const photoTime = exif.DateTimeOriginal
-        ? new Date(exif.DateTimeOriginal)
-        : exif.CreateDate
-        ? new Date(exif.CreateDate)
-        : null;
+      const coordsStr = `${photoLat.toFixed(5)}, ${photoLon.toFixed(5)}`;
 
-      // Mekanlar arasında en yakın olanı bul
+      // 3. Mekanlar arasında en yakın olanı bul
       let closestPlace: CityPlaceItem | null = null;
       let minDistance = Infinity;
 
@@ -103,14 +172,25 @@ export async function matchPhotosWithPlaces(
         }
       }
 
-      if (closestPlace && minDistance <= maxDistanceMeters) {
+      const isMatched = closestPlace && minDistance <= maxDistanceMeters;
+
+      if (isMatched && closestPlace) {
         results.push({
           fileName: file.name,
+          fileSizeFormatted: sizeStr,
+          fileType,
           previewUrl,
           latitude: photoLat,
           longitude: photoLon,
           timestamp: photoTime,
+          cameraModel,
           hasGps: true,
+          rawTagsCount,
+          closestPlace: {
+            id: closestPlace.id,
+            name: closestPlace.name,
+            distanceMeters: minDistance,
+          },
           matchedPlace: {
             id: closestPlace.id,
             name: closestPlace.name,
@@ -120,31 +200,78 @@ export async function matchPhotosWithPlaces(
             longitude: closestPlace.longitude!,
             distanceMeters: minDistance,
           },
+          debugInfo: {
+            status: "matched",
+            coordsFormatted: coordsStr,
+            closestPlaceName: closestPlace.name,
+            distanceMeters: minDistance,
+            thresholdMeters: maxDistanceMeters,
+            details: `GPS başarıyla okundu (${coordsStr}). En yakın mekan (${closestPlace.name}) ${minDistance}m mesafede bulundu (Eşik: ${maxDistanceMeters}m).`,
+          },
         });
       } else {
+        const placeNote = closestPlace
+          ? `En yakın mekan (${closestPlace.name}) ${minDistance}m uzakta (Eşik: ${maxDistanceMeters}m).`
+          : "Şehir listesindeki hiçbir mekana yakın değil.";
+
         results.push({
           fileName: file.name,
+          fileSizeFormatted: sizeStr,
+          fileType,
           previewUrl,
           latitude: photoLat,
           longitude: photoLon,
           timestamp: photoTime,
+          cameraModel,
           hasGps: true,
+          rawTagsCount,
+          closestPlace: closestPlace
+            ? {
+                id: closestPlace.id,
+                name: closestPlace.name,
+                distanceMeters: minDistance,
+              }
+            : null,
           matchedPlace: null,
-          errorNote: closestPlace
-            ? `En yakın mekan (${closestPlace.name}) ${minDistance}m uzakta (Eşik: ${maxDistanceMeters}m).`
-            : "Yakında bilinen bir mekan bulunamadı.",
+          errorNote: placeNote,
+          debugInfo: {
+            status: "distance_exceeded",
+            coordsFormatted: coordsStr,
+            closestPlaceName: closestPlace?.name,
+            distanceMeters: minDistance === Infinity ? undefined : minDistance,
+            thresholdMeters: maxDistanceMeters,
+            details: `GPS okundu (${coordsStr}) fakat en yakın mekan ${minDistance}m mesafede, ${maxDistanceMeters}m eşiğinin dışında kaldı.`,
+          },
         });
       }
     } catch (err) {
-      console.warn(`EXIF okuma hatası (${file.name}):`, err);
+      console.warn(`[EXIFR] Genel okuma hatası (${file.name}):`, err);
       results.push({
         fileName: file.name,
+        fileSizeFormatted: sizeStr,
+        fileType,
         previewUrl,
         hasGps: false,
-        errorNote: "Fotoğraf formatı veya EXIF okunamadı.",
+        rawTagsCount: 0,
+        errorNote: "Fotoğraf formatı veya EXIF başlığı okunamadı.",
+        debugInfo: {
+          status: "read_error",
+          coordsFormatted: "Hata",
+          thresholdMeters: maxDistanceMeters,
+          details: String(err),
+        },
       });
     }
   }
 
   return results;
+}
+
+/**
+ * Roma Kolezyum koordinatına sahip gerçek örnek test görselini yükler
+ */
+export async function loadSampleColosseumPhoto(): Promise<File> {
+  const res = await fetch("/samples/rome_colosseum_sample.jpg");
+  const blob = await res.blob();
+  return new File([blob], "ornek_roma_kolezyum.jpg", { type: "image/jpeg" });
 }

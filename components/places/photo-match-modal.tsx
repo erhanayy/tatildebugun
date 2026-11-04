@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   matchPhotosWithPlaces,
+  loadSampleColosseumPhoto,
   type PhotoMatchResult,
 } from "@/lib/photo-matcher";
 import { type CityPlaceItem } from "@/lib/actions/places";
@@ -21,6 +22,9 @@ import {
   Maximize2,
   ChevronDown,
   ChevronUp,
+  Bug,
+  HelpCircle,
+  Compass,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -52,6 +56,9 @@ export function PhotoMatchModal({
   const [showUnmatched, setShowUnmatched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [debugMode, setDebugMode] = useState(false);
+  const [loadingSample, setLoadingSample] = useState(false);
+  const [showHelpTips, setShowHelpTips] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastProcessedRef = useRef<File[] | null>(null);
 
@@ -117,6 +124,20 @@ export function PhotoMatchModal({
     await processFiles(Array.from(files));
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleTestSamplePhoto() {
+    setLoadingSample(true);
+    try {
+      const sampleFile = await loadSampleColosseumPhoto();
+      toast.info("🧪 Roma Kolezyum örnek fotoğrafı yüklendi, taranıyor...");
+      await processFiles([sampleFile]);
+    } catch (err) {
+      console.error(err);
+      toast.error("Örnek fotoğraf yüklenirken bir hata oluştu.");
+    } finally {
+      setLoadingSample(false);
     }
   }
 
@@ -220,25 +241,107 @@ export function PhotoMatchModal({
 
           {/* Dosya Seçim & Yükleme Butonu */}
           {!analyzing && (
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="p-5 sm:p-6 rounded-2xl border-2 border-dashed border-sky-500/40 hover:border-sky-400 bg-sky-950/20 hover:bg-sky-950/40 transition-all cursor-pointer text-center space-y-2 group"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-400 group-hover:bg-sky-500/30 flex items-center justify-center mx-auto transition-colors">
-                <Upload className="w-6 h-6 group-hover:scale-110 transition-transform" />
+            <div className="space-y-2.5">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="p-5 sm:p-6 rounded-2xl border-2 border-dashed border-sky-500/40 hover:border-sky-400 bg-sky-950/20 hover:bg-sky-950/40 transition-all cursor-pointer text-center space-y-2 group"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-400 group-hover:bg-sky-500/30 flex items-center justify-center mx-auto transition-colors">
+                  <Upload className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                </div>
+                <div>
+                  <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
+                    {results ? "Farklı Fotoğraflar Seç (Galeri / Dosyalar)" : "Galeriden Fotoğrafları Seç"}
+                  </span>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Birden fazla tatil fotoğrafı seçebilirsiniz.
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-[10px] text-slate-400">
+                  <Info className="w-3 h-3 text-sky-400 shrink-0" />
+                  <span>Fotoğraflarınız sunucuya yüklenmez, telefonun içinde yerel taranır (0 MB Kota).</span>
+                </div>
               </div>
-              <div>
-                <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
-                  {results ? "Farklı Fotoğraflar Seç (Galeri / Dosyalar)" : "Galeriden Fotoğrafları Seç"}
-                </span>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Birden fazla tatil fotoğrafı seçebilirsiniz.
-                </p>
+
+              {/* Hızlı Test & Yardım & Debug Araç Çubuğu (Rule 13 Mobile-First) */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={loadingSample}
+                  onClick={handleTestSamplePhoto}
+                  className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                  title="Doğrulanmış Roma Kolezyum koordinatına sahip örnek fotoğrafı test et"
+                >
+                  {loadingSample ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                  ) : (
+                    <span className="text-base leading-none">🧪</span>
+                  )}
+                  <span>Roma Örnek Fotoğrafı ile Dene</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDebugMode((prev) => !prev)}
+                  className={`min-h-[44px] px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    debugMode
+                      ? "bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-sm"
+                      : "bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Detaylı GPS ve EXIF koordinat teşhisini göster/gizle"
+                >
+                  <Bug className={`w-3.5 h-3.5 ${debugMode ? "text-amber-400" : "text-slate-400"}`} />
+                  <span>Teşhis {debugMode ? "(Açık)" : "(Kapalı)"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowHelpTips((prev) => !prev)}
+                  className="min-h-[44px] px-3 py-2 rounded-xl bg-slate-950/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  title="Mobil GPS ayarları rehberi"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Mobil İpucu</span>
+                </button>
               </div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-[10px] text-slate-400">
-                <Info className="w-3 h-3 text-sky-400 shrink-0" />
-                <span>Fotoğraflarınız sunucuya yüklenmez, telefonun içinde yerel taranır (0 MB Kota).</span>
-              </div>
+
+              {/* Mobil Konum İpuçları Paneli */}
+              {showHelpTips && (
+                <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-sky-500/30 text-xs space-y-2 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between text-sky-300 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <Compass className="w-4 h-4 text-sky-400" />
+                      <span>Fotoğraflarda Konum Çıkmıyorsa Ne Yapmalı?</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowHelpTips(false)}
+                      className="p-1 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 text-slate-300 text-[11px] leading-relaxed">
+                    <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                      <strong className="text-white flex items-center gap-1">🍎 iPhone / Safari / Chrome:</strong>
+                      <p className="text-slate-400 mt-1">
+                        1. Fotoğraf seçerken açılan albümün sol altındaki <span className="text-sky-300 font-bold">&ldquo;Seçenekler&rdquo; (Options)</span> linkine tıklayın.
+                      </p>
+                      <p className="text-slate-400">
+                        2. <span className="text-sky-300 font-bold">&ldquo;Tüm Fotoğraf Verileri&rdquo; (All Photos Data / Konum)</span> anahtarını açık yapın. iOS varsayılan olarak GPS verisini tarayıcıdan gizler!
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                      <strong className="text-white flex items-center gap-1">🤖 Android / Google Fotoğraflar:</strong>
+                      <p className="text-slate-400 mt-1">
+                        Kamera uygulamasında <span className="text-sky-300 font-bold">&ldquo;Konum Etiketleri&rdquo; (Geotagging)</span> açık olmalı ve galeriden dosya seçerken &ldquo;Paylaşırken konumu kaldır&rdquo; seçeneği kapatılmalıdır.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -266,15 +369,20 @@ export function PhotoMatchModal({
                     <span>Tespit Edilen Mekanlar ({matchedResults.length})</span>
                   </span>
                   {matchedResults.length > 0 && (
-                    <span className="text-[10px] text-sky-400 bg-sky-950/60 border border-sky-800/60 px-2 py-0.5 rounded-md">
+                    <span className="text-[10px] text-sky-400 bg-sky-950/60 border border-sky-800/60 px-2 py-0.5 rounded-md font-mono">
                       Mavi: Onay Bekliyor
                     </span>
                   )}
                 </div>
 
                 {matchedResults.length === 0 ? (
-                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400">
-                    Seçtiğiniz fotoğraflarda {cityName} mekanlarına yakın GPS konumu bulunamadı. Lütfen kamera ayarlarınızda konumun açık olduğundan emin olun.
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 text-center space-y-2">
+                    <div className="text-xs text-slate-300 font-medium">
+                      Seçtiğiniz fotoğraflarda {cityName} mekanlarına (400 metre yakınına) düşen bir konum bulunamadı.
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Cihazınızın fotoğraf seçerken GPS bilgisini silip silmediğini anlamak için yukarıdaki <span className="text-amber-300 font-bold">&ldquo;Teşhis (Debug)&rdquo;</span> modunu açabilir veya aşağıdaki eşleşmeyen fotoğrafların detaylarını inceleyebilirsiniz.
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -286,76 +394,94 @@ export function PhotoMatchModal({
                         <div
                           key={idx}
                           onClick={() => toggleSelect(place.id)}
-                          className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
                             isSelected
                               ? "bg-sky-950/60 border-sky-400/80 shadow-md shadow-sky-500/15"
                               : "bg-slate-950/60 border-slate-800 hover:border-slate-700 opacity-60"
                           }`}
                         >
-                          {/* Sol: Fotoğraf Thumbnail + Mekan Bilgisi */}
-                          <div className="flex items-center gap-3 min-w-0">
-                            {/* Çekilen Fotoğraf Önizlemesi */}
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewImage(r.previewUrl);
-                              }}
-                              className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-sky-700/60 cursor-zoom-in group/img"
-                              title="Fotoğrafı büyüt"
-                            >
-                              <img
-                                src={r.previewUrl}
-                                alt={r.fileName}
-                                className="w-full h-full object-cover group-hover/img:scale-110 transition-transform"
-                              />
-                              <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                                <Maximize2 className="w-3 h-3 text-white" />
-                              </div>
-                            </div>
-
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <h4 className="text-xs sm:text-sm font-bold text-white leading-tight truncate">
-                                  {place.name}
-                                </h4>
-                                <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[9px] font-extrabold border border-sky-500/30">
-                                  Fotoğraftan Bulundu
-                                </span>
+                          <div className="flex items-center justify-between gap-3">
+                            {/* Sol: Fotoğraf Thumbnail + Mekan Bilgisi */}
+                            <div className="flex items-center gap-3 min-w-0">
+                              {/* Çekilen Fotoğraf Önizlemesi */}
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage(r.previewUrl);
+                                }}
+                                className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-sky-700/60 cursor-zoom-in group/img"
+                                title="Fotoğrafı büyüt"
+                              >
+                                <img
+                                  src={r.previewUrl}
+                                  alt={r.fileName}
+                                  className="w-full h-full object-cover group-hover/img:scale-110 transition-transform"
+                                />
+                                <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                  <Maximize2 className="w-3 h-3 text-white" />
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-2 flex-wrap mt-1 text-[11px]">
-                                <span className="inline-flex items-center gap-1 text-sky-300 font-mono">
-                                  <MapPin className="w-3 h-3 text-sky-400" />
-                                  <span>{place.distanceMeters}m yakında</span>
-                                </span>
-
-                                {r.timestamp && (
-                                  <span className="inline-flex items-center gap-1 font-mono text-slate-400">
-                                    <Clock className="w-3 h-3" />
-                                    <span>
-                                      {r.timestamp.toLocaleTimeString("tr-TR", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })}
-                                    </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h4 className="text-xs sm:text-sm font-bold text-white leading-tight truncate">
+                                    {place.name}
+                                  </h4>
+                                  <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[9px] font-extrabold border border-sky-500/30">
+                                    Fotoğraftan Bulundu
                                   </span>
-                                )}
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap mt-1 text-[11px]">
+                                  <span className="inline-flex items-center gap-1 text-sky-300 font-mono">
+                                    <MapPin className="w-3 h-3 text-sky-400" />
+                                    <span>{place.distanceMeters}m yakında</span>
+                                  </span>
+
+                                  {r.timestamp && (
+                                    <span className="inline-flex items-center gap-1 font-mono text-slate-400">
+                                      <Clock className="w-3 h-3" />
+                                      <span>
+                                        {r.timestamp.toLocaleTimeString("tr-TR", {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}
+                                      </span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Sağ: Mavi Onay Kutusu */}
+                            <div className="shrink-0">
+                              <div
+                                className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                                  isSelected
+                                    ? "bg-sky-500 text-slate-950 shadow-md shadow-sky-500/30"
+                                    : "border-2 border-slate-700 bg-slate-900"
+                                }`}
+                              >
+                                {isSelected && <CheckCircle2 className="w-4 h-4 fill-slate-950 text-sky-500" />}
                               </div>
                             </div>
                           </div>
 
-                          {/* Sağ: Mavi Onay Kutusu */}
-                          <div className="shrink-0">
-                            <div
-                              className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                                isSelected
-                                  ? "bg-sky-500 text-slate-950 shadow-md shadow-sky-500/30"
-                                  : "border-2 border-slate-700 bg-slate-900"
-                              }`}
-                            >
-                              {isSelected && <CheckCircle2 className="w-4 h-4 fill-slate-950 text-sky-500" />}
+                          {/* Teşhis / Debug Bilgisi (Debug Modu Açıkken) */}
+                          {debugMode && (
+                            <div className="mt-1 pt-2 border-t border-sky-800/40 text-[10px] text-slate-300 space-y-0.5 font-mono bg-slate-900/60 p-2 rounded-xl">
+                              <div className="flex items-center justify-between text-amber-300 font-bold">
+                                <span>Teşhis: GPS Okundu ✓</span>
+                                <span>Etiket Sayısı: {r.rawTagsCount}</span>
+                              </div>
+                              <div className="text-slate-400 break-words">
+                                Koord: <span className="text-sky-300">{r.debugInfo.coordsFormatted}</span> | Cihaz: {r.cameraModel || "Bilinmiyor"}
+                              </div>
+                              <div className="text-slate-400">
+                                Mesafe: {r.debugInfo.distanceMeters}m (Eşik: {r.debugInfo.thresholdMeters}m)
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       );
                     })}
@@ -369,7 +495,7 @@ export function PhotoMatchModal({
                   <button
                     type="button"
                     onClick={() => setShowUnmatched((prev) => !prev)}
-                    className="w-full flex items-center justify-between text-xs text-slate-400 hover:text-slate-200 py-1.5 cursor-pointer"
+                    className="w-full min-h-[44px] flex items-center justify-between text-xs text-slate-400 hover:text-slate-200 py-1.5 cursor-pointer"
                   >
                     <span className="flex items-center gap-1.5">
                       <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
@@ -383,14 +509,54 @@ export function PhotoMatchModal({
                   </button>
 
                   {showUnmatched && (
-                    <div className="mt-2 space-y-1.5">
+                    <div className="mt-2 space-y-2">
                       {unmatchedResults.map((r, idx) => (
                         <div
                           key={idx}
-                          className="p-2 rounded-xl bg-slate-950/40 border border-slate-800/60 flex items-center justify-between gap-2 text-[11px] text-slate-400"
+                          className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800 flex flex-col gap-2 text-xs text-slate-300"
                         >
-                          <span className="truncate max-w-[200px] font-mono">{r.fileName}</span>
-                          <span className="text-slate-500 text-[10px] shrink-0">{r.errorNote}</span>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div
+                                onClick={() => setPreviewImage(r.previewUrl)}
+                                className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-slate-800 cursor-zoom-in"
+                              >
+                                <img
+                                  src={r.previewUrl}
+                                  alt={r.fileName}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <span className="font-mono text-[11px] text-white font-bold truncate max-w-[180px]">
+                                {r.fileName}
+                              </span>
+                            </div>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+                              {r.fileSizeFormatted}
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-slate-400 flex items-start gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                            <span>{r.errorNote}</span>
+                          </div>
+
+                          {/* Her zaman veya debug modunda teşhis detayı */}
+                          {debugMode && (
+                            <div className="pt-2 border-t border-slate-800 text-[10px] font-mono text-slate-400 space-y-1 bg-slate-900/60 p-2.5 rounded-xl">
+                              <div className="text-amber-300 font-bold">
+                                Durum: {r.debugInfo.status} | GPS: {r.debugInfo.coordsFormatted}
+                              </div>
+                              <div>Kamera / Cihaz: {r.cameraModel || "Bilinmiyor / Yok"}</div>
+                              <div>Okunan EXIF Etiketi: {r.rawTagsCount} adet</div>
+                              {r.closestPlace && (
+                                <div className="text-sky-300">
+                                  En Yakın Mekan: {r.closestPlace.name} ({r.closestPlace.distanceMeters}m &gt; {r.debugInfo.thresholdMeters}m)
+                                </div>
+                              )}
+                              <div className="text-slate-500 italic break-words">{r.debugInfo.details}</div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
