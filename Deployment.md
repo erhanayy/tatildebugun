@@ -66,6 +66,7 @@ DNS yönetim panelinde (Cloudflare / Registrar) şu kayıt açılır:
 
 | Sürüm | Tarih | Ortam | Değişiklik Özeti | Durum |
 | :--- | :--- | :--- | :--- | :--- |
+| v1.2.4 | 2026-11-05 | Production (`tatilde.bugunai.com`) | Samsung Galaxy S24 Ultra hareketli HEIC fotoğraflarındaki `GPS: NaN, NaN` onarımı (`extractCoordinate` ile rasyonel/düz/DMS formatlarından tam koordinat çözümü) | Canlıda & Aktif (`tatilde-bugun-00008-bm7`) |
 | v1.2.3 | 2026-11-05 | Production (`tatilde.bugunai.com`) | `exifreader` Tier-1 hibrit motoru ile Samsung Galaxy S24 Ultra Hareketli HEIC (`.heic`) fotoğraflarındaki GPS ayrıştırma desteği, otomatik açılan teşhis kartları ve `.heic,.heif` seçici desteği | Canlıda & Aktif (`tatilde-bugun-00007-5sh`) |
 | v1.2.2 | 2026-11-05 | Production (`tatilde.bugunai.com`) | `exifr.gps()` ile EXIF GPS ayrıştırma onarımı, modal içi anlık cihaz/koordinat/mesafe teşhis (Debug) modu, iOS/Android konum rehberi ve tek tıkla Roma Kolezyum örnek fotoğraf testi | Canlıda & Aktif (`tatilde-bugun-00006-h6j`) |
 | v1.2.1 | 2026-11-04 | Production (`tatilde.bugunai.com`) | Mobil React Portal mimarisi (ekran donması/bulanık kalma fix), butona tıklandığında anında açılan yerel galeri seçici (UX) ve fotoğraftan tespit edilen yerler için Mavi (Sky Blue) renk kodlama, rozet ve tek tıkla onaylama sistemi | Canlıda & Aktif (`tatilde-bugun-00005-299`) |
