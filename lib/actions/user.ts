@@ -3,10 +3,11 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { users, visits, trips } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { normalizeToInternational } from "@/lib/utils/phone";
 
 const updateProfileSchema = z.object({
   fullName: z.string().min(2, "Ad Soyad en az 2 karakter olmalıdır"),
@@ -143,12 +144,27 @@ export async function updateProfile(input: z.infer<typeof updateProfileSchema>):
     }
 
     const { fullName, phoneNumber, bio, avatarUrl, baseCountry, baseCity } = validated.data;
+    const cleanPhone = phoneNumber ? normalizeToInternational(phoneNumber) : null;
+
+    if (cleanPhone) {
+      const existing = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.phoneNumber, cleanPhone), ne(users.id, session.user.id)));
+
+      if (existing.length > 0) {
+        return {
+          success: false,
+          message: "Bu telefon numarası başka bir kullanıcı tarafından kullanılmaktadır. Lütfen farklı bir numara giriniz.",
+        };
+      }
+    }
 
     await db
       .update(users)
       .set({
         fullName: fullName.trim(),
-        phoneNumber: phoneNumber?.trim() || null,
+        phoneNumber: cleanPhone,
         bio: bio?.trim() || null,
         avatarUrl: avatarUrl?.trim() || null,
         baseCountry: baseCountry || "TR",

@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { getUserVisits } from "@/lib/actions/visits";
 import { getUserTrips } from "@/lib/actions/trips";
+import { getMissingContracts } from "@/lib/actions/agreements";
 import { WorldMapWrapper } from "@/components/map/world-map-wrapper";
 import { AppHeader } from "@/components/navigation/app-header";
 import { redirect } from "next/navigation";
@@ -172,6 +173,7 @@ export default async function DashboardPage() {
   }
 
   const user = session.user;
+  const pendingContracts = await getMissingContracts(user.id);
   const dbVisits = await getUserVisits();
   const dbTrips = await getUserTrips();
   const visits = dbVisits;
@@ -179,7 +181,7 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Üst Bar / Ortak Navigasyon */}
-      <AppHeader user={user} />
+      <AppHeader user={user} pendingContracts={pendingContracts} />
 
       {/* Ana Gövde */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full space-y-6">

@@ -10,7 +10,7 @@ import {
   ArrowRight,
   RotateCcw,
   CheckCircle2,
-  FileCode,
+  Mail,
   Loader2,
   Palmtree,
 } from "lucide-react";
@@ -65,7 +65,7 @@ export function VerifyOtpForm() {
     setIsResending(true);
     const res = await resendOtp(userId);
     if (res.success) {
-      toast.success(res.message || "Yeni kod üretildi ve sifreler.md dosyasına yazıldı.");
+      toast.success(res.message || "Yeni doğrulama kodunuz e-posta adresinize gönderildi.");
     } else {
       toast.error(res.message || "Yeni kod gönderilemedi.");
     }
@@ -98,16 +98,19 @@ export function VerifyOtpForm() {
           </p>
         </div>
 
-        {/* sifreler.md Bilgi Kutusu */}
-        <div className="mb-5 p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-800/60 text-cyan-300 text-xs flex items-start gap-2.5">
-          <FileCode className="w-4 h-4 text-cyan-400 mt-0.5 shrink-0" />
-          <div className="leading-relaxed text-[11px]">
-            <b>Test & Canlı Deneme:</b> 6 haneli aktivasyon kodunuz otomatik olarak proje ana dizinindeki{" "}
-            <code className="px-1.5 py-0.5 rounded bg-cyan-900/80 text-white font-mono text-[10px]">
-              sifreler.md
-            </code>{" "}
-            dosyasına yazılmıştır. Oradan kopyalayabilirsiniz!
+        {/* Giriş Ekranından Yönlendirilme Bilgisi */}
+        {searchParams.get("relogin") === "true" && (
+          <div className="mb-4 p-3 rounded-2xl bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs font-medium text-center flex items-center justify-center gap-2">
+            <span>⚠️ Hesabınız henüz onaylanmamıştı. Yeni doğrulama kodunuz e-posta adresinize gönderildi!</span>
           </div>
+        )}
+
+        {/* E-posta Doğrulama Bilgi Kutusu */}
+        <div className="mb-5 p-3.5 rounded-2xl bg-cyan-950/30 border border-cyan-800/40 text-cyan-300 text-xs flex items-center gap-2.5">
+          <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="leading-relaxed text-[12px] text-slate-300">
+            6 haneli aktivasyon kodu e-posta adresinize gönderilmiştir. Lütfen gelen kutunuzu (ve spam klasörünü) kontrol ediniz.
+          </span>
         </div>
 
         {/* Hata Bildirimi */}

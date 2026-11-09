@@ -9,7 +9,6 @@ import {
   Mail,
   ArrowRight,
   Loader2,
-  FileCode,
   Palmtree,
   ArrowLeft,
   Send,
@@ -67,12 +66,12 @@ export function ForgotPasswordForm() {
           </p>
         </div>
 
-        {/* sifreler.md Bilgi Kutusu */}
-        <div className="mb-5 p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-800/60 text-cyan-300 text-xs flex items-start gap-2.5">
-          <FileCode className="w-4 h-4 text-cyan-400 mt-0.5 shrink-0" />
-          <div className="leading-relaxed text-[11px]">
-            <b>Test & Canlı Bildirim:</b> Sıfırlama kodunuz anında <code className="px-1.5 py-0.5 rounded bg-cyan-900/80 text-white font-mono text-[10px]">sifreler.md</code> dosyasına yazılacak ve <b>erhanayyildiz@gmail.com</b> adresine CC ile iletilecektir.
-          </div>
+        {/* Güvenlik Bilgilendirme Kutusu */}
+        <div className="mb-5 p-3.5 rounded-2xl bg-cyan-950/30 border border-cyan-800/40 text-cyan-300 text-xs flex items-center gap-2.5">
+          <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="leading-relaxed text-[12px] text-slate-300">
+            Hesabınızı doğrulamak ve şifrenizi yenilemek için 6 haneli bir güvenlik kodu gönderilecektir.
+          </span>
         </div>
 
         {/* Hata Bildirimi */}

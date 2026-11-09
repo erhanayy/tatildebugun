@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { UserProfileData } from "@/lib/actions/user";
 import { updateProfile, changePassword } from "@/lib/actions/user";
+import { InternationalPhoneInput } from "@/components/ui/international-phone-input";
 import {
   User,
   Mail,
@@ -274,19 +275,11 @@ export function ProfileView({ initialData }: ProfileViewProps) {
                 >
                   Cep Telefonu
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Phone className="w-4 h-4" />
-                  </div>
-                  <input
-                    id="phoneNumber"
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="05XX XXX XX XX"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
-                </div>
+                <InternationalPhoneInput
+                  id="phoneNumber"
+                  value={phoneNumber}
+                  onChange={(fullPhone) => setPhoneNumber(fullPhone)}
+                />
               </div>
             </div>
 

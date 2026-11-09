@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uuid, index, varchar, doublePrecision, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, uuid, index, uniqueIndex, varchar, doublePrecision, integer, jsonb } from "drizzle-orm/pg-core";
 
 // Kullanıcı Rolleri: 'admin' (Yönetici), 'host' (Otel/Tesis/Tur Sahibi), 'guest' (Tatilci/Misafir)
 export const users = pgTable(
@@ -7,7 +7,7 @@ export const users = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     fullName: text("full_name").notNull(),
     email: text("email").unique(),
-    phoneNumber: text("phone_number"),
+    phoneNumber: text("phone_number").unique(),
     password: text("password").notNull(),
     role: text("role", { enum: ["admin", "host", "guest"] }).default("guest").notNull(),
     avatarUrl: text("avatar_url"),
@@ -23,7 +23,7 @@ export const users = pgTable(
   },
   (table) => ({
     emailIdx: index("users_email_idx").on(table.email),
-    phoneIdx: index("users_phone_idx").on(table.phoneNumber),
+    phoneIdx: uniqueIndex("users_phone_number_unique_idx").on(table.phoneNumber),
   })
 );
 
@@ -387,6 +387,48 @@ export const cityItineraries = pgTable(
 
 export type CityItinerary = typeof cityItineraries.$inferSelect;
 export type NewCityItinerary = typeof cityItineraries.$inferInsert;
+
+// --- 14. Sözleşmeler ve KVKK Onay Takibi (Contracts & KVKK Compliance) ---
+export const contracts = pgTable(
+  "contracts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    type: text("type", { enum: ["KVKK", "USER_AGREEMENT", "PRIVACY_POLICY", "OTHER"] }).notNull(),
+    version: varchar("version", { length: 50 }).notNull(), // Örn: '1.0.0', '2026-Kasım'
+    title: text("title").notNull(), // Örn: 'KVKK ve Açık Rıza Metni'
+    content: text("content").notNull(), // Markdown / Metin
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    typeIdx: index("contracts_type_idx").on(table.type),
+    activeIdx: index("contracts_active_idx").on(table.isActive),
+  })
+);
+
+export type Contract = typeof contracts.$inferSelect;
+export type NewContract = typeof contracts.$inferInsert;
+
+export const userContracts = pgTable(
+  "user_contracts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    contractId: uuid("contract_id")
+      .references(() => contracts.id, { onDelete: "cascade" })
+      .notNull(),
+    acceptedAt: timestamp("accepted_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("user_contracts_user_idx").on(table.userId),
+    contractIdx: index("user_contracts_contract_idx").on(table.contractId),
+  })
+);
+
+export type UserContract = typeof userContracts.$inferSelect;
+export type NewUserContract = typeof userContracts.$inferInsert;
 
 
 

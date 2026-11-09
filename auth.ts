@@ -7,7 +7,9 @@ import { users } from "./lib/db/schema";
 import { eq, or, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
-async function getUserByIdentifier(identifier: string) {
+import { normalizeToInternational } from "./lib/utils/phone";
+
+export async function getUserByIdentifier(identifier: string) {
   try {
     const trimmed = identifier.trim();
     const isEmail = trimmed.includes("@");
@@ -18,8 +20,10 @@ async function getUserByIdentifier(identifier: string) {
     if (isEmail) {
       filter = eq(users.email, trimmed.toLowerCase());
     } else if (digits.length >= 7) {
+      const normalized = normalizeToInternational(trimmed);
       filter = or(
         eq(users.phoneNumber, trimmed),
+        eq(users.phoneNumber, normalized),
         sql`regexp_replace(${users.phoneNumber}, '[^0-9]', '', 'g') LIKE ${"%" + last10}`
       );
     } else {

@@ -19,10 +19,13 @@ import {
   X,
   User,
   Luggage,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/navigation/notification-bell";
 import { ChatBadge } from "@/components/navigation/chat-badge";
+import { ContractEnforcer } from "@/components/agreements/contract-enforcer";
+import { Contract } from "@/lib/db/schema";
 
 interface AppHeaderProps {
   user: {
@@ -30,10 +33,12 @@ interface AppHeaderProps {
     name?: string | null;
     email?: string | null;
     image?: string | null;
+    role?: string | null;
   };
+  pendingContracts?: Contract[];
 }
 
-export function AppHeader({ user }: AppHeaderProps) {
+export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
   const pathname = usePathname();
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -84,6 +89,9 @@ export function AppHeader({ user }: AppHeaderProps) {
 
   return (
     <>
+      {/* Zorunlu KVKK ve Sözleşme Onay Denetçisi */}
+      <ContractEnforcer userId={user.id} initialPendingContracts={pendingContracts} />
+
       <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           {/* Logo & Marka */}
@@ -125,7 +133,7 @@ export function AppHeader({ user }: AppHeaderProps) {
             </nav>
           </div>
 
-          {/* Sağ Alan: Davet Et + Bildirimler + Sohbet + Profil & Çıkış */}
+          {/* Sağ Alan: Davet Et + Bildirimler + Sohbet + Admin Yönetimi + Profil & Çıkış */}
           <div className="flex items-center gap-2 sm:gap-2.5">
             {/* Arkadaşını Davet Et İkon Butonu */}
             <button
@@ -148,6 +156,27 @@ export function AppHeader({ user }: AppHeaderProps) {
 
             {/* Gezgin Sohbeti & Rozeti */}
             <ChatBadge />
+
+            {/* Yönetici Merkezi (Admin Hub) İkonu */}
+            {(user as any).role === "admin" && (
+              <Link
+                href="/admin"
+                className={`relative p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center group ${
+                  pathname.startsWith("/admin")
+                    ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-md shadow-indigo-500/10"
+                    : "text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/40 hover:bg-indigo-500/20"
+                }`}
+                aria-label="Yönetim Merkezi (Admin Hub)"
+              >
+                <ShieldCheck className="w-5 h-5 group-hover:scale-110 transition-transform" />
+
+                {/* Tooltip */}
+                <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
+                  Yönetim Merkezi 🛡️
+                  <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
+                </span>
+              </Link>
+            )}
 
             {/* Kullanıcı Profili Bağlantısı (Kompakt Avatar) */}
             <Link

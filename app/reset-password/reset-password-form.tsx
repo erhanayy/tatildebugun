@@ -11,7 +11,7 @@ import {
   EyeOff,
   ArrowRight,
   Loader2,
-  FileCode,
+  Mail,
   CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -92,12 +92,12 @@ export function ResetPasswordForm() {
           </p>
         </div>
 
-        {/* sifreler.md Bilgi Kutusu */}
-        <div className="mb-5 p-3 rounded-2xl bg-cyan-950/40 border border-cyan-800/60 text-cyan-300 text-xs flex items-start gap-2.5">
-          <FileCode className="w-4 h-4 text-cyan-400 mt-0.5 shrink-0" />
-          <div className="leading-relaxed text-[11px]">
-            Sıfırlama kodunuz <code className="px-1.5 py-0.5 rounded bg-cyan-900/80 text-white font-mono text-[10px]">sifreler.md</code> dosyasına kaydedilmiş ve <b>erhanayyildiz@gmail.com</b> adresine CC ile iletilmiştir.
-          </div>
+        {/* E-posta Bilgilendirme Kutusu */}
+        <div className="mb-5 p-3 rounded-2xl bg-cyan-950/30 border border-cyan-800/40 text-cyan-300 text-xs flex items-center gap-2.5">
+          <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="leading-relaxed text-[12px] text-slate-300">
+            E-posta adresinize gönderilen 6 haneli şifre sıfırlama kodunu giriniz.
+          </span>
         </div>
 
         {/* Hata Bildirimi */}
@@ -107,7 +107,7 @@ export function ResetPasswordForm() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           {/* 6 Haneli Kod */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
@@ -133,9 +133,11 @@ export function ResetPasswordForm() {
             </label>
             <div className="relative">
               <input
+                name="newPassword"
                 type={showPassword ? "text" : "password"}
                 required
                 minLength={6}
+                autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="En az 6 karakter"
@@ -158,9 +160,11 @@ export function ResetPasswordForm() {
             </label>
             <div className="relative">
               <input
+                name="confirmNewPassword"
                 type={showPassword ? "text" : "password"}
                 required
                 minLength={6}
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Yeni şifreyi tekrar giriniz"

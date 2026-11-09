@@ -18,6 +18,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import { InternationalPhoneInput } from "@/components/ui/international-phone-input";
 
 export function RegisterForm() {
   const router = useRouter();
@@ -57,7 +58,7 @@ export function RegisterForm() {
     });
 
     if (res.success && res.userId) {
-      toast.success("Hesabınız oluşturuldu! Doğrulama kodunuz hazır. 🎉");
+      toast.success(res.message || "Hesabınız oluşturuldu! Doğrulama kodunuz hazır. 🎉");
       // OTP Doğrulama Ekranına yönlendir
       router.push(`/verify-otp?userId=${res.userId}&email=${encodeURIComponent(email)}`);
     } else {
@@ -110,7 +111,7 @@ export function RegisterForm() {
         )}
 
         {/* Kayıt Formu */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           {/* Ad Soyad */}
           <div>
             <label
@@ -125,7 +126,9 @@ export function RegisterForm() {
               </div>
               <input
                 id="fullName"
+                name="name"
                 type="text"
+                autoComplete="name"
                 required
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -150,7 +153,9 @@ export function RegisterForm() {
                 </div>
                 <input
                   id="email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -167,20 +172,12 @@ export function RegisterForm() {
               >
                 Cep Telefonu *
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <Phone className="w-4 h-4" />
-                </div>
-                <input
-                  id="phoneNumber"
-                  type="tel"
-                  required
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="05XX XXX XX XX"
-                  className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all"
-                />
-              </div>
+              <InternationalPhoneInput
+                id="phoneNumber"
+                required
+                value={phoneNumber}
+                onChange={(fullPhone) => setPhoneNumber(fullPhone)}
+              />
             </div>
           </div>
 
@@ -199,9 +196,11 @@ export function RegisterForm() {
                 </div>
                 <input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   required
                   minLength={6}
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="En az 6 karakter"
@@ -230,9 +229,11 @@ export function RegisterForm() {
                 </div>
                 <input
                   id="confirmPassword"
+                  name="confirmPassword"
                   type={showPassword ? "text" : "password"}
                   required
                   minLength={6}
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Şifreyi tekrar giriniz"

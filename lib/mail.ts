@@ -20,7 +20,7 @@ export async function sendEmail({
   otpCode,
 }: SendMailOptions): Promise<{ success: boolean; error?: string; messageId?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
-  const sender = process.env.EMAIL_SENDER || "admin@bugunai.com";
+  const sender = process.env.EMAIL_SENDER || "bildirim@tatilde.bugunai.com";
 
   if (!apiKey) {
     console.warn("[sendEmail] RESEND_API_KEY tanımlı değil, e-posta gönderilemedi.");

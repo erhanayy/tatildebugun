@@ -2261,13 +2261,349 @@ GPS okundu (NaN, NaN) fakat en yakın mekan Infinitym mesafede, 400m eşiğinin 
    - `tags.gps.Latitude`'da `NaN` varsa; hemen `tags.exif.GPSLatitude.description` veya `tags.exif.GPSLatitude.value` (hem rasyonel çiftler `[[41, 1], ...]` hem düz sayılar `[41, 53, 55]` hem de DMS metin formatları) üzerinden gerçek koordinatı hesaplar.
    - Yapılan laboratuvar testinde Samsung S24 Ultra koordinatı `41.89866, 12.4770` olarak tam Pantheon Tapınağı üzerinde (7 metre mesafede) çözülmüştür!
 
+---
 
+## 46. Yeni Kullanıcı Aktivasyon E-postası Rota Analizi (`yesayyildiz@gmail.com`)
 
+Kullanıcının *"Biraz evvel yesayyildiz@gmail.com diye bir kullanıcı yarattım. Giriş ilk şifresi erhanayyildiz@gmail.com adresine gitti ama yesayyildiz@gmail.com adresine ise mail gitmedi. Sebebi nedir?"* sorusu üzerine canlı sistem ve e-posta altyapısı derinlemesine incelenmiştir.
 
+### 46.1. Canlı Sistem Logları Kanıtı (GCP Cloud Logging)
+`dernektebugun-492221` projesindeki `tatilde-bugun` servisi Cloud Run loglarında saat `17:47:15` anında şu kayıtlar tespit edilmiştir:
 
+```text
+[sendEmail] E-posta gönderimi deneniyor: From=admin@bugunai.com, To=yesayyildiz@gmail.com, BCC=erhanayyildiz@gmail.com
+[sendEmail] Gönderici adresi veya domain hatası: The associated domain with your API key is not verified. Please, create a new API key with full access or with a verified domain.
+[sendEmail] E-posta kopyası ve OTP başarıyla erhanayyildiz@gmail.com adresine teslim edildi (ID: 01a1c16b-e431-7b59-81b9-98025689e045).
+```
 
+### 46.2. Kök Neden Analizi
+1. **Resend Alan Adı Doğrulama Kısıtı (HTTP 400):**
+   - Canlı Cloud Run ortamında `EMAIL_SENDER=admin@bugunai.com` olarak tanımlıdır.
+   - Resend hesabında `bugunai.com` alan adının DNS (DKIM/SPF) doğrulaması henüz tamamlanmamıştır.
+   - Resend, doğrulanmamış bir alan adından üçüncü şahıslara e-posta gönderimini kesin olarak engellemekte ve API çağrısını reddetmektedir.
 
+2. **Acil Durum Fallback Mekanizmasının Devreye Girmesi:**
+   - [lib/mail.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/mail.ts) (satır 48-82) içerisinde, gönderici adresi veya domain hatası alındığında aktivasyon kodunun/şifrenin havada kaybolmasını önlemek için acil durum mekanizması kurgulanmıştır.
+   - Bu mekanizma `onboarding@resend.dev` adresi üzerinden doğrudan yöneticiye (`erhanayyildiz@gmail.com`) bir uyarı e-postası ve OTP kodunu teslim etmektedir.
 
+3. **Neden `yesayyildiz@gmail.com` Adresine E-posta Ulaşamadı?**
+   - Resend'in ücretsiz sandbox göndericisi `onboarding@resend.dev`, güvenlik protokolü gereği **yalnızca Resend hesabının sahibi olan e-posta adresine (`erhanayyildiz@gmail.com`)** e-posta teslim edebilir.
+   - Resend üzerinden harici bir kullanıcıya (`yesayyildiz@gmail.com`) e-posta gönderilebilmesi için gönderici alan adının (`bugunai.com`) Resend panelinde doğrulanmış ("Verified") olması şarttır.
+
+### 46.3. Çözüm Yolu
+1. **Resend Üzerinde `bugunai.com` Doğrulanması:**
+   - `resend.com/domains` adresinden `bugunai.com` (veya `tatilde.bugunai.com`) eklenerek DNS sağlayıcısına (Cloudflare / Domain Registrar) 3 adet DNS kaydının (TXT / MX) eklenmesi.
+2. **Alternatif Olarak:**
+   - Eğer başka doğrulanmış bir kurumsal alan adı veya SMTP altyapısı tercih edilirse ortam değişkenlerinin güncellenmesi.
+3. **Mobil Uygulama Hazırlığı:**
+   - Kullanıcının sonraki problem/ekleme talepleri dinlendikten sonra uygulamanın mobil (PWA / Capacitor) paketi hazırlanacaktır.
+
+---
+
+## 47. BurstaBugün KVKK, Kullanıcı Sözleşmesi ve Veri Gizliliği Altyapısı Analizi ve TatildeBugün Uyarlaması
+
+Kullanıcının *"Madem uygulamayı artık herkese açacağız. BurstaBugun uygulamasındaki KVKK ve Veri Gizliliği altyapısını da buraya alalım. Oradaki kodları incele... Yönetim ekranlarından oluşturup güncelleyebiliyorum. Bir kişi login olduğunda bunlara ait son versiyonlara imza atmadı ise uygulamaya girmeden bu ekranlar çıkıyor ve tik atıp ilerlemesi sağlanıyor"* direktifi doğrultusunda `../BurstaBugun` projesi derinlemesine incelenmiştir.
+
+### 47.1. BurstaBugün Kaynak İncelemesi Bulguları
+`BurstaBugun` projesinde incelenen bileşenler:
+1. **Veritabanı Şeması (`BurstaBugun/lib/db/schema.ts:292-316`):**
+   - `contractTypeEnum`: `'KVKK'`, `'USER_AGREEMENT'`, `'STUDENT_AGREEMENT'`, `'WEB_KVKK'`, `'WEB_DONATION_AGREEMENT'`, `'OTHER'`.
+   - `contracts` tablosu: `id (uuid)`, `type (enum)`, `version (text)`, `title (text)`, `content (text/markdown)`, `isActive (boolean)`, `createdAt (timestamp)`.
+   - `user_contracts` tablosu: `id (uuid)`, `userId (uuid -> users.id)`, `contractId (uuid -> contracts.id)`, `acceptedAt (timestamp)`.
+2. **Server Actions (`BurstaBugun/lib/actions/agreements.ts`):**
+   - `getMissingContracts(userId)`: Aktif olan (`isActive: true`) sözleşmeleri çeker ve kullanıcının henüz imzalamadığı sözleşme listesini döndürür.
+   - `signContract(userId, contractId)`: `user_contracts` tablosuna onay kaydı ekler ve `revalidatePath` tetikler.
+   - `getAdminContracts()`: Tüm geçmiş ve aktif sözleşmeleri listeler.
+   - `createContractVersion(data)`: Aynı tipteki eski sözleşmeleri `isActive = false` yapar, yeni versiyonu `isActive = true` olarak ekler.
+3. **Zorunlu İmza Enforcer (`BurstaBugun/app/dashboard/contract-enforcer.tsx` & `force-contract-signature.tsx`):**
+   - Dashboard layout seviyesinde `getMissingContracts(userId)` çağrılır.
+   - Eğer imza bekleyen sözleşme varsa, tam ekran (`fixed inset-0 z-[9999]`) kapatılamaz bir modal açılır.
+   - `/dashboard/admin/agreements` rotası yöneticinin kilitlenmemesi için muaf tutulur.
+   - Kullanıcı sözleşmeyi okur, "Okudum ve Kabul Ediyorum" butonuna tıklar, sıradaki sözleşmeye geçer, hepsi bitince sistem açılır.
+4. **Yönetici Paneli (`BurstaBugun/app/dashboard/admin/agreements/`):**
+   - `page.tsx`: Sol tarafta yeni versiyon ekleme formu, sağ tarafta versiyon geçmişi tablosu (Yayında / Eski etiketleriyle).
+
+---
+
+### 47.2. TatildeBugün İçin Tasarlanan Mimari ve Uyarlama Planı
+
+TatildeBugün projesinin modern koyu temalı (Cyan/Slate), mobil öncelikli (Zero-Horizontal-Scroll) tasarımına birebir uygun olarak şu yapı kurulacaktır:
+
+1. **Veritabanı Şeması (`lib/db/schema.ts`):**
+   - `contract_types`: `'KVKK'`, `'USER_AGREEMENT'`, `'PRIVACY_POLICY'`, `'OTHER'` (TatildeBugün seyahat platformuna uygun etiketler).
+   - `contracts` tablosu:
+     - `id`: uuid defaultRandom primaryKey
+     - `type`: varchar(50) veya enum
+     - `version`: varchar(50) (Örn: "1.0.0", "2026-Kasım")
+     - `title`: text (Örn: "KVKK ve Kişisel Veri Koruma Aydınlatma Metni")
+     - `content`: text (Markdown veya metin)
+     - `isActive`: boolean default true
+     - `createdAt`: timestamp defaultNow
+   - `user_contracts` tablosu:
+     - `id`: uuid defaultRandom primaryKey
+     - `userId`: uuid references users.id (cascade)
+     - `contractId`: uuid references contracts.id (cascade)
+     - `acceptedAt`: timestamp defaultNow
+   - İndeksler: `user_contracts_user_idx`, `contracts_active_idx`.
+   - **Geri Alma (Rollback) Scripti:** `rollback_contracts_and_user_contracts.sql` (Rule 8 gereği).
+
+2. **Server Actions (`lib/actions/agreements.ts`):**
+   - `getMissingContracts(userId: string)`: Kullanıcının imzalamadığı aktif sözleşmeleri döndürür.
+   - `signContract(userId: string, contractId: string)`: İmzayı kaydeder.
+   - `getAdminContracts()`: Admin paneli için tüm sözleşmeleri listeler.
+   - `createContractVersion(data)`: Eski versiyonu arşivler, yenisini yayınlar.
+
+3. **Zorunlu İmza Arayüzü (`components/agreements/contract-enforcer.tsx` & `force-contract-signature.tsx`):**
+   - Mobil öncelikli (360px-430px ekranlara tam oturan, dikey kaydırılabilir, yatay taşmasız).
+   - TatildeBugün koyu cam (dark glassmorphism) stili: Slate-900 zemin, cyan/blue vurgular, okunaklı sözleşme okuma alanı.
+   - "Okudum ve Kabul Ediyorum" butonu (min 48px dokunma hedefi).
+   - Sayfalar (`dashboard`, `feed`, `match`, `tatildeyim`, `profile`, `messages`) ortak üst bileşeninde veya `AppHeader` entegrasyonuyla kesintisiz kontrol.
+
+4. **Yönetim Ekranı (`app/admin/agreements/page.tsx` & `create-contract-form.tsx`):**
+   - Yalnızca `role === 'admin'` olan kullanıcılara açık.
+   - Yeni versiyon yayınlama formu (Sözleşme Tipi, Başlık, Versiyon, İçerik).
+   - Sözleşme geçmişi tablosu (Aktif/Eski durumu, versiyon rozetleri).
+   - `AppHeader` içerisine admin rolündeki kullanıcılar için zarif bir "Sözleşme Yönetimi" linki / ikonu.
+
+5. **İlk Tohum Verisi (Seed Data):**
+   - İlk kurulumda sistemin boş kalmaması için varsayılan güncel versiyon (v1.0.0):
+     - `KVKK`: TatildeBugün Kişisel Verilerin Korunması Aydınlatma ve Açık Rıza Metni.
+     - `USER_AGREEMENT`: TatildeBugün Kullanıcı ve Gezgin Üyelik Sözleşmesi.
+
+### 47.3. Gerçekleştirilen Kod Geliştirmeleri ve Kalite Kapısı
+1. **Veritabanı ve Şema:**
+   - [lib/db/schema.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/db/schema.ts): `contracts` ve `user_contracts` tabloları ve tipleri eklendi.
+   - `scripts/create_contracts.sql` DDL betiği ve Kural 8 gereğince `scripts/rollback_contracts_and_user_contracts.sql` geri alma betiği hazırlandı.
+   - `scripts/migrate_contracts.ts` ile Cloud SQL veritabanına tablolar başarıyla uygulandı ve `KVKK v1.0.0` ile `USER_AGREEMENT v1.0.0` tohumlandı.
+2. **Server Actions:**
+   - [lib/actions/agreements.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/agreements.ts): `getMissingContracts`, `signContract`, `getAdminContracts`, `createContractVersion` fonksiyonları Zod validasyonu ve NextAuth admin yetki kontrolleriyle yazıldı.
+3. **Kullanıcı Onay Arayüzü (Zorunlu Enforcer):**
+   - [components/agreements/force-contract-signature.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/agreements/force-contract-signature.tsx): Kapatılamaz tam ekran modal, okuma alanı, mobil öncelikli onay butonu.
+   - [components/agreements/contract-enforcer.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/agreements/contract-enforcer.tsx): Eksik sözleşme denetim sarmalayıcısı.
+   - [components/navigation/app-header.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/app-header.tsx): `ContractEnforcer` tüm korumalı sayfalarda ortak çalışacak şekilde entegre edildi. Admin kullanıcılar için `Sözleşme & KVKK Yönetimi` hızlı erişim ikonu eklendi.
+   - [app/dashboard/page.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/dashboard/page.tsx): SSR anında `getMissingContracts` çağrılarak sıfır gecikmeli ilk render sağlandı.
+4. **Admin Yönetim Ekranı:**
+   - [app/admin/agreements/page.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/admin/agreements/page.tsx): Admin sözleşme yönetim sayfası (sadece `admin` rolüne açık).
+   - [app/admin/agreements/create-contract-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/admin/agreements/create-contract-form.tsx): Yeni sözleşme/versiyon yayınlama formu.
+5. **Kalite Kapısı ve Birim Test Doğrulaması:**
+   - `npx tsc --noEmit`: 0 hata ile başarıyla tamamlandı.
+   - `npm run build`: 2.0 saniyede başarıyla tamamlandı, yeni `/admin/agreements` rotası oluşturuldu.
+   - Canlı veritabanı simülasyon testi: İki aşamalı imzalama akışı (`KVKK` + `USER_AGREEMENT`) test edildi, imza sonrası kalan sözleşme sayısının 2 -> 1 -> 0 şeklinde kusursuz azaldığı doğrulandı.
+
+---
+
+## 48. Yönetim Paneli Modüler Ana Menü / Hub Mimarisi (`/admin`)
+
+Kullanıcının *"Yönetim paneli şu an direkt KVKK ekranına açıyor böyle olmasın. Orası bir menü ekranı açsın. Oradan Sözleşmeleri Yönet linki ile ekrana geçelim. Mutlaka başka yönetim ekranları da olacaktır."* geri bildirimi doğrultusunda yönetim mimarisi modüler bir Hub yapısına dönüştürülmektedir.
+
+### 48.1. İhtiyaç Analizi ve Mimari Tasarım
+1. **Mevcut Durum:** Üst bardaki 🛡️ Kalkan ikonu doğrudan `/admin/agreements` (KVKK & Sözleşme) sayfasına yönlendirmekteydi.
+2. **Hedeflenen Mimari:**
+   - Üst bardaki kalkan butonu artık doğrudan **Yönetim Merkezi Ana Menüsüne (`/admin`)** yönlendirecektir.
+   - `/admin` sayfası, gelecekte eklenecek tüm idari modülleri taşıyabilecek genişletilebilir modern kartlı bir menü / pano (Dashboard Hub) olarak hizmet verecektir:
+     1. **Sözleşme & KVKK Yönetimi (`/admin/agreements`):** Aktif ve tıklandığında mevcut sözleşme yönetim paneline yönlendirir.
+     2. **Kullanıcı & Gezgin Yönetimi:** Sistemdeki kayıtlı kullanıcıları, rolleri ve hesap durumlarını denetleme modülü (Gelecek modül).
+     3. **Mekan & Rota Kürasyonu:** Şehir mekanları ve günlük yürüyüş rotalarını düzenleme modülü (Gelecek modül).
+     4. **Sistem & İletişim Ayarları:** E-posta, SMS ve bildirim parametreleri (Gelecek modül).
+   - `/admin/agreements` sayfasının üstüne de kolay geri dönüş için `← Yönetim Merkezine Dön` bağlantısı/ekmek kırıntısı (breadcrumb) eklenecektir.
+
+### 48.2. Tasarım & Mobil Uyumluluk (Kural 13)
+- Mobil cihazlarda (360px-430px) kartlar dikey olarak tek sıra halinde dizilecek (`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2`).
+- Dokunma hedefleri min 48px olacak, sıfır yatay kaydırma garantisi sağlanacaktır.
+
+### 48.3. Gerçekleştirilen Geliştirmeler ve Canlı Dağıtım
+1. **Yönetim Merkezi Ana Menüsü (`app/admin/page.tsx`):**
+   - Modern koyu cam stilinde 4 ana idari modülü içeren Dashboard Hub oluşturuldu.
+   - Aktif Sözleşme & KVKK Yönetimi modül kartı tıklandığında `/admin/agreements` rotasına geçiş sağlar.
+2. **Üst Bar Kalkan İkonu (`components/navigation/app-header.tsx`):**
+   - Doğrudan `/admin` ana menüsüne bağlandı. Tooltip: `"Yönetim Merkezi 🛡️"`.
+3. **Geri Dönüş Bağlantısı (`app/admin/agreements/page.tsx`):**
+   - Sol üste `← Yönetim Merkezine Dön` bağlantısı eklendi.
+4. **Kalite Kapısı ve Dağıtım:**
+   - `npx tsc --noEmit` 0 hata ile tamamlandı.
+   - `npm run build` 2.1s'de derlendi.
+   - Cloud Run üzerinde `tatilde-bugun-00010-w2g` revizyonu ile canlıya başarıyla dağıtıldı.
+
+---
+
+## 49. Resend Doğrulanmış Alan Adı API Anahtarı Güncellemesi ve E-posta İletim Çözümü
+
+### 49.1. Kök Neden Analizi
+1. **Sorun:** Canlıda kayıt olan `yesayyildiz@gmail.com` adresine aktivasyon/şifre e-postası gitmeyip `erhanayyildiz@gmail.com` adresine gelmekteydi.
+2. **Kök Neden:**
+   - Önceki Resend API anahtarı (`re_N3hGjuZN...`), `tatilde.bugunai.com` alan adı henüz DNS üzerinde doğrulanmadan önce oluşturulduğu için kısıtlı yetkide kalmıştı.
+   - Resend API, doğrulanmamış domain kapsamında üretilmiş eski anahtarla dış alıcılara e-posta gönderimini reddetmekte (`400: The associated domain with your API key is not verified`) idi.
+   - Sistemimizdeki güvenlik ve acil durum mekanizması (`lib/mail.ts`), ana gönderim hata aldığında kullanıcının aktivasyon kodunu kaybetmemesi için `onboarding@resend.dev` üzerinden acil durum uyarısıyla sistem yöneticisine (`erhanayyildiz@gmail.com`) yönlendiriyordu.
+3. **Çözüm:**
+   - Resend panelinden tam yetkili (`Full access`) yeni API anahtarı (`re_NEuJYREy...`) üretildi.
+   - `bildirim@tatilde.bugunai.com` gönderici adresi ile `yesayyildiz@gmail.com` adresine canlı test gönderimi yapıldı ve Resend tarafından başarıyla kabul edildi (`ID: 01a1c1b5-5188-7e89-993b-7a7f328ad840`).
+   - `.env` ve Cloud Run servis ortam değişkenleri (`RESEND_API_KEY`) güncellendi (`tatilde-bugun-00011-w86`).
+   - Veritabanındaki yarım kalan `yesayyildiz@gmail.com` kaydı temizlenerek kullanıcının sıfırdan kayıt olabilmesi sağlandı.
+
+---
+
+## 50. Telefon Numarası Tekilliği (Unique) ve Uluslararası Format / Maskeleme Mimarisi
+
+Kullanıcının *"Telefon numarasını aynı girdim bu problem bence telefon numarası da uygulamada tekil olmalı. Bir de telefon yurtdışı telefonu da olabilir bu yüzden maskelemesi 0 ile başlamamalı 00 90 ile başlamalı ve diğer yurtdışı formatları da desteklenmeli. Orayı da düzeltmemiz lazım."* geri bildirimi doğrultusunda yapılan mimari analiz ve tasarım:
+
+### 50.1. Kök Neden Analizi
+1. **Veritabanı Düzeyinde Unique Kısıtı Eksikliği:**
+   - `lib/db/schema.ts` üzerinde `phoneNumber: text("phone_number")` alanı yalnızca arama performansı için indekslenmiş (`users_phone_idx`), ancak `UNIQUE` kısıtı tanımlanmamıştır.
+2. **Format Uyuşmazlığı Nedeniyle Kontrolün Atlanması:**
+   - Veritabanındaki mevcut kayıtların bazılarında telefon başında `0` (`0500...`, `0555...`), bazılarında ise 10 hane (`533...`, `530...`) yer almaktadır.
+   - `registerUser` içindeki `normalizePhone` fonksiyonu son 10 haneyi alarak arama yaparken, veritabanında `05...` şeklinde 11 hane kayıtlı olan kullanıcılarla tam eşleşememekte ve aynı numarayla mükerrer kayıt açılmasına izin vermektedir.
+3. **Yurtdışı ve Uluslararası Format Eksikliği:**
+   - Arayüzde sadece `05XX XXX XX XX` yerel Türkiye formatı ve `0` ile başlayan maske yer almaktadır.
+   - TatildeBugün küresel ve yurtdışı seyahatleri hedefleyen bir gezgin ağı olduğundan, gurbetçi kullanıcılar veya yabancı hat sahipleri (Almanya `+49 / 0049`, Birleşik Krallık `+44`, ABD `+1`, Fransa `+33`, Azerbaycan `+994` vb.) hesap açamamaktadır.
+
+### 50.2. Önerilen Mimari ve Teknik Tasarım
+1. **Veritabanı & Şema Standardizasyonu (Kural 8 - Reversible Migrations):**
+   - Veritabanındaki tüm telefon numaraları standart uluslararası formata (`+905XXXXXXXXX` / E.164) normalize edilecektir.
+   - `users.phone_number` sütununa `UNIQUE` kısıtı eklenecektir:
+     `CREATE UNIQUE INDEX users_phone_number_unique_idx ON users(phone_number) WHERE phone_number IS NOT NULL;`
+   - Geri alma için [scripts/rollback_users_phone_unique.sql](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/scripts/rollback_users_phone_unique.sql) hazırlanacaktır.
+2. **Merkezi Telefon İşleme ve Normalizasyon Yardımcısı (`lib/utils/phone.ts`):**
+   - Kullanıcı ister `0090...`, ister `+90...`, ister `05...` veya doğrudan `5...` girsin; sistem bunu tekil uluslararası E.164 standardına dönüştürür.
+   - Oturum açma (`getUserByIdentifier`) ve şifre sıfırlama işlemlerinde kullanıcının numarasını her formattan algılayan akıllı eşleme sağlanır.
+3. **Uluslararası Telefon Giriş Bileşeni (`components/ui/international-phone-input.tsx`):**
+   - **Kural 13 (Mobile-First):** Dokunmatik ekranlarda min 44px hedef alanı, sıfır yatay kaydırma.
+   - **Ülke Seçici:** Bayrak + Alan Kodu içeren modern açılır menü (Varsayılan `🇹🇷 Türkiye (+90 / 0090)` seçili; Almanya `+49`, İngiltere `+44`, ABD `+1`, Fransa `+33`, Hollanda `+31`, Azerbaycan `+994` vb. popüler ülkeler + serbest arama).
+   - **Akıllı Maskeleme:** Kullanıcı numara alanına alışkanlıkla başında `0` yazsa dahi otomatik temizlenir ve seçilen alan koduyla mükemmel şekilde birleştirilir.
+   - Hem `RegisterForm` (Kayıt) hem de `ProfileView` (Profil Düzenleme) ekranlarına entegre edilir.
+4. **Sunucu Tarafı Güvenlik ve Doğrulama (Kural 10):**
+   - Zod şeması uluslararası numara uzunluklarına (8-25 karakter) göre güncellendi.
+   - Kayıt anında ve profil güncellemede telefon numarasının başka bir aktif kullanıcı tarafından kullanılıp kullanılmadığı kontrol edilir; mükerrerlikte net bir uyarı mesajı verilir:
+     *"Bu telefon numarası ile zaten kayıtlı bir hesap bulunmaktadır. Lütfen giriş yapınız veya farklı bir numara giriniz."*
+
+### 50.3. Gerçekleştirilen Geliştirmeler ve Dosyalar
+1. **Veritabanı Migrasyonu & Rollback (Kural 8):**
+   - [scripts/create_users_phone_unique.sql](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/scripts/create_users_phone_unique.sql): `users_phone_number_unique_idx` DDL oluşturuldu.
+   - [scripts/rollback_users_phone_unique.sql](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/scripts/rollback_users_phone_unique.sql): Geri alma DDL'i hazırlandı.
+   - [scripts/migrate_phone_unique.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/scripts/migrate_phone_unique.ts): Canlı veritabanındaki 7 kullanıcının tüm telefon numaraları standart E.164 (`+90...`) formatına dönüştürüldü ve Unique Index başarıyla uygulandı.
+   - [lib/db/schema.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/db/schema.ts): `phoneNumber: text("phone_number").unique()` ve `uniqueIndex("users_phone_number_unique_idx")` eklendi.
+2. **Merkezi Telefon ve Ülke Kodu Yardımcısı:**
+   - [lib/utils/phone.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/utils/phone.ts): 16 ana ülke (Türkiye, Almanya, İngiltere, ABD, Fransa, Hollanda, Azerbaycan, İtalya, İspanya, Avusturya, Belçika, İsviçre vb.) + Serbest Uluslararası giriş, `normalizeToInternational`, `splitPhone`, `formatPhoneDisplay` fonksiyonları geliştirildi.
+3. **Uluslararası Giriş Bileşeni (Kural 13 - Mobile First):**
+   - [components/ui/international-phone-input.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/ui/international-phone-input.tsx): Bayraklı açılır liste, arama filtresi, min 44px dokunma hedefleri, başında `0` yazıldığında otomatik temizleme ve yapıştırılan uluslararası numaraları otomatik algılama yeteneği.
+4. **Form Entegrasyonları ve Server Action Güvenliği:**
+   - [app/register/register-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/register/register-form.tsx): Uluslararası telefon giriş bileşeni entegre edildi.
+   - [components/profile/profile-view.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/profile/profile-view.tsx): Profil düzenleme ekranı uluslararası seçici ile yenilendi.
+   - [lib/actions/auth.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/auth.ts): `registerUser` içerisinde e-posta ve telefon tekillik kontrolleri birbirinden bağımsızlaştırıldı, mükerrer telefon anında engellendi. `forgotPasswordAction` güncellendi.
+   - [lib/actions/user.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/user.ts): `updateProfile` fonksiyonuna başka kullanıcıların telefonlarıyla çakışmayı önleyen tekillik kontrolü eklendi.
+   - [auth.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/auth.ts): `getUserByIdentifier` hem yerel (`05...`), hem `0090...`, hem `+90...` hem de ham uluslararası numaraları akıllıca eşleştirecek şekilde güncellendi.
+
+### 50.4. Kalite Kapısı ve Birim Test Doğrulamaları (Kural 10 & 12)
+1. **Derleme Doğrulaması:**
+   - `npx tsc --noEmit`: 0 hata ile başarıyla geçti.
+   - `npm run build`: 2.4s derleme süresi ile 17 sayfanın tamamı hatasız oluşturuldu.
+2. **Çakışma ve Doğrulama Senaryoları (Canlı Veritabanı Testi):**
+   - `05305146033` (Yerel format) ile kayıt denemesi -> **ENGELLENDİ** (`Bu telefon numarası ile zaten kayıtlı bir hesap bulunmaktadır`).
+   - `00905305146033` (00 formatı) ile kayıt denemesi -> **ENGELLENDİ** (`Bu telefon numarası ile zaten kayıtlı bir hesap bulunmaktadır`).
+   - `+905305146033` (+ formatı) ile kayıt denemesi -> **ENGELLENDİ** (`Bu telefon numarası ile zaten kayıtlı bir hesap bulunmaktadır`).
+   - `+4915199998888` (Almanya numarası) ile kayıt denemesi -> **BAŞARILI** (Kullanıcı oluşturuldu, test tamamlandıktan sonra temizlendi).
+
+---
+
+## 51. İnaktif (Aktivasyon Bekleyen) Hesapların Otomatik Devralınması & Kod Yenileme (Auto Re-hydration) Mimarisi
+
+Kullanıcının *"Bir şekilde yeni kaydeden ilk giriş şifresini alamadı ya da girmedi. Ben senden temizlemeni istiyordum ama aslında temizlemeye ihtiyaç olmadan adam tekrar kayıt olduğunda tekrar şifre alabilmeli. Yani Unique kontrollerini aktif ve OTP'si yapılmış kayıtlar üzerinden yapmalı. Girmeyi denemiş ama girememiş kayıtlarda tekrar sıfırdan tanımlama yapmak istendiğinde ya o eski kaydı dikkate almadan kayıt yapabilmeli ya da daha iyisi kaydı tanımlanmamış kayıt ile eşleşerek kayıt tekilliğini de koruyarak bir çözüm bulunabilir. Sonrasında BurstaBugun'de de buradan bakarak o düzeltmeyi yaparız."* talebi doğrultusunda geliştirilen mimari:
+
+### 51.1. Problem ve Kök Neden
+1. Bir kullanıcı sisteme kaydolduğunda veritabanına `isActive: false` ve 15 dakika geçerli bir OTP kodu ile eklenir.
+2. Kullanıcı o an e-postasını kontrol edemezse, tarayıcıyı kapatırsa veya 15 dakikalık süre aşılırsa hesap onaylanmamış kalır.
+3. Kullanıcı sisteme tekrar girmek istediğinde:
+   - **Kayıt Ol (`/register`)** ekranına giderse: Veritabanında `phone_number` veya `email` tekil olduğu için sistem *"Bu bilgilerle kayıtlı hesap var"* uyarısı vererek kaydı reddeder.
+   - **Giriş Yap (`/login`)** ekranına giderse: Hesap henüz aktifleşmediği için sistem *"Giriş bilgileri hatalı veya hesap aktif değil"* der.
+4. Sonuçta kullanıcı sisteme giremez ve yöneticinin veritabanına girip inaktif satırı manuel silmesi gerekir.
+
+### 51.2. Mimari Karar: "Auto Re-hydration" (Tazeleme ve Devralma)
+- **Veritabanından Satır Silmek Yerine:** Aynı e-posta veya telefon ile daha önce kayıt yapılmış ama onaylanmamışsa (`!isActive`), sistem bu kaydı doğrudan "devralır" (re-hydrate).
+- **Yeni Form Verileriyle Güncelleme:** Kullanıcının formda girdiği güncel şifre hash'ini (`password`), adını (`fullName`) ve telefonunu mevcut satıra işler.
+- **Taze OTP Üretimi:** 6 haneli yepyeni bir OTP kodu üretilir ve süre 15 dakika uzatılır.
+- **Anında E-posta Gönderimi:** Yeni aktivasyon kodu kullanıcının e-posta adresine derhal postalanır.
+- **Kusursuz Yönlendirme:** Kullanıcı `/verify-otp?userId=...` ekranına yönlendirilir ve kendisine *"Hesabınızın aktivasyonu henüz tamamlanmamıştı. Bilgileriniz güncellendi ve yeni doğrulama kodunuz e-posta adresinize gönderildi!"* bilgisi verilir.
+
+### 51.3. Giriş (`/login`) Ekranından Otomatik Kurtarma (Bonus UX)
+- Eğer inaktif bir kullanıcı şifresini bilerek `/login` ekranından giriş yapmayı denerse;
+- Sistem şifrenin doğruluğunu teyit ettikten sonra kullanıcının inaktif olduğunu saptar; anında yeni bir OTP kodu üretip e-postasına gönderir ve kullanıcıyı doğrudan aktivasyon ekranına aktarır (`/verify-otp?relogin=true`).
+
+### 51.4. BurstaBugun İçin Referans Uygulama Notları
+- Bu mimari ileride `../BurstaBugun` projesine aktarılırken:
+  1. `lib/actions/auth.ts` içerisindeki `registerUser` fonksiyonunda `existingByEmail` ve `existingByPhone` kontrolleri `isActive` bayrağına göre dallandırılmalıdır.
+  2. `inactiveUser` tespiti yapıldığında `db.delete` yerine `db.update` ile yeni `otpCode`, `expiresAt` ve `hashedPassword` atanmalıdır.
+  3. `authenticate` server action'ında `CredentialsSignin` hatası fırlatılmadan önce inaktif kullanıcı kontrolü yapılarak doğrudan aktivasyon ekranına yönlendirme eklenmelidir.
+
+---
+
+## 52. Kullanıcı Arayüzünden Geliştirici/Test İfadelerinin (`sifreler.md`) Tamamen Temizlenmesi
+
+Kullanıcının *"Canlıda böyle sifreler.md dosyasına yazılmıştır gibi bir ibare yazmamalı. Güvenirliğimiz kalmaz."* geri bildirimi doğrultusunda canlı ürün güvenilirliği ve kurumsal UX revizyonu yapılmıştır.
+
+### 52.1. Temizlenen Alanlar
+1. **Hesap Aktivasyon Ekranı (`/verify-otp`):**
+   - [app/verify-otp/verify-otp-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/verify-otp/verify-otp-form.tsx): `sifreler.md` referansı ve `FileCode` ikonu kaldırıldı. Yerine profesyonel ve güven veren *"6 haneli aktivasyon kodu e-posta adresinize gönderilmiştir. Lütfen gelen kutunuzu (ve spam klasörünü) kontrol ediniz."* bilgilendirme kutusu (`Mail` ikonu) eklendi.
+2. **Şifre Yenileme Ekranı (`/reset-password`):**
+   - [app/reset-password/reset-password-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/reset-password/reset-password-form.tsx): `sifreler.md` ve `erhanayyildiz@gmail.com CC` ifadeleri tamamen kaldırıldı; standart *"E-posta adresinize gönderilen 6 haneli şifre sıfırlama kodunu giriniz."* mesajına dönüştürüldü.
+3. **Şifremi Unuttum Ekranı (`/forgot-password`):**
+   - [app/forgot-password/forgot-password-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/forgot-password/forgot-password-form.tsx): Developer bildirim kutusu yerine *"Hesabınızı doğrulamak ve şifrenizi yenilemek için 6 haneli bir güvenlik kodu gönderilecektir."* güvenli bilgilendirme kutusu yerleştirildi.
+4. **Sunucu Yanıtları (`lib/actions/auth.ts`):**
+   - `resendOtp` ve `requestPasswordReset` eylemlerinde dönen kullanıcı mesajlarından `sifreler.md` ibareleri tamamen arındırıldı.
+
+### 52.2. Kalite Kapısı
+- `app/` ve `components/` dizinlerinde `sifreler.md` taraması yapıldı: 0 sonuç (Tamamen temizlendi).
+- `npx tsc --noEmit` ve `npm run build` 0 hata ile başarıyla doğrulandı.
+
+---
+
+## 53. Kayıt Ekranında Varsayılan Telefon Ülke Kodu: Türkiye (+90) ve v1.4.1 Canlı Dağıtımı
+
+Kullanıcının *"Bir de +90 türkiyeyi default seçili getirir misin kayıt ekranında bunu da yaptıktan sonra ikisini birden canlıya at"* talimatı doğrultusunda geliştirme tamamlanıp canlıya alınmıştır.
+
+### 53.1. Varsayılan Ülke Kodu Revizyonu (`lib/utils/phone.ts`)
+- `splitPhone(fullPhone: string, defaultCountryCode = "TR")` fonksiyonunda, `fullPhone` boş dize (`""`) geldiğinde önceden `OTHER` (`🌐 +`) dönen yapı; doğrudan `COUNTRIES.find((c) => c.code === defaultCountryCode)` (`🇹🇷 Türkiye (+90)`) dönecek şekilde güncellendi.
+- [components/ui/international-phone-input.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/ui/international-phone-input.tsx) bileşeni yüklendiğinde artık açılışta doğrudan `🇹🇷 +90` bayrağı ve kodu seçili gelir; kullanıcı numarasını doğrudan `5XX XXX XX XX` şeklinde girebilir.
+- Kullanıcı dilerse açılır menüden diğer 16 ülkeyi veya uluslararası formatı seçebilir.
+
+### 53.2. Kalite Kapısı ve Canlı Dağıtım (Kural 12 & Kural 3)
+1. **Kalite Kapısı:** `npx tsc --noEmit` 0 hata; `npm run build` Turbopack ile tüm 16 rota hatasız derlendi.
+2. **Cloud Run Dağıtımı:**
+   - Servis: `tatilde-bugun`
+   - Revizyon: `tatilde-bugun-00013-fk8`
+   - Canlı URL: `https://tatilde.bugunai.com`
+   - Test: `https://tatilde.bugunai.com/register` canlı DOM'unda `+90` varsayılan olarak doğrulandı; `/verify-otp`, `/reset-password` ve `/forgot-password` sayfalarında `sifreler.md` ibarelerinin bulunmadığı (`CLEAN`) teyit edildi.
+
+---
+
+## 54. Kayıt Ekranında İstenmeyen Tarayıcı Şifre Doldurmasının (Autofill `071907`) Engellenmesi Analizi
+
+### 54.1. Problem ve Kök Neden Analizi
+- **Kullanıcı Geri Bildirimi:** *"Bu kayıt ekranına girdiğimde şifre alanında hep benim 071907 test şifrem otomatik geliyor daha henüz hiçbirşey girmeden. Bakınca da gözüküyor."*
+- **Kök Neden:**
+  1. `071907` değeri proje kaynak kodlarında, veritabanında veya ortam değişkenlerinde yer almamaktadır (tüm repoda yapılan taramada 0 sonuç çıkmıştır).
+  2. Kullanıcı daha önce `tatilde.bugunai.com` veya `localhost` üzerinde test yaparken veya giriş yaparken `071907` şifresini tarayıcısına (Google Chrome, Apple Safari / iCloud Anahtar Zinciri) kaydetmiştir.
+  3. [app/register/register-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/register/register-form.tsx) bileşenindeki `<input id="password">` ve `<input id="confirmPassword">` elemanlarında `autoComplete="new-password"` özniteliği bulunmamaktadır.
+  4. Tarayıcı şifre yöneticisi bu sayfadaki şifre alanını "yeni bir şifre üretimi" olarak algılayamamakta; sitenin kayıtlı parolası olan `071907` değerini otomatik olarak şifre kutusuna (ve göz ikonu tıklandığında görünür hale) doldurmaktadır (Autofill).
+
+### 54.2. Tasarlanan Çözüm Mimarisi
+1. **W3C / WHATWG HTML5 Standardı (`autoComplete="new-password"`):**
+   - Kayıt formundaki şifre (`password`) ve şifre tekrarı (`confirmPassword`) alanlarına `autoComplete="new-password"` eklenecektir.
+   - Bu öznitelik tüm modern tarayıcılara (Chrome, Safari, Edge, Firefox) şu kesin talimatı verir: *"Bu alan yeni bir hesap oluşturma alanıdır. Kullanıcının daha önce bu sitede kaydettiği eski şifreleri buraya kesinlikle otomatik doldurma."*
+2. **Form Seviyesinde Yabancı Doldurma Engeli (`autoComplete="off"`):**
+   - Kayıt formunun `<form>` etiketine `autoComplete="off"` tanımlanacaktır.
+3. **Şifre Sıfırlama Formu Koruması (`ResetPasswordForm`):**
+   - [app/reset-password/reset-password-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/reset-password/reset-password-form.tsx) ekranındaki yeni şifre ve yeni şifre tekrarı alanlarına da aynı şekilde `autoComplete="new-password"` uygulanacaktır.
+
+### 54.3. Uygulanan Geliştirme ve Kalite Kapısı (Kural 1 & 12)
+1. **[app/register/register-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/register/register-form.tsx):**
+   - `<form>` etiketine `autoComplete="off"` eklendi.
+   - Ad-soyad için `autoComplete="name"`, e-posta için `autoComplete="email"` eklendi.
+   - `#password` ve `#confirmPassword` alanlarına `autoComplete="new-password"` ve semantik `name` özellikleri tanımlandı.
+2. **[app/reset-password/reset-password-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/reset-password/reset-password-form.tsx):**
+   - `<form>` etiketine `autoComplete="off"` eklendi.
+   - Yeni şifre ve şifre tekrarı alanlarına `autoComplete="new-password"` tanımlandı.
+3. **Kalite Kapısı Doğrulaması:**
+   - `npx tsc --noEmit` çalıştırıldı: 0 hata.
+   - `npm run build` Turbopack derlemesi çalıştırıldı: 2.0 saniyede 16 rota hatasız derlendi.
 
 
 
