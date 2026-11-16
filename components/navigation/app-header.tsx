@@ -70,33 +70,48 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
   const navLinks = [
     {
       href: "/dashboard",
-      label: t("nav.dashboard") || "Dünya Haritam",
+      label: t("nav.dashboard") || (locale === "en" ? "World Map" : "Dünya Haritam"),
       icon: Globe,
       active: pathname === "/dashboard",
+      colorClass: "text-cyan-400 hover:text-cyan-300",
+      activeBg: "bg-cyan-500/20 text-cyan-400 border-cyan-500/40 shadow-md shadow-cyan-500/15",
+      hoverBg: "hover:bg-cyan-500/10 hover:border-cyan-500/25",
     },
     {
       href: "/feed",
-      label: t("nav.feed") || "Gezgin Akışı",
+      label: t("nav.feed") || (locale === "en" ? "Explore Feed" : "Gezgin Akışı"),
       icon: Compass,
       active: pathname.startsWith("/feed"),
+      colorClass: "text-emerald-400 hover:text-emerald-300",
+      activeBg: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-md shadow-emerald-500/15",
+      hoverBg: "hover:bg-emerald-500/10 hover:border-emerald-500/25",
     },
     {
       href: "/match",
-      label: t("nav.radar") || "Rota Radarı",
+      label: t("nav.radar") || (locale === "en" ? "Route Radar" : "Rota Radarı"),
       icon: Radar,
       active: pathname.startsWith("/match"),
+      colorClass: "text-purple-400 hover:text-purple-300",
+      activeBg: "bg-purple-500/20 text-purple-400 border-purple-500/40 shadow-md shadow-purple-500/15",
+      hoverBg: "hover:bg-purple-500/10 hover:border-purple-500/25",
     },
     {
       href: "/tatildeyim",
-      label: t("nav.tatildeyim") || "Tatildeyim",
+      label: t("nav.tatildeyim") || (locale === "en" ? "On Vacation" : "Tatildeyim"),
       icon: Luggage,
       active: pathname.startsWith("/tatildeyim"),
+      colorClass: "text-rose-400 hover:text-rose-300",
+      activeBg: "bg-rose-500/20 text-rose-400 border-rose-500/40 shadow-md shadow-rose-500/15",
+      hoverBg: "hover:bg-rose-500/10 hover:border-rose-500/25",
     },
     {
       href: "/passport",
-      label: t("nav.passport") || "Gezgin Karnesi",
+      label: t("nav.passport") || (locale === "en" ? "Traveler Passport" : "Gezgin Pasaportu"),
       icon: Trophy,
       active: pathname.startsWith("/passport"),
+      colorClass: "text-amber-400 hover:text-amber-300",
+      activeBg: "bg-amber-500/25 text-amber-300 border-amber-500/50 shadow-md shadow-amber-500/20",
+      hoverBg: "hover:bg-amber-500/15 hover:border-amber-500/30",
     },
   ];
 
@@ -121,7 +136,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               </span>
             </Link>
 
-            {/* Masaüstü Navigasyon Sekmeleri (Zarif İkon Butonları & Tooltip) */}
+            {/* Masaüstü Navigasyon Sekmeleri (Zarif Renkli İkon Butonları & Tooltip) */}
             <nav className="hidden md:flex items-center gap-1.5">
               {navLinks.map((link) => {
                 const Icon = link.icon;
@@ -130,10 +145,10 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
                     key={link.href}
                     href={link.href}
                     aria-label={link.label}
-                    className={`p-2.5 rounded-xl transition-all relative flex items-center justify-center cursor-pointer group ${
+                    className={`p-2.5 rounded-xl transition-all relative flex items-center justify-center cursor-pointer group border ${
                       link.active
-                        ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-md shadow-cyan-500/10"
-                        : "text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent"
+                        ? link.activeBg
+                        : `${link.colorClass} ${link.hoverBg} border-slate-800/80 bg-slate-900/60`
                     }`}
                   >
                     <Icon className="w-5 h-5 group-hover:scale-110 transition-transform" />
@@ -190,25 +205,6 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
 
             {/* Gezgin Sohbeti & Rozeti */}
             <ChatBadge />
-
-            {/* Gezgin Pasaportu & Karnesi (Trophy İkonu) */}
-            <Link
-              href="/passport"
-              className={`relative p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center group ${
-                pathname.startsWith("/passport")
-                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-md shadow-amber-500/10"
-                  : "text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/40 hover:bg-amber-500/20"
-              }`}
-              aria-label={t("nav.passport") || "Gezgin Karnesi"}
-            >
-              <Trophy className="w-5 h-5 group-hover:scale-110 transition-transform" />
-
-              {/* Tooltip */}
-              <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
-                {t("nav.passport") || "Gezgin Karnesi"} 🏆
-                <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
-              </span>
-            </Link>
 
             {/* Yönetici Merkezi (Admin Hub) İkonu */}
             {(user as any).role === "admin" && (
@@ -278,8 +274,10 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`flex flex-col items-center py-1 px-2.5 rounded-lg text-[10px] font-bold ${
-                  link.active ? "text-cyan-400 bg-cyan-950/40" : "text-slate-400"
+                className={`flex flex-col items-center py-1 px-2.5 rounded-lg text-[10px] font-bold transition-all ${
+                  link.active
+                    ? `${link.colorClass} bg-slate-800/90 shadow-sm`
+                    : `${link.colorClass} opacity-75 hover:opacity-100`
                 }`}
               >
                 <Icon className="w-5 h-5 mb-0.5" />

@@ -4066,11 +4066,34 @@ CREATE TABLE IF NOT EXISTS user_badges (
 );
 ```
 
+---
 
+## 80. Üst Bar Navigasyon İkonları Renklendirmesi & Gezgin Dashboard'u Tam İngilizce (i18n) Uyarlaması
 
+### 80.1. Kullanıcı Geri Bildirimi ve Talepleri
+1. **İngilizce Dil Desteği:** Gezgin karnesinde / dashboard'unda (`/passport`) dil İngilizce (`EN`) seçildiğinde başlıkların ve sayaçların Türkçe kalması sorunu düzeltilmeli.
+2. **Kupa İkonu Tekilleştirme:** Üst bar erişim logolarında hem solda hem sağda bulunan Kupa ikonu tekilleştirilmeli; sağdaki mükerrer ikon kaldırılıp soldaki korunmalı. Soldaki Kupa ikonunun rengi altın sarısı (amber) olmalı.
+3. **Üst Bar İkonlarının Renk Uyumu:** Üst bardaki ikonların neden tekdüze/renksiz olduğu, hepsinin renkli olması durumunda gözü yorup yormayacağı soruldu.
 
+### 80.2. Tasarım & UX Kararları
+1. **Zarif Mücevher Tonları (Jewel Tones):**
+   - İkonlar kör edici parlaklık yerine koyu arka planla (`bg-slate-900/60 border-slate-800/80`) dengeli kontrast oluşturan zengin mücevher tonlarıyla renklendirildi:
+     - 🌐 **Dünya Haritam:** Zümrüt Mavisi / Cyan (`text-cyan-400`, aktifte `bg-cyan-500/20 border-cyan-500/40`)
+     - 🧭 **Gezgin Akışı:** Zümrüt Yeşili / Emerald (`text-emerald-400`, aktifte `bg-emerald-500/20 border-emerald-500/40`)
+     - 🎯 **Rota Radarı:** Ametist Moru / Purple (`text-purple-400`, aktifte `bg-purple-500/20 border-purple-500/40`)
+     - 🧳 **Tatildeyim:** Yakut Pembesi / Rose (`text-rose-400`, aktifte `bg-rose-500/20 border-rose-500/40`)
+     - 🏆 **Gezgin Pasaportu:** Altın Sarısı / Amber (`text-amber-400`, aktifte `bg-amber-500/25 border-amber-500/50`)
+   - **Gözü Boğmama Analizi:** Arka plan koyu tutulduğu, ikonlar 20px (w-5 h-5) boyutta kaldığı ve renkler doygun ama abartısız tonlarda seçildiği için ekranı asla boğmamakta; aksine kullanıcının her bir sekmeyi (Harita, Akış, Radar, Tatildeyim, Pasaport) göz ucuyla anında ayırt etmesini sağlayarak UX hızını ve görsel prestiji artırmaktadır.
 
+2. **Kupa İkonunun Tekilleştirilmesi:**
+   - Sağ tarafta bildirim ve sohbet butonlarının yanında bulunan mükerrer Kupa butonu kaldırıldı.
+   - Soldaki ana navigasyon kümesindeki Kupa butonu `text-amber-400` altın sarısı rengi ve `bg-amber-500/25` aktif ışıldama efektiyle tek odak noktası yapıldı.
 
-
-
-
+3. **Gezgin Dashboard'u Tam İki Dilli (EN / TR) Dönüşümü:**
+   - `traveler-dashboard-view.tsx` dosyasındaki tüm statik Türkçe metinler `locale === "en"` durumuna bağlandı:
+     - Üst Skor Kartı: *"TRAVELER SCORE / GEZGİN SKORU"*, *"Stars / Yıldız"*, *"For Next Star: / Sonraki Yıldız İçin:"*, *"Visit X more countries to unlock star #Y! / X ülke daha ziyaret ederek Y. yıldızı kap!"*, *"Max Rank / Maksimum Rütbe"*
+     - Ana Şehir Filtresi: *"Include Home City in Statistics / Ana Şehri İstatistiklere Dahil Et"*, *"Home City Included (Active) / Ana Şehir Dahil (Açık)"*, *"Home City Excluded (Filtered) / Ana Şehir Hariç (Filtreli)"*
+     - 5 Temel Sayaç: *"Visited Countries / Ziyaret Edilen Ülke"*, *"World Explored: / Dünya Keşfi:"*, *"Visited Cities / Gezilen Şehir"*, *"Travel Routes / Seyahat Rotası"*, *"Places Checked-in / Mekan Check-in"*, *"Total Travel / Toplam Seyahat"*
+     - Kıta ve Ülke Analizi: Dinamik `getContinentName()` çevirisi (Europe, Asia, Americas, Africa, Oceania vb.), *"Continent Distribution / Kıta Dağılımı"*, *"Most Visited Countries / En Çok Ziyaret Edilen Ülke"*
+     - Sosyal Liderlik Tablosu: *"Social Leaderboard / Sosyal Liderlik Sıralaması"*, Kapsam sekmeleri (*"Friends / Arkadaşlar"*, *"Family / Ailem"*, *"Relatives / Akrabalar"*, *"Global / Genel"*), *"Your Rank / Sıranız"*, *"You / Siz"*, *"Updating leaderboard... / Sıralama güncelleniyor..."*
+     - Başarım Rozetleri: *"Achievement Badges & Trophies / Başarım Rozetleri & Kilitler"*, *"Earned / Kazanıldı"*, *"Locked / Kilitli"*

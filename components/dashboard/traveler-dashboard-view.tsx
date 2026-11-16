@@ -67,8 +67,12 @@ export function TravelerDashboardView({
         setStats(updated);
         toast.success(
           nextVal
-            ? "Ana şehir ziyaretleri seyahat istatistiklerine dahil edildi."
-            : "Ana şehir ziyaretleri seyahat istatistiklerinden hariç tutuldu."
+            ? locale === "en"
+              ? "Home city visits included in travel statistics."
+              : "Ana şehir ziyaretleri seyahat istatistiklerine dahil edildi."
+            : locale === "en"
+              ? "Home city visits excluded from travel statistics."
+              : "Ana şehir ziyaretleri seyahat istatistiklerinden hariç tutuldu."
         );
       }
     });
@@ -82,7 +86,7 @@ export function TravelerDashboardView({
       const res = await getLeaderboard(scope);
       setLeaderboard(res);
     } catch (e) {
-      toast.error("Sıralama yüklenirken bir sorun oluştu.");
+      toast.error(locale === "en" ? "Failed to load leaderboard." : "Sıralama yüklenirken bir sorun oluştu.");
     } finally {
       setLoadingLeaderboard(false);
     }
@@ -99,6 +103,22 @@ export function TravelerDashboardView({
       ? stats.tierInfo.nextTier.titleEn
       : stats.tierInfo.nextTier.titleTr
     : null;
+
+  // Kıta isimlerini dile göre dönüştürme
+  function getContinentName(rawName: string) {
+    if (locale !== "en") return rawName;
+    const map: Record<string, string> = {
+      "Avrupa / Asya": "Europe / Asia",
+      "Avrupa": "Europe",
+      "Amerika": "Americas",
+      "Asya": "Asia",
+      "Afrika": "Africa",
+      "Okyanusya": "Oceania",
+      "Asya / Orta Doğu": "Asia / Middle East",
+      "Avrupa / Akdeniz": "Europe / Med",
+    };
+    return map[rawName] || rawName;
+  }
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -150,14 +170,18 @@ export function TravelerDashboardView({
                 {/* Kademeli Yıldızlar */}
                 <div
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-950/40 border border-amber-800/50 text-amber-300 text-xs font-bold shadow-sm"
-                  title={`${stats.starInfo.stars} Yıldızlı Gezgin (${stats.countryCount} Ülke)`}
+                  title={`${stats.starInfo.stars} ${locale === "en" ? "Star Traveler" : "Yıldızlı Gezgin"} (${stats.countryCount} ${locale === "en" ? "Countries" : "Ülke"})`}
                 >
                   <span className="tracking-tight text-amber-400 font-extrabold">
                     {stats.starInfo.starDisplay || "⭐"}
                   </span>
                   <span>
                     {stats.starInfo.stars > 0
-                      ? `${stats.starInfo.stars} Yıldız`
+                      ? locale === "en"
+                        ? `${stats.starInfo.stars} Stars`
+                        : `${stats.starInfo.stars} Yıldız`
+                      : locale === "en"
+                      ? "New Explorer"
                       : "Yeni Kaşif"}
                   </span>
                 </div>
@@ -174,10 +198,11 @@ export function TravelerDashboardView({
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
                 <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                Gezgin Skoru
+                {locale === "en" ? "TRAVELER SCORE" : "GEZGİN SKORU"}
               </span>
               <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-400 to-amber-200">
-                {stats.score.toLocaleString("tr-TR")} P
+                {stats.score.toLocaleString(locale === "en" ? "en-US" : "tr-TR")}{" "}
+                {locale === "en" ? "Pts" : "P"}
               </span>
             </div>
 
@@ -187,7 +212,11 @@ export function TravelerDashboardView({
                 <span>{tierTitle}</span>
                 <span>
                   {nextTierTitle
-                    ? `${stats.tierInfo.pointsToNext} P kaldı`
+                    ? locale === "en"
+                      ? `${stats.tierInfo.pointsToNext} pts left`
+                      : `${stats.tierInfo.pointsToNext} P kaldı`
+                    : locale === "en"
+                    ? "Max Rank 👑"
                     : "Maksimum Rütbe 👑"}
                 </span>
               </div>
@@ -202,9 +231,12 @@ export function TravelerDashboardView({
             {/* Kademeli Yıldız İlerlemesi (Her 5 ülke = 1 yıldız) */}
             <div className="pt-2 border-t border-slate-800/80 space-y-1">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-400">Sonraki Yıldız İçin:</span>
+                <span className="text-slate-400">
+                  {locale === "en" ? "For Next Star:" : "Sonraki Yıldız İçin:"}
+                </span>
                 <span className="font-bold text-amber-400">
-                  {stats.starInfo.progressInStar} / 5 ülke
+                  {stats.starInfo.progressInStar} / 5{" "}
+                  {locale === "en" ? "countries" : "ülke"}
                 </span>
               </div>
               <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
@@ -216,8 +248,13 @@ export function TravelerDashboardView({
                 />
               </div>
               <p className="text-[10px] text-slate-500 text-right">
-                {stats.starInfo.remainingToNext} ülke daha ziyaret ederek{" "}
-                {stats.starInfo.stars + 1}. yıldızı kap!
+                {locale === "en"
+                  ? `Visit ${stats.starInfo.remainingToNext} more ${
+                      stats.starInfo.remainingToNext === 1 ? "country" : "countries"
+                    } to unlock star #${stats.starInfo.stars + 1}!`
+                  : `${stats.starInfo.remainingToNext} ülke daha ziyaret ederek ${
+                      stats.starInfo.stars + 1
+                    }. yıldızı kap!`}
               </p>
             </div>
           </div>
@@ -232,7 +269,11 @@ export function TravelerDashboardView({
           </div>
           <div>
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <span>Ana Şehri İstatistiklere Dahil Et</span>
+              <span>
+                {locale === "en"
+                  ? "Include Home City in Statistics"
+                  : "Ana Şehri İstatistiklere Dahil Et"}
+              </span>
               {stats.user.baseCity && (
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-800 text-cyan-400 border border-slate-700">
                   📍 {stats.user.baseCity}
@@ -241,7 +282,11 @@ export function TravelerDashboardView({
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               {includeHomeCity
-                ? "Şu an ana şehrinizdeki ziyaretler de seyahat istatistiklerinize ve karnenize yansıtılıyor."
+                ? locale === "en"
+                  ? "Visits in your home city are currently included in your travel score and passport."
+                  : "Şu an ana şehrinizdeki ziyaretler de seyahat istatistiklerinize ve karnenize yansıtılıyor."
+                : locale === "en"
+                ? "Your home city is currently excluded; only vacation, tour and exploration journeys are counted."
                 : "Şu an ana şehriniz hariç tutuluyor; sadece tatil, tur ve keşif seyahatleriniz sayılıyor."}
             </p>
           </div>
@@ -268,7 +313,13 @@ export function TravelerDashboardView({
             {includeHomeCity && <Check className="w-3 h-3 stroke-[3]" />}
           </div>
           <span>
-            {includeHomeCity ? "Ana Şehir Dahil (Açık)" : "Ana Şehir Hariç (Filtreli)"}
+            {includeHomeCity
+              ? locale === "en"
+                ? "Home City Included (Active)"
+                : "Ana Şehir Dahil (Açık)"
+              : locale === "en"
+              ? "Home City Excluded (Filtered)"
+              : "Ana Şehir Hariç (Filtreli)"}
           </span>
         </button>
       </div>
@@ -278,7 +329,9 @@ export function TravelerDashboardView({
         {/* Ülke */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-400 font-semibold">Ziyaret Edilen Ülke</span>
+            <span className="text-xs text-slate-400 font-semibold">
+              {locale === "en" ? "Visited Countries" : "Ziyaret Edilen Ülke"}
+            </span>
             <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
               <Globe className="w-4 h-4" />
             </div>
@@ -288,7 +341,10 @@ export function TravelerDashboardView({
               {stats.countryCount}
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-cyan-400 font-semibold mt-1">
-              <span>Dünya Keşfi: %{worldCoveragePercent}</span>
+              <span>
+                {locale === "en" ? "World Explored:" : "Dünya Keşfi:"} %
+                {worldCoveragePercent}
+              </span>
             </div>
           </div>
         </div>
@@ -296,7 +352,9 @@ export function TravelerDashboardView({
         {/* Şehir */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-400 font-semibold">Gezilen Şehir</span>
+            <span className="text-xs text-slate-400 font-semibold">
+              {locale === "en" ? "Visited Cities" : "Gezilen Şehir"}
+            </span>
             <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
               <MapPin className="w-4 h-4" />
             </div>
@@ -305,14 +363,18 @@ export function TravelerDashboardView({
             <div className="text-2xl sm:text-3xl font-black text-white">
               {stats.cityCount}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">Harita pini ve durak</p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {locale === "en" ? "Map pins and stops" : "Harita pini ve durak"}
+            </p>
           </div>
         </div>
 
         {/* Seyahat Rotası */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-400 font-semibold">Seyahat Rotası</span>
+            <span className="text-xs text-slate-400 font-semibold">
+              {locale === "en" ? "Travel Routes" : "Seyahat Rotası"}
+            </span>
             <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
               <Route className="w-4 h-4" />
             </div>
@@ -322,7 +384,8 @@ export function TravelerDashboardView({
               {stats.tripCount}
             </div>
             <p className="text-[11px] text-purple-400 font-medium mt-1">
-              {stats.completedTrips} tamamlanan
+              {stats.completedTrips}{" "}
+              {locale === "en" ? "completed" : "tamamlanan"}
             </p>
           </div>
         </div>
@@ -330,7 +393,9 @@ export function TravelerDashboardView({
         {/* Tarihi Mekan / POI */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-400 font-semibold">Mekan Check-in</span>
+            <span className="text-xs text-slate-400 font-semibold">
+              {locale === "en" ? "Places Checked-in" : "Mekan Check-in"}
+            </span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
               <Landmark className="w-4 h-4" />
             </div>
@@ -339,23 +404,29 @@ export function TravelerDashboardView({
             <div className="text-2xl sm:text-3xl font-black text-white">
               {stats.poiCount}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">Tarihi anıt & POI</p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {locale === "en" ? "Historic sights & POIs" : "Tarihi anıt & POI"}
+            </p>
           </div>
         </div>
 
         {/* Seyahat Süresi */}
         <div className="col-span-2 lg:col-span-1 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-400 font-semibold">Toplam Seyahat</span>
+            <span className="text-xs text-slate-400 font-semibold">
+              {locale === "en" ? "Total Travel" : "Toplam Seyahat"}
+            </span>
             <div className="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div>
             <div className="text-2xl sm:text-3xl font-black text-white">
-              {stats.totalDays} Gün
+              {stats.totalDays} {locale === "en" ? "Days" : "Gün"}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">Yolda geçirilen süre</p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {locale === "en" ? "Time spent exploring" : "Yolda geçirilen süre"}
+            </p>
           </div>
         </div>
       </div>
@@ -369,25 +440,31 @@ export function TravelerDashboardView({
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Globe className="w-4 h-4 text-cyan-400" />
-                Kıta Dağılımı
+                {locale === "en" ? "Continent Distribution" : "Kıta Dağılımı"}
               </h3>
               <span className="text-xs text-slate-500">
-                {stats.continentDistribution.length} Kıta
+                {stats.continentDistribution.length}{" "}
+                {locale === "en" ? "Continents" : "Kıta"}
               </span>
             </div>
 
             {stats.continentDistribution.length === 0 ? (
               <p className="text-xs text-slate-500 text-center py-4">
-                Henüz seyahat kaydı eklenmedi.
+                {locale === "en"
+                  ? "No travel records added yet."
+                  : "Henüz seyahat kaydı eklenmedi."}
               </p>
             ) : (
               <div className="space-y-3">
                 {stats.continentDistribution.map((cont, idx) => (
                   <div key={idx} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-300">{cont.name}</span>
+                      <span className="font-semibold text-slate-300">
+                        {getContinentName(cont.name)}
+                      </span>
                       <span className="text-slate-400">
-                        {cont.count} Ülke (%{cont.percentage})
+                        {cont.count} {locale === "en" ? "Countries" : "Ülke"} (%
+                        {cont.percentage})
                       </span>
                     </div>
                     <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
@@ -407,13 +484,17 @@ export function TravelerDashboardView({
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
-                En Çok Ziyaret Edilen Ülkeler
+                {locale === "en"
+                  ? "Most Visited Countries"
+                  : "En Çok Ziyaret Edilen Ülkeler"}
               </h3>
             </div>
 
             {stats.topCountries.length === 0 ? (
               <p className="text-xs text-slate-500 text-center py-4">
-                Henüz ziyaret edilen ülke bulunmuyor.
+                {locale === "en"
+                  ? "No visited countries yet."
+                  : "Henüz ziyaret edilen ülke bulunmuyor."}
               </p>
             ) : (
               <div className="space-y-2.5">
@@ -434,7 +515,7 @@ export function TravelerDashboardView({
                       </span>
                     </div>
                     <span className="text-xs font-bold text-emerald-400 px-2 py-0.5 rounded-lg bg-emerald-950/60 border border-emerald-800/60">
-                      {c.cityCount} Şehir
+                      {c.cityCount} {locale === "en" ? "Cities" : "Şehir"}
                     </span>
                   </div>
                 ))}
@@ -449,21 +530,26 @@ export function TravelerDashboardView({
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-400" />
-                Sosyal Liderlik Sıralaması
+                {locale === "en" ? "Social Leaderboard" : "Sosyal Liderlik Sıralaması"}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Gezgin arkadaşlarınız ve aileniz arasındaki puan sıralaması
+                {locale === "en"
+                  ? "Travel score rankings among your friends, family and travelers"
+                  : "Gezgin arkadaşlarınız ve aileniz arasındaki puan sıralaması"}
               </p>
             </div>
 
             {/* Kullanıcının Sırası Rozeti */}
             {leaderboard.userRank > 0 && (
               <div className="self-start sm:self-center px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1.5">
-                <span>🏆 Sıranız:</span>
+                <span>{locale === "en" ? "🏆 Your Rank:" : "🏆 Sıranız:"}</span>
                 <span className="text-amber-400 font-extrabold">
                   #{leaderboard.userRank}
                 </span>
-                <span className="text-slate-400">/ {leaderboard.totalParticipants}</span>
+                <span className="text-slate-400">
+                  / {leaderboard.totalParticipants}{" "}
+                  {locale === "en" ? "Travelers" : "Gezgin"}
+                </span>
               </div>
             )}
           </div>
@@ -480,7 +566,7 @@ export function TravelerDashboardView({
               }`}
             >
               <span>🤝</span>
-              <span>Arkadaşlar</span>
+              <span>{locale === "en" ? "Friends" : "Arkadaşlar"}</span>
             </button>
 
             <button
@@ -493,7 +579,7 @@ export function TravelerDashboardView({
               }`}
             >
               <span>🏡</span>
-              <span>Ailem</span>
+              <span>{locale === "en" ? "Family" : "Ailem"}</span>
             </button>
 
             <button
@@ -506,7 +592,7 @@ export function TravelerDashboardView({
               }`}
             >
               <span>👥</span>
-              <span>Akrabalar</span>
+              <span>{locale === "en" ? "Relatives" : "Akrabalar"}</span>
             </button>
 
             <button
@@ -519,7 +605,7 @@ export function TravelerDashboardView({
               }`}
             >
               <span>🌍</span>
-              <span>Genel</span>
+              <span>{locale === "en" ? "Global" : "Genel"}</span>
             </button>
           </div>
 
@@ -527,16 +613,22 @@ export function TravelerDashboardView({
           <div className="space-y-2 pt-2">
             {loadingLeaderboard ? (
               <div className="text-center py-8 text-xs text-slate-400">
-                Sıralama güncelleniyor...
+                {locale === "en"
+                  ? "Updating leaderboard..."
+                  : "Sıralama güncelleniyor..."}
               </div>
             ) : leaderboard.items.length === 0 ? (
               <div className="text-center py-8 text-xs text-slate-400 bg-slate-950/40 rounded-2xl border border-slate-800/80 p-6 space-y-2">
                 <Users className="w-8 h-8 text-slate-600 mx-auto" />
                 <p className="font-semibold text-slate-300">
-                  Bu kapsamda henüz bağlantınız bulunmuyor.
+                  {locale === "en"
+                    ? "No connections in this category yet."
+                    : "Bu kapsamda henüz bağlantınız bulunmuyor."}
                 </p>
                 <p className="text-slate-500 text-[11px]">
-                  Gezgin akışından veya profilinizden yeni bağlantılar ekleyerek yarışa katılabilirsiniz!
+                  {locale === "en"
+                    ? "Connect with fellow travelers from explore feed or profile to join the race!"
+                    : "Gezgin akışından veya profilinizden yeni bağlantılar ekleyerek yarışa katılabilirsiniz!"}
                 </p>
               </div>
             ) : (
@@ -587,7 +679,9 @@ export function TravelerDashboardView({
                           {item.starDisplay && (
                             <span
                               className="text-amber-400 text-xs shrink-0 font-medium tracking-tight"
-                              title={`${item.stars} Yıldızlı Gezgin`}
+                              title={`${item.stars} ${
+                                locale === "en" ? "Star Traveler" : "Yıldızlı Gezgin"
+                              }`}
                             >
                               {item.starDisplay}
                             </span>
@@ -595,17 +689,26 @@ export function TravelerDashboardView({
 
                           {item.isSelf && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/40">
-                              Siz
+                              {locale === "en" ? "You" : "Siz"}
                             </span>
                           )}
                         </div>
 
                         <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                          <span>{item.countryCount} Ülke</span>
+                          <span>
+                            {item.countryCount}{" "}
+                            {locale === "en" ? "Countries" : "Ülke"}
+                          </span>
                           <span>•</span>
-                          <span>{item.cityCount} Şehir</span>
+                          <span>
+                            {item.cityCount}{" "}
+                            {locale === "en" ? "Cities" : "Şehir"}
+                          </span>
                           <span>•</span>
-                          <span>{item.tripCount} Rota</span>
+                          <span>
+                            {item.tripCount}{" "}
+                            {locale === "en" ? "Routes" : "Rota"}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -613,7 +716,8 @@ export function TravelerDashboardView({
                     {/* Puan ve Rütbe İkonu */}
                     <div className="text-right shrink-0">
                       <div className="text-sm sm:text-base font-black text-amber-400">
-                        {item.score.toLocaleString("tr-TR")} P
+                        {item.score.toLocaleString(locale === "en" ? "en-US" : "tr-TR")}{" "}
+                        {locale === "en" ? "Pts" : "P"}
                       </div>
                       <span className="text-[10px] text-slate-500">
                         {locale === "en" ? item.tierTitleEn : item.tierTitleTr}
@@ -633,14 +737,19 @@ export function TravelerDashboardView({
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Award className="w-5 h-5 text-cyan-400" />
-              Başarım Rozetleri & Kilitler
+              {locale === "en"
+                ? "Achievement Badges & Trophies"
+                : "Başarım Rozetleri & Kilitler"}
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Seyahat hedeflerini tamamlayarak özel madalya ve rozetleri açın
+              {locale === "en"
+                ? "Unlock exclusive travel badges by achieving milestones"
+                : "Seyahat hedeflerini tamamlayarak özel madalya ve rozetleri açın"}
             </p>
           </div>
           <span className="text-xs font-bold px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-800/60 text-cyan-300">
-            {stats.badges.filter((b) => b.isUnlocked).length} / {stats.badges.length} Kazanıldı
+            {stats.badges.filter((b) => b.isUnlocked).length} / {stats.badges.length}{" "}
+            {locale === "en" ? "Earned" : "Kazanıldı"}
           </span>
         </div>
 
@@ -692,12 +801,12 @@ export function TravelerDashboardView({
                       {badge.isUnlocked ? (
                         <span className="text-amber-400 font-bold flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" />
-                          Kazanıldı
+                          {locale === "en" ? "Earned" : "Kazanıldı"}
                         </span>
                       ) : (
                         <span className="text-slate-500 flex items-center gap-1">
                           <Lock className="w-3 h-3" />
-                          Kilitli
+                          {locale === "en" ? "Locked" : "Kilitli"}
                         </span>
                       )}
                     </span>
