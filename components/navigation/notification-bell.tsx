@@ -169,7 +169,7 @@ export function NotificationBell() {
 
       {/* Açılır Bildirim Menüsü (Dropdown) */}
       {isOpen && (
-        <div className="absolute right-0 sm:right-auto sm:left-auto md:right-0 mt-2.5 w-[330px] sm:w-[380px] bg-slate-900/95 backdrop-blur-2xl border border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 mt-2.5 w-[330px] sm:w-[380px] bg-slate-900/95 backdrop-blur-2xl border border-slate-800 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
           {/* Başlık Alanı */}
           <div className="p-3.5 px-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/40">
             <div className="flex items-center gap-2">

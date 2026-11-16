@@ -101,7 +101,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
       {/* Gezgin İlk Kurulum & Gizlilik Tercihleri Sihirbazı */}
       <OnboardingWizard />
 
-      <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50">
+      <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-[1500]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           {/* Logo & Marka */}
           <div className="flex items-center gap-4 sm:gap-6">

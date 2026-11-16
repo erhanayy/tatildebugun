@@ -447,5 +447,29 @@ export const userContracts = pgTable(
 export type UserContract = typeof userContracts.$inferSelect;
 export type NewUserContract = typeof userContracts.$inferInsert;
 
+// --- 16. Keşfet Akışından Gezgin Gizleme (Feed Mutes) Tablosu ---
+export const feedMutes = pgTable(
+  "feed_mutes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    mutedUserId: uuid("muted_user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userMutedIdx: uniqueIndex("feed_mutes_user_muted_unique_idx").on(table.userId, table.mutedUserId),
+    userIdx: index("feed_mutes_user_idx").on(table.userId),
+    mutedUserIdx: index("feed_mutes_muted_user_idx").on(table.mutedUserId),
+  })
+);
+
+export type FeedMute = typeof feedMutes.$inferSelect;
+export type NewFeedMute = typeof feedMutes.$inferInsert;
+
+
 
 

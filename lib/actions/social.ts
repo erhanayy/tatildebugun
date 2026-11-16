@@ -12,8 +12,10 @@ import {
   type Visit,
   type Trip,
   type TripStop,
+  travelMatches,
+  feedMutes,
 } from "@/lib/db/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, or, desc, inArray, notInArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "@/lib/actions/notifications";
 
@@ -37,8 +39,12 @@ export interface FeedItem {
   author: {
     id: string;
     fullName: string;
+    username?: string | null;
     email: string | null;
     avatarUrl: string | null;
+    isSelf?: boolean;
+    connectionStatus?: "none" | "pending_outgoing" | "pending_incoming" | "accepted";
+    relationshipType?: "friend" | "relative" | "family" | null;
   };
   stops?: TripStop[];
   reactions: {
@@ -250,37 +256,58 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
     const session = await auth();
     const currentUserId = session?.user?.id;
 
-    // 1. Ziyaretleri Çek
+    // 0. Gizlenen Gezginleri (Feed Mutes) Tespit Et
+    const mutedRows = currentUserId
+      ? await db
+          .select({ mutedUserId: feedMutes.mutedUserId })
+          .from(feedMutes)
+          .where(eq(feedMutes.userId, currentUserId))
+      : [];
+    const mutedUserIds = mutedRows.map((m) => m.mutedUserId);
+
+    // 1. Ziyaretleri Çek (Gizlenen kullanıcılar hariç)
+    const visitConditions = [eq(visits.visibility, "public")];
+    if (mutedUserIds.length > 0) {
+      visitConditions.push(notInArray(visits.userId, mutedUserIds));
+    }
+
     const allVisits = await db
       .select({
         visit: visits,
         user: {
           id: users.id,
           fullName: users.fullName,
+          username: users.username,
           email: users.email,
           avatarUrl: users.avatarUrl,
         },
       })
       .from(visits)
       .innerJoin(users, eq(visits.userId, users.id))
-      .where(eq(visits.visibility, "public"))
+      .where(and(...visitConditions))
       .orderBy(desc(visits.createdAt))
       .limit(30);
 
-    // 2. Rotaları Çek
+    // 2. Rotaları Çek (Gizlenen kullanıcılar hariç)
+    const tripConditions = [eq(trips.visibility, "public")];
+    if (mutedUserIds.length > 0) {
+      tripConditions.push(notInArray(trips.userId, mutedUserIds));
+    }
+
     const allTrips = await db
       .select({
         trip: trips,
         user: {
           id: users.id,
           fullName: users.fullName,
+          username: users.username,
           email: users.email,
           avatarUrl: users.avatarUrl,
         },
       })
       .from(trips)
       .innerJoin(users, eq(trips.userId, users.id))
-      .where(eq(trips.visibility, "public"))
+      .where(and(...tripConditions))
       .orderBy(desc(trips.createdAt))
       .limit(20);
 
@@ -299,6 +326,56 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
       .from(comments)
       .innerJoin(users, eq(comments.userId, users.id))
       .orderBy(desc(comments.createdAt));
+
+    // 5. Yazar Bağlantı / Eşleşme Durumlarını Tek Sorguda Çek
+    const authorIds = Array.from(
+      new Set([...allVisits.map((v) => v.user.id), ...allTrips.map((t) => t.user.id)])
+    );
+
+    const existingMatches =
+      currentUserId && authorIds.length > 0
+        ? await db
+            .select({
+              id: travelMatches.id,
+              senderId: travelMatches.senderId,
+              receiverId: travelMatches.receiverId,
+              status: travelMatches.status,
+              relationshipType: travelMatches.relationshipType,
+            })
+            .from(travelMatches)
+            .where(
+              or(
+                and(eq(travelMatches.senderId, currentUserId), inArray(travelMatches.receiverId, authorIds)),
+                and(eq(travelMatches.receiverId, currentUserId), inArray(travelMatches.senderId, authorIds))
+              )
+            )
+        : [];
+
+    function getAuthorConnection(authorId: string) {
+      const isSelf = Boolean(currentUserId && authorId === currentUserId);
+      if (isSelf) {
+        return { isSelf: true, connectionStatus: "none" as const, relationshipType: null };
+      }
+      const match = existingMatches.find(
+        (m) =>
+          (m.senderId === currentUserId && m.receiverId === authorId) ||
+          (m.receiverId === currentUserId && m.senderId === authorId)
+      );
+      if (!match) {
+        return { isSelf: false, connectionStatus: "none" as const, relationshipType: null };
+      }
+      let connectionStatus: "accepted" | "pending_outgoing" | "pending_incoming" = "none" as any;
+      if (match.status === "accepted") {
+        connectionStatus = "accepted";
+      } else if (match.status === "pending") {
+        connectionStatus = match.senderId === currentUserId ? "pending_outgoing" : "pending_incoming";
+      }
+      return {
+        isSelf: false,
+        connectionStatus,
+        relationshipType: match.relationshipType as "friend" | "relative" | "family",
+      };
+    }
 
     // Ziyaretleri FeedItem formatına dönüştür
     const visitItems: FeedItem[] = allVisits.map(({ visit, user }) => {
@@ -336,6 +413,8 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
           ? "Zamansız Ziyaret"
           : `${visit.visitYear || ""} ${visit.visitMonth ? `(${visit.visitMonth}. Ay)` : ""}`;
 
+      const conn = getAuthorConnection(user.id);
+
       return {
         id: visit.id,
         type: "visit",
@@ -349,7 +428,12 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
         stayDurationDays: visit.stayDurationDays,
         visitType: visit.visitType,
         createdAt: visit.createdAt,
-        author: user,
+        author: {
+          ...user,
+          isSelf: conn.isSelf,
+          connectionStatus: conn.connectionStatus,
+          relationshipType: conn.relationshipType,
+        },
         reactions: {
           counts,
           total: itemReactions.length,
@@ -394,6 +478,8 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
             ).toLocaleDateString("tr-TR")}`
           : "Tarihsiz Rota";
 
+      const conn = getAuthorConnection(user.id);
+
       return {
         id: trip.id,
         type: "trip",
@@ -405,7 +491,12 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
         transportType: trip.transportType,
         status: trip.status,
         createdAt: trip.createdAt,
-        author: user,
+        author: {
+          ...user,
+          isSelf: conn.isSelf,
+          connectionStatus: conn.connectionStatus,
+          relationshipType: conn.relationshipType,
+        },
         stops,
         reactions: {
           counts,
@@ -427,3 +518,125 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
     return [];
   }
 }
+
+/**
+ * Gezgini Akıştan Kalıcı Olarak Gizler (Mute)
+ */
+export async function muteTravelerAction(targetUserId: string) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, message: "Lütfen önce giriş yapınız." };
+    }
+
+    if (session.user.id === targetUserId) {
+      return { success: false, message: "Kendinizi akışınızdan gizleyemezsiniz." };
+    }
+
+    await db
+      .insert(feedMutes)
+      .values({
+        userId: session.user.id,
+        mutedUserId: targetUserId,
+      })
+      .onConflictDoNothing();
+
+    revalidatePath("/feed");
+    revalidatePath("/profile");
+
+    return { success: true, message: "Gezgin akışınızdan başarıyla gizlendi." };
+  } catch (error) {
+    console.error("Gezgin gizleme hatası:", error);
+    return { success: false, message: "Gezgin gizlenirken bir hata oluştu." };
+  }
+}
+
+/**
+ * Akıştan Gizlenen Gezginin Gizlemesini Kaldırır (Unmute)
+ */
+export async function unmuteTravelerAction(targetUserId: string) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, message: "Lütfen önce giriş yapınız." };
+    }
+
+    await db
+      .delete(feedMutes)
+      .where(
+        and(
+          eq(feedMutes.userId, session.user.id),
+          eq(feedMutes.mutedUserId, targetUserId)
+        )
+      );
+
+    revalidatePath("/feed");
+    revalidatePath("/profile");
+
+    return { success: true, message: "Gezgin tekrar akışınızda gösterilecek." };
+  } catch (error) {
+    console.error("Gizleme kaldırma hatası:", error);
+    return { success: false, message: "Gizleme kaldırılırken bir hata oluştu." };
+  }
+}
+
+/**
+ * Giriş Yapan Kullanıcının Gizlediği Gezginlerin Listesini Getirir
+ */
+export async function getMutedTravelersAction() {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) return [];
+
+    const list = await db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        username: users.username,
+        avatarUrl: users.avatarUrl,
+        mutedAt: feedMutes.createdAt,
+      })
+      .from(feedMutes)
+      .innerJoin(users, eq(feedMutes.mutedUserId, users.id))
+      .where(eq(feedMutes.userId, session.user.id))
+      .orderBy(desc(feedMutes.createdAt));
+
+    return list;
+  } catch (error) {
+    console.error("Gizlenen gezginleri çekme hatası:", error);
+    return [];
+  }
+}
+
+/**
+ * Gezginle Olan Bağlantıyı / Arkadaşlığı Kaldırır (Disconnect)
+ */
+export async function disconnectTravelerAction(targetUserId: string) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, message: "Lütfen önce giriş yapınız." };
+    }
+
+    const currentUserId = session.user.id;
+
+    await db
+      .delete(travelMatches)
+      .where(
+        or(
+          and(eq(travelMatches.senderId, currentUserId), eq(travelMatches.receiverId, targetUserId)),
+          and(eq(travelMatches.senderId, targetUserId), eq(travelMatches.receiverId, currentUserId))
+        )
+      );
+
+    revalidatePath("/feed");
+    revalidatePath("/match");
+    revalidatePath("/messages");
+
+    return { success: true, message: "Bağlantı başarıyla kaldırıldı." };
+  } catch (error) {
+    console.error("Bağlantı kaldırma hatası:", error);
+    return { success: false, message: "Bağlantı kaldırılırken bir hata oluştu." };
+  }
+}
+

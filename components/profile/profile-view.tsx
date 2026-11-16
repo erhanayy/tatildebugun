@@ -27,8 +27,10 @@ import {
   AlertCircle,
   Radar,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getMutedTravelersAction, unmuteTravelerAction } from "@/lib/actions/social";
 import { POPULAR_COUNTRIES } from "@/lib/world-cities";
 import { useTranslation } from "@/lib/i18n/context";
 import { Locale } from "@/lib/i18n/types";
@@ -100,6 +102,56 @@ export function ProfileView({ initialData }: ProfileViewProps) {
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // Gizlenen Gezginler State & Yönetimi
+  const [isMutedModalOpen, setIsMutedModalOpen] = useState(false);
+  const [mutedList, setMutedList] = useState<
+    Array<{
+      id: string;
+      fullName: string;
+      username: string | null;
+      avatarUrl: string | null;
+      mutedAt: Date;
+    }>
+  >([]);
+  const [loadingMutedList, setLoadingMutedList] = useState(false);
+
+  useEffect(() => {
+    async function loadMuted() {
+      try {
+        const list = await getMutedTravelersAction();
+        setMutedList(list);
+      } catch (err) {
+        console.error("Gizlenen gezginler yüklenemedi:", err);
+      }
+    }
+    loadMuted();
+  }, []);
+
+  async function handleOpenMutedModal() {
+    setIsMutedModalOpen(true);
+    setLoadingMutedList(true);
+    try {
+      const list = await getMutedTravelersAction();
+      setMutedList(list);
+    } finally {
+      setLoadingMutedList(false);
+    }
+  }
+
+  async function handleUnmuteTraveler(targetUserId: string) {
+    const res = await unmuteTravelerAction(targetUserId);
+    if (res.success) {
+      setMutedList((prev) => prev.filter((u) => u.id !== targetUserId));
+      toast.success(
+        locale === "en"
+          ? "Traveler unhidden and restored to your feed."
+          : "Gezgin gizlilikten çıkarıldı ve tekrar akışınıza dahil edildi."
+      );
+    } else {
+      toast.error(res.message);
+    }
+  }
 
   // Profil Bilgilerini Kaydet
   async function handleSaveProfile(e: React.FormEvent) {
@@ -757,6 +809,37 @@ export function ProfileView({ initialData }: ProfileViewProps) {
                 </div>
               </div>
             </div>
+
+            {/* Gizlenen Gezginler & Akış Tercihleri Kartı */}
+            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <EyeOff className="w-4 h-4 text-amber-400" />
+                    <label className="text-xs font-bold text-white uppercase tracking-wider">
+                      {t("profile.mutedTravelersTitle")}
+                    </label>
+                    {mutedList.length > 0 && (
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        {mutedList.length}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    {t("profile.mutedTravelersDesc")}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenMutedModal}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-xs font-bold text-slate-200 hover:text-white transition-all cursor-pointer min-h-[44px] shrink-0"
+                >
+                  <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{t("profile.manageMutedBtn")}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end pt-2">
@@ -864,6 +947,79 @@ export function ProfileView({ initialData }: ProfileViewProps) {
             </button>
           </div>
         </form>
+      )}
+
+      {/* Gizlenen Gezginler Yönetim Modalı */}
+      {isMutedModalOpen && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <EyeOff className="w-5 h-5 text-amber-400" />
+                <h3 className="font-extrabold text-base text-white">
+                  {t("profile.mutedTravelersTitle")}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMutedModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1">
+              <p className="text-xs text-slate-400 mb-2">
+                {t("profile.mutedTravelersDesc")}
+              </p>
+
+              {loadingMutedList ? (
+                <div className="py-8 text-center text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                  <span className="text-xs">{t("common.loading")}</span>
+                </div>
+              ) : mutedList.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs">
+                  {t("profile.mutedTravelersEmpty")}
+                </div>
+              ) : (
+                mutedList.map((mUser) => (
+                  <div
+                    key={mUser.id}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80 gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <UserAvatar
+                        avatarUrl={mUser.avatarUrl}
+                        name={mUser.fullName}
+                        size="sm"
+                      />
+                      <div className="truncate">
+                        <h5 className="font-bold text-xs text-white truncate">
+                          {mUser.fullName}
+                        </h5>
+                        {mUser.username && (
+                          <span className="text-[11px] text-cyan-400 font-mono">
+                            @{mUser.username}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleUnmuteTraveler(mUser.id)}
+                      className="px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-colors cursor-pointer shrink-0 min-h-[44px] flex items-center justify-center"
+                    >
+                      {t("feed.unmuteBtn")}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

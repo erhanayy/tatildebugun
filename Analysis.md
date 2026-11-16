@@ -3758,6 +3758,142 @@ Kullanıcının profil fotoğrafını yükleyip çıkış yapmak istediğinde ka
 3. **Node.js Başlık Boyutunun Genişletilmesi ([package.json](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/package.json)):**
    - `start` betiğine `NODE_OPTIONS='--max-http-header-size=65536'` eklenerek sunucunun 64KB'a kadar başlıkları kabul etmesi sağlandı. Böylece tarayıcısında eski şişmiş çerez bulunan kullanıcıların dahi isteği sunucuya ulaşacak ve NextAuth tarafından taze küçük çerez ile ezilerek otomatik düzelecektir.
 
+---
+
+## 75. Bildirim Dropdown'ı ile Harita Butonları Çakışması Analizi & Çözümü (Header Z-Index Stacking Context)
+
+### 75.1. Sorunun Tespiti (Kullanıcı Geri Bildirimi: "Bildirim sayfası butonların altında kalıyor. Düzeltir misin?")
+Kullanıcının paylaştığı ekran görüntüsünde, üst bardaki bildirim ziline tıklandığında açılan `Bildirimler` penceresinin, haritanın üst kısmında yüzen *"Rotalarım (4)", "Seyahatlerim (287)", "Seyahat & Keşif"* butonlarının **altında kaldığı** ve butonların bildirim kartlarını fiziksel olarak kestiği tespit edildi.
+
+### 75.2. Kök Neden Analizi (CSS Stacking Context)
+1. **Harita Üst Kontrol Barı Z-Index Değeri:**
+   - [components/map/world-map.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/map/world-map.tsx) içerisinde harita istatistikleri ve butonlarını barındıran kapsayıcı, Leaflet haritası kontrollerinin (`z-[400]`) üzerinde kalabilmesi için **`z-[990]`** olarak tanımlanmıştır.
+2. **Üst Başlık (Header) Z-Index Yetersizliği:**
+   - [components/navigation/app-header.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/app-header.tsx) ise yalnızca **`z-50`** olarak konumlandırılmıştır.
+   - CSS Stacking Context (İstifleme Bağlamı) kuralları gereğince; `<NotificationBell>` bileşeni kendi içinde `z-50` veya `z-[100]` alsa dahi, ebeveyni olan `<header>`'ın `z-50` seviyesiyle sınırlı kalmaktadır.
+   - `z-[990] > z-50` olduğundan, haritanın butonları DOM hiyerarşisinde başlığın ve dolayısıyla bildirim dropdown'ının üzerine çizilmekteydi.
+
+### 75.3. Uygulanan Çözüm
+1. **Header Z-Index Seviyesinin Yükseltilmesi ([components/navigation/app-header.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/app-header.tsx)):**
+   - `<header>` z-index değeri **`z-[1500]`** seviyesine çıkarıldı.
+   - Bu sayede `1500 > 990` ilişkisiyle; header içerisindeki tüm açılır menüler (Bildirimler, profil tooltip'leri, dil seçici vb.) harita butonlarının, pinlerinin ve kontrollerinin tamamen üzerinde pürüzsüzce görüntülenecektir.
+   - Aynı zamanda `1500 < 2000`, `3000`, `9995`, `9999` ilişkisi korunduğundan; tam ekran diyaloglar, çekmeceler (Drawers) ve sözleşme/onboarding modalları başlığın üzerinde kalmaya devam edecektir.
+2. **Bildirim Dropdown Sağ Hizalama & Z-Index İyileştirmesi ([components/navigation/notification-bell.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/notification-bell.tsx)):**
+   - Bildirim dropdown kapsayıcısına `z-[100]` ve doğrudan sağ kenara yaslanan `right-0` sınıfları atanarak taşma veya hizalama belirsizlikleri giderildi.
+
+### 75.4. Kalite Kapısı Doğrulaması
+- `npx tsc --noEmit`: 0 hata ile doğrulandı.
+- `npm run build`: 2.2 saniyede 12 sayfa hatasız derlendi.
+
+---
+
+## 76. Keşfet Akışı (Explore / Feed) Bağlantı Durumu Göstergesi & Hızlı "Arkadaş Olarak Ekle" Mimarisi
+
+### 76.1. Kullanıcı İhtiyacı ve Hedef
+Kullanıcının talebi doğrultusunda:
+1. Keşfet (`/feed`) sayfasındaki herkese açık paylaşımlarda yazarın bağlantı durumu tespit edilecek.
+2. Oturum açmış kullanıcının halihazırda bağlantı kurduğu gezginlerin adının yanında parantez içinde bağlantı tipi yer alacak:
+   - Türkçe: `(Arkadaşım)`, `(Ailem)`, `(Akrabam)`
+   - İngilizce: `(Friend)`, `(Family)`, `(Relative)`
+3. Bağlantısı olmayan gezginlerin gönderi kartlarında belirgin, mobil uyumlu bir **`+ Arkadaş Olarak Ekle`** (`+ Add as Friend`) butonu yer alacak.
+4. Butona tıklandığında anında `sendTravelerConnection` Server Action'ı çalışarak arkadaşlık isteği gönderecek ve arayüzde iyimser (optimistic) olarak **`İstek Gönderildi ⏳`** durumuna geçecek.
+5. Kullanıcının kendi paylaşımlarında ise `(Sen)` / `(You)` ibaresi gösterilip arkadaş ekleme butonu gizlenecek.
+
+### 76.2. Mimari ve Veri Modeli Tasarımı
+1. **Sunucu Tarafı Veri Zenginleştirme (`lib/actions/social.ts`):**
+   - `getFeedPosts(filter)` fonksiyonu, çekilen tüm ziyaret ve rota yazarlarının ID'lerini toplayarak tek bir optimize sorguyla `travelMatches` tablosundan `currentUserId` ile olan eşleşme kayıtlarını (`senderId`, `receiverId`, `status`, `relationshipType`) çekecektir.
+   - Her `FeedItem.author` nesnesine şu alanlar eklenecektir:
+     ```ts
+     isSelf?: boolean;
+     connectionStatus?: "none" | "pending_outgoing" | "pending_incoming" | "accepted";
+     relationshipType?: "friend" | "relative" | "family" | null;
+     ```
+2. **Arayüz Tasarımı (`components/social/feed-view.tsx`):**
+   - Yazar başlığında baş harfler yerine evrensel `<UserAvatar>` entegre edilecek (fotoğrafların akışta da görünmesi sağlanacaktır).
+   - Yazar adının hemen sağında dinamik rozet gösterimi:
+     - `accepted`: Yeşile çalan zarif rozet `(Arkadaşım) / (Friend)`
+     - `pending_outgoing`: Sarı tonlu `(İstek Gönderildi) / (Pending Request)`
+     - `isSelf`: Turkuaz tonlu `(Sen) / (You)`
+   - Bağlantı yoksa (`connectionStatus === "none"`):
+     - Başlığın sağ üstünde `+ Arkadaş Olarak Ekle` butonu.
+     - Tıklandığında anında Server Action tetiklenir, `sonner` ile başarı bildirimi gösterilir ve kart durumu `pending_outgoing` olarak güncellenir.
+3. **Çift Dilli Sözlük Desteği (`lib/i18n/dictionaries/`):**
+   - Hem Türkçe (`tr.ts`) hem İngilizce (`en.ts`) sözlüklerine `feed.addFriendBtn`, `feed.requestSent`, `feed.self`, `feed.relFriend`, `feed.relFamily`, `feed.relRelative` anahtarları tanımlanacaktır.
+
+---
+
+## 77. Keşfet Akışından Gezgin Gizleme (Mute), Gönderi Gizleme ve Bağlantıyı Kaldırma (Unfollow) Mimarisi
+
+### 77.1. Kullanıcı İhtiyacı ve Soru
+Kullanıcının sorusu: *"Takibi bırakma, akışımda gözükmesin gibi şeyleri nereye eklemek lazım? Sanki onun yeri de burası olur. Bu yüzden bunu da eklemek lazım sanki ve bunları da işaretledi ise de bir daha o kişinin akışına işaretlediği kişinin düşmemesi lazım."*
+
+### 77.2. UX / Arayüz Konumlandırması (Üç Nokta Menüsü - More Menu `...`)
+- Modern sosyal ağ standartları (Instagram, X, LinkedIn) gereğince, her Keşfet kartının sağ üst köşesine (yazar bilgisi ve aksiyon butonunun yanına) zarif bir **Üç Nokta Menüsü (`...` / MoreVertical)** yerleştirilecektir.
+- Bu menü tıklandığında açılan minimalist açılır pencerede:
+  1. **Bağlantı Kurulmuş Gezginler İçin (`accepted`):**
+     - ❌ **"Bağlantıyı Kaldır (Arkadaşlıktan Çıkar)"** (`Disconnect / Unfollow`): `travelMatches` ilişkisini sonlandırır, yazar yeniden bağlantısız duruma döner.
+     - 🚫 **"Bu Gezginin Paylaşımlarını Gizle"** (`Hide all posts from this traveler`): Gezgini kalıcı sessize alma listesine ekler.
+  2. **Bağlantısız / Herkese Açık Gezginler İçin (`none`):**
+     - 🚫 **"Bu Gezgini Akışımda Gösterme"** (`Hide this traveler from my feed`): Akıştan kalıcı gizler.
+     - 🔇 **"Bu Gönderiyi Gizle"** (`Hide this post`): Sadece o anki seyahat/ziyaret kartını yerel olarak gizler.
+  3. **Kullanıcının Kendi Gönderisi İse:**
+     - 📍 **"Seyahati Gör / Düzenle"** (`View / Manage Trip`)
+
+### 77.3. Veritabanı ve Akış Filtreleme Mimarisi
+1. **Kalıcı Gizleme Tablosu (`feed_mutes` - Kural 8 Reversible Migration):**
+   - `feed_mutes`:
+     - `id`: uuid (PK)
+     - `userId`: uuid (Gizleyen gezgin - FK users.id)
+     - `mutedUserId`: uuid (Gizlenen gezgin - FK users.id)
+     - `createdAt`: timestamp
+     - Unique index: `feed_mutes_user_muted_idx (userId, mutedUserId)`
+2. **Akış Sorgusu İzolasyonu (`getFeedPosts`):**
+   - Giriş yapmış kullanıcının `feed_mutes` tablosundaki `mutedUserId` listesi çekilir.
+   - `visits` ve `trips` sorgularında:
+     `notInArray(visits.userId, mutedUserIds)` ve `notInArray(trips.userId, mutedUserIds)` filtresi uygulanır.
+   - Böylece gizlenen kişinin hiçbir yeni veya eski ziyareti/rotası gizleyen kullanıcının ekranına bir daha **asla düşmez**.
+3. **Kullanıcı Geri Bildirimi & Geri Alma (Undo):**
+   - "Gezgini Akışımda Gösterme"ye tıklandığı an, kart akıştan yumuşak bir fade-out animasyonuyla silinir.
+   - Ekranda bildirim açılır: *"@gezgin akışınızdan gizlendi. [Geri Al]"* (Kullanıcı yanlışlıkla basarsa tek tıkla anında kaldırabilir).
+
+---
+
+## 78. Yanlışlıkla Gizlenen Gezginleri Geri Alma (Undo & Persistent Un-Mute Management) ve Profil / Keşfet Entegrasyonu
+
+### 78.1. Kullanıcı İhtiyacı ve Senaryo
+- Kullanıcı talebi: *"Akıştan sil dedi yanlışlıkla, geri al çıktı ama yapmadı. Sonradan başka bir yerden geri alabileceği bir yer de olmalı sanki onu da tasarıma ekle. Eklenmiş hali ile onaylıyorum, geliştirmeye başlayabilirsin."*
+- Geçici (6 saniyelik) `toast` bildirimi kullanıcı fark etmeden kaybolabilir veya kullanıcı daha sonraki bir tarihte fikrini değiştirebilir.
+- Bu nedenle gizlenen gezginleri listeleyip tek tıkla geri alabilecekleri **kalıcı (persistent) yönetim noktaları** gereklidir.
+
+### 78.2. Çift Taraflı Erişim Mimarisi (Dual-Access UX)
+Kullanıcının gizlediği kişileri inceleyip geri alabilmesi için 2 stratejik nokta entegre edilmiştir:
+
+1. **Keşfet Akışı Doğrudan Erişim Noktası (`components/social/feed-view.tsx`):**
+   - Keşfet filtresinin ("Tümü", "Şehir Ziyaretleri", "Rotalar") sağ tarafında **"Gizlenen Gezginler"** butonu (`EyeOff` simgesi).
+   - Tıklandığında `getMutedTravelersAction()` ile gizlenen kullanıcılar listelenir.
+   - Kullanıcı dilediği kişinin yanındaki **"Gizlemeyi Kaldır"** butonuna basarak anında o gezgini yeniden akışına kazandırır.
+
+2. **Gezgin Profil Ayarları Erişim Noktası (`components/profile/profile-view.tsx`):**
+   - Kullanıcı ayarları ve gizlilik tercihlerinin yönetildiği `/profile` sayfasında, "İletişim, Arama ve Görünürlük Tercihleri" kartının hemen altına **"Gizlenen Gezginler & Akış Tercihleri"** kartı eklenmiştir.
+   - Kart üzerinde aktif olarak kaç kişinin gizlendiğini gösteren dinamik bir rozet (badge) ve **"Gizlenen Gezginleri Yönet"** butonu yer alır.
+   - Tıklandığında açılan modal üzerinden gezginlerin avatarları, adları ve `@kullanıcı_adı` bilgileri listelenir; **"Gizlemeyi Kaldır"** ile anında akışa geri alınır.
+
+### 78.3. Sunucu ve Veritabanı Mimarisi
+1. **Server Actions (`lib/actions/social.ts`):**
+   - `getMutedTravelersAction()`: Giriş yapmış kullanıcının `feed_mutes` tablosundaki tüm kayıtlarını `users` tablosuyla `innerJoin` yaparak (ID, ad soyad, kullanıcı adı, profil fotoğrafı/avatar, gizlenme tarihi) getirir.
+   - `unmuteTravelerAction(targetUserId)`: `feed_mutes` tablosundan ilgili kaydı siler ve `revalidatePath('/feed')` tetikler.
+2. **Kural 8 Geri Alınabilir Migration:**
+   - [scripts/create_feed_mutes.sql](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/scripts/create_feed_mutes.sql)
+   - [scripts/rollback_feed_mutes.sql](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/scripts/rollback_feed_mutes.sql)
+3. **Kural 13 Mobil-First Standartları:**
+   - Modallar ve butonlar 360px-430px ekranlarda sıfır yatay kaydırma ile dikey esnek grid/flex yapısında ve minimum 44px dokunma hedefiyle tasarlanmıştır.
+4. **Çift Dilli Sözlük:**
+   - `tr.ts` ve `en.ts` içerisinde `profile.mutedTravelersTitle`, `profile.mutedTravelersDesc`, `profile.manageMutedBtn`, `profile.mutedTravelersEmpty`, `feed.unmuteBtn` eksiksiz tanımlanmıştır.
+
+
+
+
+
 
 
 
