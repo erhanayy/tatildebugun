@@ -7,10 +7,11 @@ import { AppHeader } from "@/components/navigation/app-header";
 import { redirect } from "next/navigation";
 import { Compass } from "lucide-react";
 import type { Visit } from "@/lib/db/schema";
+import { getServerTranslation } from "@/lib/i18n/server";
 
 export const metadata = {
-  title: "Seyahat Haritam | TatildeBugün",
-  description: "Ziyaret ettiğiniz ülkeleri ve şehirleri dünya haritasında keşfedin.",
+  title: "Seyahat Haritam | AllTripX",
+  description: "Ziyaret ettiğiniz ülkeleri ve şehirleri dünya haritasında keşfedin. / Explore countries and cities on your world travel map.",
 };
 
 // İlk açılışta kullanıcının hayal ettiği senaryoyu (İspanya 4 şehir, Barselona 2 ziyaret vb.)
@@ -173,6 +174,7 @@ export default async function DashboardPage() {
   }
 
   const user = session.user;
+  const { t } = await getServerTranslation();
   const pendingContracts = await getMissingContracts(user.id);
   const dbVisits = await getUserVisits();
   const dbTrips = await getUserTrips();
@@ -190,13 +192,13 @@ export default async function DashboardPage() {
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-semibold mb-2">
               <Compass className="w-3.5 h-3.5" />
-              <span>Gezgin Pasaportu & Rota Karnesi</span>
+              <span>{t("dashboard.badge")}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Kişisel Dünya Haritam 🗺️
+              {t("dashboard.title")}
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Gittiğiniz ülkeleri, şehir bayraklarını ve seyahat hatıralarınızı canlı olarak yönetin.
+              {t("dashboard.subtitle")}
             </p>
           </div>
         </div>
@@ -210,10 +212,10 @@ export default async function DashboardPage() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white">
-                  Hoş geldiniz! Haritanız henüz boş ve keşfedilmeyi bekliyor
+                  {t("dashboard.emptyTitle")}
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-                  Ziyaret ettiğiniz veya planladığınız bir şehri eklemek için haritada gitmek istediğiniz şehre <b>sağ tıklayın</b> (mobilde basılı tutun) veya yukarıdaki <b>&quot;Seyahat & Keşif&quot;</b> butonunu kullanın.
+                  {t("dashboard.emptyDesc")}
                 </p>
               </div>
             </div>
@@ -230,30 +232,30 @@ export default async function DashboardPage() {
           <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80">
             <h4 className="text-xs font-bold text-white mb-1 flex items-center gap-2">
               <span className="text-base">🚩</span>
-              <span>Ülke & Şehir Sayacı</span>
+              <span>{t("dashboard.cardCountriesTitle")}</span>
             </h4>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Dünya görünümünde bayraklar üzerinde o ülkede gördüğünüz <b>farklı şehir sayısı</b> gösterilir.
+              {t("dashboard.cardCountriesDesc")}
             </p>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80">
             <h4 className="text-xs font-bold text-white mb-1 flex items-center gap-2">
               <span className="text-base">🔍</span>
-              <span>Çift Tıklama İle Şehirler</span>
+              <span>{t("dashboard.cardCitiesTitle")}</span>
             </h4>
             <p className="text-xs text-slate-400 leading-relaxed">
-              İstediğiniz ülkeye <b>çift tıklayarak</b> o ülkedeki şehir pinlerini ve o şehre kaç kez gittiğinizi görebilirsiniz.
+              {t("dashboard.cardCitiesDesc")}
             </p>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80">
             <h4 className="text-xs font-bold text-white mb-1 flex items-center gap-2">
               <span className="text-base">📍</span>
-              <span>Sağ Tık / Uzun Basma</span>
+              <span>{t("dashboard.cardPinTitle")}</span>
             </h4>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Haritada herhangi bir yere <b>sağ tıklayarak</b> (mobilde uzun basarak) o şehre anında bayrak ekleyebilirsiniz.
+              {t("dashboard.cardPinDesc")}
             </p>
           </div>
         </div>

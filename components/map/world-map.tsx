@@ -9,6 +9,7 @@ import { TripsDrawer } from "./trips-drawer";
 import { CreateTripModal } from "./create-trip-modal";
 import { TripRoutesDrawer } from "./trip-routes-drawer";
 import { deleteTrip, updateTripStatus, type TripWithStops } from "@/lib/actions/trips";
+import { useTranslation } from "@/lib/i18n";
 import {
   Globe2,
   MapPin,
@@ -35,6 +36,7 @@ interface WorldMapProps {
 }
 
 export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
+  const { t, locale } = useTranslation();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
@@ -1037,7 +1039,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
               <strong className="text-cyan-600 dark:text-cyan-400 text-sm">
                 {stats.countryCount}
               </strong>{" "}
-              Ülke
+              {t("common.countries")}
             </span>
           </div>
 
@@ -1047,7 +1049,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
               <strong className="text-blue-600 dark:text-blue-400 text-sm">
                 {stats.cityCount}
               </strong>{" "}
-              Şehir
+              {t("common.cities")}
             </span>
           </div>
 
@@ -1057,7 +1059,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
               <strong className="text-indigo-600 dark:text-indigo-400 text-sm">
                 {tripsList.length}
               </strong>{" "}
-              Rota
+              {t("map.routes")}
             </span>
           </div>
 
@@ -1067,14 +1069,14 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
               <strong className="text-teal-600 dark:text-teal-400 text-sm">
                 {stats.tripCount}
               </strong>{" "}
-              Seyahat
+              {t("common.trips")}
             </span>
           </div>
 
           <div className="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-lg border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-800 dark:text-white">
             <Clock className="w-4 h-4 text-amber-500" />
             <span>
-              <strong className="text-amber-500 text-sm">{stats.totalDays}</strong> Gün Yolda
+              <strong className="text-amber-500 text-sm">{stats.totalDays}</strong> {t("map.daysOnRoad")}
             </span>
           </div>
         </div>
@@ -1085,10 +1087,10 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
             <button
               type="button"
               onClick={handleResetZoom}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg transition-all animate-in fade-in cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg transition-all animate-in fade-in cursor-pointer min-h-[38px]"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Dünya Görünümüne Dön</span>
+              <span>{t("map.backToWorld")}</span>
             </button>
           )}
 
@@ -1096,22 +1098,22 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
           <button
             type="button"
             onClick={() => setIsTripRoutesDrawerOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-lg border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
-            title="Rotalarımı Görüntüle ve Yönet"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-lg border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer min-h-[38px]"
+            title={locale === "en" ? "View and Manage My Routes" : "Rotalarımı Görüntüle ve Yönet"}
           >
             <Navigation className="w-4 h-4 text-indigo-500" />
-            <span>Rotalarım ({tripsList.length})</span>
+            <span>{t("map.myRoutes")} ({tripsList.length})</span>
           </button>
 
           {/* Seyahatlerim Çekmece Butonu */}
           <button
             type="button"
             onClick={() => setIsDrawerOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-lg border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
-            title="Tüm Seyahatlerimi Gör ve Yönet"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-lg border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer min-h-[38px]"
+            title={locale === "en" ? "View and Manage All Visits" : "Tüm Seyahatlerimi Gör ve Yönet"}
           >
             <Compass className="w-4 h-4 text-cyan-500" />
-            <span>Seyahatlerim ({visits.length})</span>
+            <span>{t("map.myTrips")} ({visits.length})</span>
           </button>
 
           <MapThemeSwitcher currentTheme={currentTheme} onThemeChange={handleThemeChange} />
@@ -1125,9 +1127,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
       <div className="absolute bottom-4 left-4 z-[990] hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 backdrop-blur-md text-[11px] text-slate-300 border border-slate-700 pointer-events-none">
         <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
         <span>
-          {currentZoom < 5
-            ? "Rotalar şehirleri çizgilerle birbirine bağlar. Ülkelere çift tıklayarak şehir detaylarına inebilirsiniz."
-            : "Şehir pinlerine tıklayarak ziyaretleri düzenleyebilir veya silebilirsiniz."}
+          {currentZoom < 5 ? t("map.tipZoomOut") : t("map.tipZoomIn")}
         </span>
       </div>
 
@@ -1136,10 +1136,10 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
         <button
           type="button"
           onClick={() => setIsCreateTripModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-2xl shadow-indigo-500/30 transform hover:scale-105 active:scale-95 transition-all cursor-pointer"
+          className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-2xl shadow-indigo-500/30 transform hover:scale-105 active:scale-95 transition-all cursor-pointer min-h-[44px]"
         >
           <Navigation className="w-4 h-4" />
-          <span>Rota Oluştur</span>
+          <span>{locale === "en" ? "Create Route" : "Rota Oluştur"}</span>
         </button>
 
         <button
@@ -1152,10 +1152,10 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
             setEditingVisit(null);
             setIsModalOpen(true);
           }}
-          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-2xl shadow-cyan-500/30 transform hover:scale-105 active:scale-95 transition-all cursor-pointer"
+          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs shadow-2xl shadow-cyan-500/30 transform hover:scale-105 active:scale-95 transition-all cursor-pointer min-h-[44px]"
         >
           <Plus className="w-4 h-4" />
-          <span>Bayrak Ekle</span>
+          <span>{locale === "en" ? "Add Pin / Visit" : "Bayrak Ekle"}</span>
         </button>
       </div>
 

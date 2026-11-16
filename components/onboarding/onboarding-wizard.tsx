@@ -167,7 +167,7 @@ export function OnboardingWizard() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-[9995] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
       <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-cyan-500/30 shadow-2xl p-6 sm:p-8 space-y-6 text-slate-100 my-8">
         {/* Header */}
         <div className="space-y-2 text-center">
@@ -176,7 +176,7 @@ export function OnboardingWizard() {
             <span>{locale === "en" ? "Traveler Setup Wizard" : "Gezgin Kurulum Sihirbazı"}</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white">
-            {locale === "en" ? "Welcome to AllTripX! 🌴" : "TatildeBugün'e Hoş Geldin! 🌴"}
+            {locale === "en" ? "Welcome to AllTripX! 🌴" : "AllTripX'e Hoş Geldin! 🌴"}
           </h2>
           <p className="text-xs sm:text-sm text-slate-400">
             {t("onboarding.welcomeSubtitle")}
@@ -208,7 +208,7 @@ export function OnboardingWizard() {
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                 <AtSign className="w-4 h-4 text-cyan-400" />
-                <span>Gezgin Kullanıcı Adı (Nickname)</span>
+                <span>{locale === "en" ? "Traveler Handle (Nickname)" : "Gezgin Kullanıcı Adı (Nickname)"}</span>
               </label>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">
@@ -218,7 +218,7 @@ export function OnboardingWizard() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ""))}
-                  placeholder="ornek_kullanici"
+                  placeholder="traveler_alex"
                   className="w-full pl-8 pr-10 py-3 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-cyan-400 transition-colors min-h-[44px]"
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -232,7 +232,8 @@ export function OnboardingWizard() {
                 </div>
               </div>
               <p className="text-[11px] text-slate-400">
-                Benzersiz profil bağlantınız: <span className="text-cyan-400 font-mono">alltripx.com/@{username || "..."}</span>
+                {locale === "en" ? "Unique profile link:" : "Benzersiz profil bağlantınız:"}{" "}
+                <span className="text-cyan-400 font-mono">alltripx.com/@{username || "..."}</span>
               </p>
               {usernameStatus && !usernameStatus.available && (
                 <p className="text-[11px] font-bold text-rose-400 flex items-center gap-1">
@@ -246,7 +247,7 @@ export function OnboardingWizard() {
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                 <MapPin className="w-4 h-4 text-cyan-400" />
-                <span>Ana İkametgah Ülkesi</span>
+                <span>{locale === "en" ? "Country of Residence" : "Ana İkametgah Ülkesi"}</span>
               </label>
               <select
                 value={baseCountry}
@@ -265,7 +266,7 @@ export function OnboardingWizard() {
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                 <Compass className="w-4 h-4 text-cyan-400" />
-                <span>Ana İkametgah Şehri (Zorunlu)</span>
+                <span>{locale === "en" ? "Home City (Required)" : "Ana İkametgah Şehri (Zorunlu)"}</span>
               </label>
               {baseCountry === "TR" ? (
                 <select
@@ -284,12 +285,12 @@ export function OnboardingWizard() {
                   type="text"
                   value={baseCity}
                   onChange={(e) => setBaseCity(e.target.value)}
-                  placeholder="Şehir adı yazınız (Örn: Berlin, Londra, New York)"
+                  placeholder={locale === "en" ? "Enter city (e.g. London, New York)" : "Şehir adı yazınız (Örn: Berlin, Londra, New York)"}
                   className="w-full px-3.5 py-3 rounded-xl bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 text-sm font-semibold focus:outline-none focus:border-cyan-400 transition-colors min-h-[44px]"
                 />
               )}
               <p className="text-[11px] text-slate-400">
-                Rotanızın başlangıç merkezi ve haritanızın varsayılan konumudur.
+                {locale === "en" ? "Starting center for your routes and default map location." : "Rotanızın başlangıç merkezi ve haritanızın varsayılan konumudur."}
               </p>
             </div>
 
@@ -404,7 +405,7 @@ export function OnboardingWizard() {
             <div className="space-y-2 pt-1">
               <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                 <Radar className="w-4 h-4 text-cyan-400" />
-                <span>Rota Radarı Görünürlüğü</span>
+                <span>{locale === "en" ? "Route Radar Visibility" : "Rota Radarı Görünürlüğü"}</span>
               </label>
               <select
                 value={radarPrivacy}
@@ -412,19 +413,19 @@ export function OnboardingWizard() {
                 className="w-full px-3.5 py-3 rounded-xl bg-slate-800/80 border border-slate-700 text-white text-xs font-semibold focus:outline-none focus:border-cyan-400 transition-colors cursor-pointer min-h-[44px]"
               >
                 <option value="public" className="bg-slate-900 text-white">
-                  🌍 Herkes (Tüm gezginler ortak rotaları görebilir)
+                  {locale === "en" ? "🌍 Everyone (All travelers can see matching routes)" : "🌍 Herkes (Tüm gezginler ortak rotaları görebilir)"}
                 </option>
                 <option value="friend" className="bg-slate-900 text-white">
-                  👥 Arkadaşlarım & Akrabalarım & Ailem
+                  {locale === "en" ? "👥 Friends, Relatives & Family" : "👥 Arkadaşlarım & Akrabalarım & Ailem"}
                 </option>
                 <option value="relative" className="bg-slate-900 text-white">
-                  🤝 Sadece Akrabalarım ve Ailem
+                  {locale === "en" ? "🤝 Relatives & Family Only" : "🤝 Sadece Akrabalarım ve Ailem"}
                 </option>
                 <option value="family" className="bg-slate-900 text-white">
-                  🏡 Sadece Ailem
+                  {locale === "en" ? "🏡 Family Only" : "🏡 Sadece Ailem"}
                 </option>
                 <option value="private" className="bg-slate-900 text-white">
-                  🔒 Gizli (Radarda görünme)
+                  {locale === "en" ? "🔒 Private (Do not appear on Radar)" : "🔒 Gizli (Radarda görünme)"}
                 </option>
               </select>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Locale, DEFAULT_LOCALE, LOCALE_COOKIE_NAME, SUPPORTED_LOCALES, SupportedLocale } from "./types";
 import { getDictionary } from "./dictionaries";
 import { Dictionary } from "./dictionaries/tr";
@@ -32,6 +33,7 @@ export function LanguageProvider({
   initialLocale?: Locale;
 }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
+  const router = useRouter();
 
   // Sayfa yüklendiğinde çerezi kontrol et
   useEffect(() => {
@@ -78,7 +80,14 @@ export function LanguageProvider({
     } catch {
       // Oturum açık değilse veya çevrimdışıysa sessizce devam et
     }
-  }, []);
+
+    // Sunucu bileşenlerinin yeni dil çereziyle yenilenmesi için
+    try {
+      router.refresh();
+    } catch {
+      // sessizce devam et
+    }
+  }, [router]);
 
   // Nokta notasyonuyla anahtar çözümleme (Örn: t("nav.dashboard") veya t("mail.greeting", { fullName: "Erhan" }))
   const t = useCallback(

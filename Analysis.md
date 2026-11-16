@@ -3449,6 +3449,46 @@ Kullanıcının *"O zaman 1. adım ile başlayalım. ilk olarak AllTripX.com'un 
 - `npx tsc --noEmit`: 0 hata ile başarıyla geçti.
 - `npm run build`: Turbopack 16.1.6 ile tüm 17 rota (SSG + SSR + Proxy Middleware) hatasız derlendi.
 
+---
+
+## 67. Canlı Saha Test Geri Bildirimleri Analizi ve Çözüm Mimarisi (Spam Uyarısı, İki Dilli Sözleşmeler, Z-Index Çakışması ve Global Dil Senkronizasyonu)
+
+Kullanıcının `alltripx.com` canlı ortamında yaptığı ilk kayıt, onay ve giriş testlerinde karşılaştığı 4 kritik kullanıcı deneyimi ve iş mantığı sorunu aşağıda kök nedenleri ve çözüm mimarisiyle detaylandırılmıştır:
+
+### 67.1. Kök Neden Analizi (Root Cause Analysis)
+
+1. **Hotmail / Outlook Spam Kutusuna Düşme Sorunu & Eksik Bilgilendirme:**
+   - **Kök Neden:** Hotmail, Outlook ve kurumsal Exchange sunucuları yeni kurulan veya yakın zamanda trafik almaya başlayan alan adlarından gelen mailleri sıklıkla "Gereksiz / Spam / Junk" klasörüne taşımaktadır. Kod doğrulama ekranında (`/verify-otp`) kullanıcıya bu konuda hiçbir uyarı veya yönlendirme yapılmadığından, kullanıcı e-postanın gelmediğini veya sistemin çalışmadığını zannetmektedir.
+   - **Çözüm:** [app/verify-otp/verify-otp-form.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/verify-otp/verify-otp-form.tsx) içerisine amber/turuncu çerçeveli, belirgin bir dikkat uyarısı kutusu eklenecektir:
+     - *TR:* "Önemli: Hotmail, Outlook ve kurumsal e-posta servislerinde aktivasyon kodu bazen 'Gereksiz / Spam / Junk' klasörüne düşebilir. Lütfen Spam kutunuzu kontrol etmeyi unutmayınız."
+     - *EN:* "Notice: For Hotmail, Outlook, or corporate email services, activation emails may sometimes land in your 'Junk / Spam' folder. Please make sure to check your Spam folder."
+     - Ayrıca sayfa `useTranslation` ile donatılarak sağ üstüne mini dil değiştirici eklenecek ve başlık `AllTripX` olarak güncellenecektir.
+
+2. **Sözleşmelerin (KVKK, Kullanıcı Sözleşmesi, Gizlilik) Sadece Türkçe Olması:**
+   - **Kök Neden:** [components/agreements/force-contract-signature.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/agreements/force-contract-signature.tsx) bileşeni `useTranslation` kancasını kullanmamakta; modal başlığı, sekmeler, onay kutusu metinleri ve sözleşme metinleri Türkçe olarak sabit kodlanmıştır. İngilizce seçimle giren bir yabancı kullanıcı sözleşmeleri anlayamamaktadır.
+   - **Çözüm:**
+     - Modal başlığına sağ üst köşeye hızlı bir `TR / EN` buton grubu eklenecektir.
+     - `useTranslation()` entegrasyonu ile tüm başlıklar, butonlar ("Okudum, Onaylıyorum" / "I Read and Agree") ve onay kutusu etiketleri dile göre dinamikleşecektir.
+     - `TERMS_CONTENT`, `KVKK_CONTENT` ve `PRIVACY_CONTENT` için hem eksiksiz Türkçe hem de profesyonel uluslararası İngilizce (GDPR / Global Traveler Terms) sözleşme metinleri hazırlanacak; seçili dile göre anında ilgili dildeki sözleşme metni gösterilecektir.
+
+3. **Onboarding Sihirbazı ile Harita Butonlarının Z-Index Çakışması:**
+   - **Kök Neden:** Kullanıcının paylaştığı ekran görüntüsünde, haritanın üst kısmında yüzen istatistik ve gezinme çubuğu (`world-map.tsx` satır 1031) `z-[990]` z-index değerine sahipken, ilk kayıt sonrası açılan `OnboardingWizard` modalı (`onboarding-wizard.tsx` satır 170) yalnızca `z-50` değerine sahiptir. `z-[990] > z-50` olduğu için harita üzerindeki "0 Ülke, 0 Şehir, 0 Rota, Seyahat & Keşif" butonları modalın arkasında kalmak yerine modalın tam ortasından yatay bir şerit halinde geçerek içeriğin üzerini örtmektedir. Ayrıca başlıkta eski marka adı "TatildeBugün'e Hoş Geldin! 🌴" yazmaktadır.
+   - **Çözüm:**
+     - `OnboardingWizard` overlay z-index değeri `z-[9995]` seviyesine çekilecek, arka plan `bg-slate-950/85 backdrop-blur-md` ile haritayı tamamen karartacaktır.
+     - Karşılama başlığı "AllTripX'e Hoş Geldin! 🌴" / "Welcome to AllTripX! 🌴" olarak güncellenecek; 1. ve 2. adımdaki tüm etiketler `useTranslation()` ile iki dilli çalışacaktır.
+
+4. **Sisteme Giriş Yapıldığında Harita Ekranının EN / TR Seçimine Tepki Vermemesi:**
+   - **Kök Neden:**
+     1. [components/map/world-map.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/map/world-map.tsx) bileşeni `useTranslation` kancasını hiç kullanmamakta; tüm butonlar ("Ülke", "Şehir", "Rota", "Seyahat", "Gün Yolda", "Rotalarım", "Seyahatlerim", "Seyahat & Keşif", "Dünya Görünümüne Dön") Türkçe sabit dize (hardcoded) olarak kalmıştır.
+     2. [lib/i18n/context.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/i18n/context.tsx) içerisindeki `setLanguage` fonksiyonu, `NEXT_LOCALE` çerezini güncelleyip React state'ini değiştirmesine rağmen `router.refresh()` çalıştırmamaktadır. Bu nedenle sunucu bileşenleri ([app/dashboard/page.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/dashboard/page.tsx) vb.) yeni dil çerezini okuyup sayfayı yeniden render etmemektedir.
+   - **Çözüm:**
+     - `lib/i18n/context.tsx` içerisindeki dil değiştiriciye `useRouter().refresh()` eklenecek, böylece sunucu bileşenleri de anında revalidate olacaktır.
+     - `world-map.tsx` içerisine `useTranslation` dahil edilecek; sözlüğe `dashboard.countries`, `dashboard.cities`, `dashboard.routes`, `dashboard.trips`, `dashboard.daysOnRoad`, `dashboard.myRoutes`, `dashboard.myTrips`, `dashboard.travelAndExplore`, `dashboard.backToWorld` anahtarları eklenerek harita üzerindeki tüm butonlar anında İngilizce/Türkçe arasında geçecektir.
+     - `app/dashboard/page.tsx` sunucu bileşeni `getServerTranslation` ile iki dilli hale getirilecektir.
+
+---
+
+
 
 
 
