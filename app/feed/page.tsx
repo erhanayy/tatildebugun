@@ -3,12 +3,16 @@ import { getFeedPosts } from "@/lib/actions/social";
 import { AppHeader } from "@/components/navigation/app-header";
 import { FeedView } from "@/components/social/feed-view";
 import { redirect } from "next/navigation";
-import { Users, Compass, Sparkles } from "lucide-react";
+import { Users } from "lucide-react";
+import { getServerTranslation } from "@/lib/i18n/server";
 
-export const metadata = {
-  title: "Gezgin Akışı | TatildeBugün",
-  description: "Diğer gezginlerin rotalarını, şehir ziyaretlerini ve seyahat anılarını keşfedin.",
-};
+export async function generateMetadata() {
+  const { t } = await getServerTranslation();
+  return {
+    title: `${t("feed.title")} | AllTripX`,
+    description: t("feed.subtitle"),
+  };
+}
 
 export default async function FeedPage() {
   const session = await auth();
@@ -17,6 +21,7 @@ export default async function FeedPage() {
     redirect("/login");
   }
 
+  const { t } = await getServerTranslation();
   const posts = await getFeedPosts("all");
 
   return (
@@ -30,13 +35,13 @@ export default async function FeedPage() {
         <div className="max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-semibold mb-2">
             <Users className="w-3.5 h-3.5" />
-            <span>Topluluk & Keşif Akışı</span>
+            <span>{t("feed.badge")}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Gezginlerin Seyahat Akışı 🌴
+            {t("feed.title")}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Gezginlerin dünya genelinde eklediği bayrakları, planladığı rotaları keşfedin ve ilham alın.
+            {t("feed.subtitle")}
           </p>
         </div>
 

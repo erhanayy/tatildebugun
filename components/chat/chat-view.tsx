@@ -24,6 +24,7 @@ import {
   type ChatMessageItem,
 } from "@/lib/actions/chat";
 import { toast } from "sonner";
+import { useTranslation } from "@/lib/i18n/context";
 
 interface ChatViewProps {
   initialConversations: ConversationItem[];
@@ -36,6 +37,7 @@ export function ChatView({
   currentUserId,
   defaultPartnerId,
 }: ChatViewProps) {
+  const { locale, t } = useTranslation();
   const [conversations, setConversations] = useState<ConversationItem[]>(initialConversations);
   const [activePartnerId, setActivePartnerId] = useState<string | null>(
     defaultPartnerId || initialConversations[0]?.partner.id || null
@@ -137,7 +139,7 @@ export function ChatView({
       );
       refreshConversations();
     } else {
-      toast.error(res.message || "Mesaj iletilemedi.");
+      toast.error(res.message || t("chat.messageError"));
       // Hata durumunda geri al
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
     }
@@ -175,10 +177,10 @@ export function ChatView({
           <div className="flex items-center justify-between">
             <h2 className="text-base font-extrabold text-white flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-cyan-400" />
-              <span>Gezgin Sohbeti</span>
+              <span>{t("chat.title")}</span>
             </h2>
             <span className="text-[11px] font-semibold text-slate-400 bg-slate-800/80 px-2.5 py-0.5 rounded-full border border-slate-700/60">
-              {conversations.length} Eşleşme
+              {conversations.length} {t("chat.matchesCount")}
             </span>
           </div>
 
@@ -186,10 +188,10 @@ export function ChatView({
             <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Arkadaş veya şehir ara..."
+              placeholder={t("chat.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors min-h-[44px]"
             />
           </div>
         </div>
@@ -201,21 +203,21 @@ export function ChatView({
               <div className="w-14 h-14 rounded-2xl bg-cyan-950/40 border border-cyan-800/60 text-cyan-400 flex items-center justify-center text-2xl mb-3 shadow-inner">
                 🧭
               </div>
-              <h3 className="text-xs font-bold text-white mb-1">Henüz Eşleşmeniz Yok</h3>
+              <h3 className="text-xs font-bold text-white mb-1">{t("chat.noMatchesTitle")}</h3>
               <p className="text-[11px] text-slate-400 leading-relaxed mb-4 max-w-[220px]">
-                Gezgin Eşleşmesi (Radar) sayfasına giderek rotanızla çakışan gezginlerle tanışın ve sohbete başlayın!
+                {t("chat.noMatchesDesc")}
               </p>
               <Link
                 href="/match"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md hover:from-cyan-500 hover:to-blue-500 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md hover:from-cyan-500 hover:to-blue-500 transition-all cursor-pointer min-h-[44px]"
               >
                 <Compass className="w-3.5 h-3.5" />
-                <span>Radara Git</span>
+                <span>{t("chat.goToRadarBtn")}</span>
               </Link>
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-500">
-              Aramanıza uygun sohbet bulunamadı.
+              {t("chat.noSearchTitle")}
             </div>
           ) : (
             filteredConversations.map((item) => {
@@ -265,7 +267,9 @@ export function ChatView({
                       {item.lastMessage ? (
                         item.lastMessage.messageText
                       ) : (
-                        <span className="text-slate-500 italic">Sohbeti başlat...</span>
+                        <span className="text-slate-500 italic">
+                          {locale === "en" ? "Start chatting..." : "Sohbeti başlat..."}
+                        </span>
                       )}
                     </p>
                   </div>
@@ -332,7 +336,7 @@ export function ChatView({
               {/* Rota Detayı Rozeti */}
               <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/50 border border-cyan-800/50 text-cyan-300 text-xs font-semibold">
                 <Coffee className="w-3.5 h-3.5 text-amber-400" />
-                <span>Eşleşen Seyahat Arkadaşı</span>
+                <span>{locale === "en" ? "Matched Travel Buddy" : "Eşleşen Seyahat Arkadaşı"}</span>
               </div>
             </div>
 
@@ -344,20 +348,26 @@ export function ChatView({
                   ☕
                 </div>
                 <h4 className="text-xs font-bold text-white">
-                  {activeConversation.partner.fullName} ile eşleştiniz!
+                  {locale === "en"
+                    ? `You matched with ${activeConversation.partner.fullName}!`
+                    : `${activeConversation.partner.fullName} ile eşleştiniz!`}
                 </h4>
                 <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                  {activeConversation.matchInfo.cityName} seyahatiniz için buluşma planı yapabilir, deneyimlerinizi paylaşabilirsiniz.
+                  {locale === "en"
+                    ? `You can coordinate plans and share tips for your trip to ${activeConversation.matchInfo.cityName}.`
+                    : `${activeConversation.matchInfo.cityName} seyahatiniz için buluşma planı yapabilir, deneyimlerinizi paylaşabilirsiniz.`}
                 </p>
               </div>
 
               {loadingMessages ? (
                 <div className="p-8 text-center text-xs text-slate-500">
-                  Mesajlar yükleniyor...
+                  {locale === "en" ? "Loading messages..." : "Mesajlar yükleniyor..."}
                 </div>
               ) : messages.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-500">
-                  Henüz bir mesaj yazılmadı. Aşağıdaki hızlı ifadelerden birini seçerek veya mesajınızı yazarak sohbeti başlatın!
+                  {locale === "en"
+                    ? "No messages yet. Send a greeting or pick a quick prompt below!"
+                    : "Henüz bir mesaj yazılmadı. Aşağıdaki hızlı ifadelerden birini seçerek veya mesajınızı yazarak sohbeti başlatın!"}
                 </div>
               ) : (
                 messages.map((m) => (
@@ -398,31 +408,31 @@ export function ChatView({
             <div className="px-4 sm:px-6 py-2 border-t border-slate-800/60 bg-slate-950/40 flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
-                onClick={() => handleQuickPrompt("📍 Nerede buluşalım?")}
-                className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-[11px] text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+                onClick={() => handleQuickPrompt(locale === "en" ? "📍 Where should we meet?" : "📍 Nerede buluşalım?")}
+                className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-[11px] text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer min-h-[44px] flex items-center"
               >
-                📍 Nerede buluşalım?
+                {locale === "en" ? "📍 Where should we meet?" : "📍 Nerede buluşalım?"}
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickPrompt("☕ Müsait olduğunda bir kahve içelim mi?")}
-                className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-[11px] text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+                onClick={() => handleQuickPrompt(locale === "en" ? "☕ Grab a coffee sometime?" : "☕ Müsait olduğunda bir kahve içelim mi?")}
+                className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-[11px] text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer min-h-[44px] flex items-center"
               >
-                ☕ Bir kahve içelim mi?
+                {locale === "en" ? "☕ Grab a coffee?" : "☕ Bir kahve içelim mi?"}
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickPrompt("✈️ Seyahat planın nasıl gidiyor?")}
-                className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-[11px] text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+                onClick={() => handleQuickPrompt(locale === "en" ? "✈️ How is your trip going?" : "✈️ Seyahat planın nasıl gidiyor?")}
+                className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-[11px] text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer min-h-[44px] flex items-center"
               >
-                ✈️ Seyahat planın nasıl?
+                {locale === "en" ? "✈️ How's your trip?" : "✈️ Seyahat planın nasıl?"}
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickPrompt("🌴 Rotalarımızı birleştirelim mi?")}
-                className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-[11px] text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer"
+                onClick={() => handleQuickPrompt(locale === "en" ? "🌴 Let's combine our routes!" : "🌴 Rotalarımızı birleştirelim mi?")}
+                className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-[11px] text-slate-300 hover:text-cyan-300 transition-colors cursor-pointer min-h-[44px] flex items-center"
               >
-                🌴 Rotamızı birleştirelim!
+                {locale === "en" ? "🌴 Let's team up!" : "🌴 Rotamızı birleştirelim!"}
               </button>
             </div>
 
@@ -435,16 +445,16 @@ export function ChatView({
                 type="text"
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
-                placeholder="Bir mesaj yazın... (Enter ile gönder)"
-                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                placeholder={locale === "en" ? "Type a message... (Enter to send)" : "Bir mesaj yazın... (Enter ile gönder)"}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors min-h-[44px]"
               />
               <button
                 type="submit"
                 disabled={!messageText.trim() || sending}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-600/25 transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-600/25 transition-all cursor-pointer min-h-[44px]"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Gönder</span>
+                <span className="hidden sm:inline">{t("chat.sendBtn")}</span>
               </button>
             </form>
           </>
@@ -453,9 +463,13 @@ export function ChatView({
             <div className="w-16 h-16 rounded-3xl bg-slate-800/60 border border-slate-700/60 text-slate-400 flex items-center justify-center text-3xl mb-3 shadow-inner">
               💬
             </div>
-            <h3 className="text-sm font-bold text-white mb-1">Bir Sohbet Seçin</h3>
+            <h3 className="text-sm font-bold text-white mb-1">
+              {locale === "en" ? "Select a Conversation" : "Bir Sohbet Seçin"}
+            </h3>
             <p className="text-xs text-slate-400 max-w-sm">
-              Sol taraftaki seyahat arkadaşlarınızdan birine tıklayarak sohbet geçmişinizi görüntüleyin ve mesajlaşmaya başlayın.
+              {locale === "en"
+                ? "Select a travel buddy from the left panel to view messages and start chatting."
+                : "Sol taraftaki seyahat arkadaşlarınızdan birine tıklayarak sohbet geçmişinizi görüntüleyin ve mesajlaşmaya başlayın."}
             </p>
           </div>
         )}

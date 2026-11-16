@@ -3,11 +3,15 @@ import { redirect } from "next/navigation";
 import { getConversationList } from "@/lib/actions/chat";
 import { AppHeader } from "@/components/navigation/app-header";
 import { ChatView } from "@/components/chat/chat-view";
+import { getServerTranslation } from "@/lib/i18n/server";
 
-export const metadata = {
-  title: "Gezgin Sohbeti & Özel Mesajlar | TatildeBugün",
-  description: "Eşleştiğiniz seyahat arkadaşlarınızla rotalarınızı birleştirin ve anlık mesajlaşın.",
-};
+export async function generateMetadata() {
+  const { t } = await getServerTranslation();
+  return {
+    title: `${t("chat.title")} | AllTripX`,
+    description: t("chat.noMatchesDesc"),
+  };
+}
 
 interface MessagesPageProps {
   searchParams: Promise<{

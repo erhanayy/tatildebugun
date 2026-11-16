@@ -5,9 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageSquare } from "lucide-react";
 import { getUnreadChatCount } from "@/lib/actions/chat";
+import { useTranslation } from "@/lib/i18n/context";
 
 export function ChatBadge() {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const [unreadCount, setUnreadCount] = useState(0);
 
   async function loadCount() {
@@ -35,7 +37,7 @@ export function ChatBadge() {
           ? "bg-slate-800 text-cyan-400 border border-slate-700"
           : "text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent"
       }`}
-      aria-label="Gezgin Sohbeti"
+      aria-label={t("chat.badgeTitle")}
     >
       <MessageSquare className="w-5 h-5 group-hover:scale-110 transition-transform" />
 
@@ -48,7 +50,7 @@ export function ChatBadge() {
 
       {/* Tooltip */}
       <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
-        Gezgin Sohbeti {unreadCount > 0 ? `(${unreadCount} yeni)` : ""}
+        {t("chat.badgeTitle")} {unreadCount > 0 ? `(${unreadCount} ${t("notifications.newBadge")})` : ""}
         <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
       </span>
     </Link>

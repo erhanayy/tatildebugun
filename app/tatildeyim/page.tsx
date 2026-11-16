@@ -3,12 +3,15 @@ import { AppHeader } from "@/components/navigation/app-header";
 import { TatildeyimView } from "@/components/places/tatildeyim-view";
 import { getUserTripsForGuide, getTripGuideDetails } from "@/lib/actions/places";
 import { redirect } from "next/navigation";
-import { Luggage } from "lucide-react";
+import { getServerTranslation } from "@/lib/i18n/server";
 
-export const metadata = {
-  title: "Tatildeyim - Canlı Tur Rehberim | TatildeBugün",
-  description: "Aktif seyahat rotanızdaki şehirlerde görülecek yerleri keşfedin, gördüklerinizi zaman damgasıyla tikleyin ve puanlayın.",
-};
+export async function generateMetadata() {
+  const { t } = await getServerTranslation();
+  return {
+    title: `${t("tatildeyim.title")} | AllTripX`,
+    description: t("tatildeyim.subtitle"),
+  };
+}
 
 interface TatildeyimPageProps {
   searchParams: Promise<{ tripId?: string }>;

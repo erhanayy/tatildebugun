@@ -297,10 +297,10 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                    Arkadaşını Davet Et 🎁
+                    {t("inviteModal.title")}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Birlikte gezin, rotalarınızı eşleştirin
+                    {t("inviteModal.subtitle")}
                   </p>
                 </div>
               </div>
@@ -314,8 +314,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Özel davet linkin ile arkadaşlarını TatildeBugün'e davet et. Aynı şehirde ve tarihte
-              buluştuğunuzda anında eşleşip rota oluşturun!
+              {t("inviteModal.description")}
             </p>
 
             {/* Link Kopyalama Kutusu */}
@@ -332,7 +331,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
                 className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? "Kopyalandı" : "Kopyala"}</span>
+                <span>{copied ? t("inviteModal.copiedBtn") : t("inviteModal.copyBtn")}</span>
               </button>
             </div>
 
@@ -343,7 +342,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all cursor-pointer"
             >
               <MessageCircle className="w-4 h-4" />
-              <span>WhatsApp ile Hemen Paylaş</span>
+              <span>{t("inviteModal.shareWaBtn")}</span>
             </button>
           </div>
         </div>

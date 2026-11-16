@@ -20,9 +20,11 @@ import {
   type NotificationItem,
 } from "@/lib/actions/notifications";
 import { toast } from "sonner";
+import { useTranslation } from "@/lib/i18n/context";
 
 export function NotificationBell() {
   const router = useRouter();
+  const { locale, t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -103,7 +105,7 @@ export function NotificationBell() {
     await markAllNotificationsAsRead();
     setUnreadCount(0);
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    toast.success("Tüm bildirimler okundu olarak işaretlendi.");
+    toast.success(t("notifications.markAllSuccess"));
   }
 
   function formatTime(date: Date | string) {
@@ -112,10 +114,10 @@ export function NotificationBell() {
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-    if (minutes < 1) return "Şimdi";
-    if (minutes < 60) return `${minutes} dk önce`;
-    if (hours < 24) return `${hours} saat önce`;
-    return `${days} gün önce`;
+    if (minutes < 1) return t("notifications.justNow");
+    if (minutes < 60) return `${minutes} ${t("notifications.minutesAgo")}`;
+    if (hours < 24) return `${hours} ${t("notifications.hoursAgo")}`;
+    return `${days} ${t("notifications.daysAgo")}`;
   }
 
   function getIcon(type: string) {
@@ -144,7 +146,7 @@ export function NotificationBell() {
             ? "bg-slate-800 text-cyan-400 border border-slate-700"
             : "text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent"
         }`}
-        aria-label="Bildirimler"
+        aria-label={t("notifications.title")}
       >
         <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
 
@@ -158,7 +160,7 @@ export function NotificationBell() {
         {/* Tooltip (Menü açık değilken gösterilir) */}
         {!isOpen && (
           <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
-            Bildirimler {unreadCount > 0 ? `(${unreadCount} yeni)` : ""}
+            {t("notifications.title")} {unreadCount > 0 ? `(${unreadCount} ${t("notifications.newBadge")})` : ""}
             <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
           </span>
         )}
@@ -170,10 +172,10 @@ export function NotificationBell() {
           {/* Başlık Alanı */}
           <div className="p-3.5 px-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/40">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-extrabold text-white">Bildirimler</span>
+              <span className="text-sm font-extrabold text-white">{t("notifications.title")}</span>
               {unreadCount > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-bold">
-                  {unreadCount} yeni
+                  {unreadCount} {t("notifications.newBadge")}
                 </span>
               )}
             </div>
@@ -185,7 +187,7 @@ export function NotificationBell() {
                 className="text-[11px] font-semibold text-slate-400 hover:text-cyan-400 flex items-center gap-1 transition-colors cursor-pointer"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
-                <span>Tümünü Okundu Yap</span>
+                <span>{t("notifications.markAllRead")}</span>
               </button>
             )}
           </div>
@@ -194,16 +196,16 @@ export function NotificationBell() {
           <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-800/50">
             {loading && notifications.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs">
-                Bildirimler yükleniyor...
+                {t("notifications.loading")}
               </div>
             ) : notifications.length === 0 ? (
               <div className="p-10 text-center flex flex-col items-center">
                 <div className="w-12 h-12 rounded-2xl bg-slate-800/60 flex items-center justify-center text-2xl mb-2.5 border border-slate-700/60">
                   🌴
                 </div>
-                <h4 className="text-xs font-bold text-slate-300">Henüz bildiriminiz yok</h4>
+                <h4 className="text-xs font-bold text-slate-300">{t("notifications.emptyTitle")}</h4>
                 <p className="text-[11px] text-slate-500 mt-1 max-w-[220px]">
-                  Seyahatleriniz ve rotalarınızla etkileşim olduğunda burada görünecektir.
+                  {t("notifications.emptyDesc")}
                 </p>
               </div>
             ) : (

@@ -282,13 +282,15 @@ export function MatchView({
     setSelectedCandidate(candidate);
     const dateText =
       candidate.overlapStartDate && candidate.overlapEndDate
-        ? `${new Date(candidate.overlapStartDate).toLocaleDateString("tr-TR")} - ${new Date(
+        ? `${new Date(candidate.overlapStartDate).toLocaleDateString(locale === "en" ? "en-US" : "tr-TR")} - ${new Date(
             candidate.overlapEndDate
-          ).toLocaleDateString("tr-TR")}`
-        : "aynı tarihlerde";
+          ).toLocaleDateString(locale === "en" ? "en-US" : "tr-TR")}`
+        : locale === "en" ? "around the same dates" : "aynı tarihlerde";
 
     setIntroMessage(
-      `Merhaba ${candidate.user.fullName}! Ben de ${dateText} ${candidate.cityName} seyahatindeyim. Rotalarımızı birleştirmek ve bir kahve eşliğinde deneyimlerimizi paylaşmak ister misin? ☕`
+      locale === "en"
+        ? `Hello ${candidate.user.fullName}! I will also be traveling to ${candidate.cityName} ${dateText}. Would you like to connect and share travel tips over coffee? ☕`
+        : `Merhaba ${candidate.user.fullName}! Ben de ${dateText} ${candidate.cityName} seyahatindeyim. Rotalarımızı birleştirmek ve bir kahve eşliğinde deneyimlerimizi paylaşmak ister misin? ☕`
     );
   }
 
@@ -308,7 +310,7 @@ export function MatchView({
     });
 
     if (res.success && res.match) {
-      toast.success("Arkadaşlık teklifin başarıyla iletildi! 🎉");
+      toast.success(t("match.proposalSent"));
       // Listede durumu güncelle
       setCandidates((prev) =>
         prev.map((c) =>
@@ -326,7 +328,7 @@ export function MatchView({
       ]);
       setSelectedCandidate(null);
     } else {
-      toast.error(res.message || "İstek gönderilemedi.");
+      toast.error(res.message || (locale === "en" ? "Failed to send request." : "İstek gönderilemedi."));
     }
 
     setIsSubmitting(false);
@@ -411,7 +413,7 @@ export function MatchView({
   async function handleRespond(matchId: string, action: "accepted" | "declined") {
     const res = await respondMatchRequest(matchId, action);
     if (res.success) {
-      toast.success(action === "accepted" ? "Teklif kabul edildi! 🤝" : "Teklif reddedildi.");
+      toast.success(action === "accepted" ? t("match.acceptSuccess") : t("match.declineSuccess"));
       setIncoming((prev) =>
         prev.map((item) =>
           item.match.id === matchId
@@ -420,7 +422,7 @@ export function MatchView({
         )
       );
     } else {
-      toast.error(res.message || "İşlem tamamlanamadı.");
+      toast.error(res.message || (locale === "en" ? "Action could not be completed." : "İşlem tamamlanamadı."));
     }
   }
 
@@ -432,13 +434,13 @@ export function MatchView({
           <div className="space-y-1.5 max-w-xl">
             <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[11px] font-extrabold border border-cyan-500/30">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Gezgin Ağını Büyüt</span>
+              <span>{t("match.bannerBadge")}</span>
             </div>
             <h3 className="text-base sm:text-lg font-black text-white">
-              {locale === "en" ? "Invite Friends to AllTripX 🌴" : "Arkadaşlarını AllTripX'e Davet Et 🌴"}
+              {t("match.bannerTitle")}
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Özel davet linkini WhatsApp'ta paylaş; arkadaşların haritalarını ve seyahat rotalarını eklediğinde rotalarınız çakıştığında anında bildirim al!
+              {t("match.bannerDesc")}
             </p>
           </div>
 
@@ -449,7 +451,7 @@ export function MatchView({
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer min-h-[44px]"
             >
               <MessageCircle className="w-4 h-4" />
-              <span>WhatsApp'ta Paylaş</span>
+              <span>{t("match.shareWhatsApp")}</span>
             </button>
 
             <button
@@ -458,7 +460,7 @@ export function MatchView({
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 active:scale-95 transition-all cursor-pointer min-h-[44px]"
             >
               {copiedInvite ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-              <span>{copiedInvite ? "Kopyalandı! ✓" : "Linki Kopyala"}</span>
+              <span>{copiedInvite ? t("match.copiedLink") : t("match.copyLink")}</span>
             </button>
           </div>
         </div>
@@ -540,7 +542,7 @@ export function MatchView({
           ) : (
             <Smartphone className="w-4 h-4 text-cyan-200" />
           )}
-          <span>{isScanningContacts ? "Taranıyor..." : "Rehberimi Tara 📱"}</span>
+          <span>{isScanningContacts ? t("match.scanningBtn") : t("match.scanBtn")}</span>
         </button>
       </div>
 
@@ -551,10 +553,9 @@ export function MatchView({
             <div className="py-20 text-center text-slate-400 rounded-3xl bg-slate-900/40 border border-slate-800 space-y-4">
               <Compass className="w-10 h-10 mx-auto text-cyan-500 opacity-60" />
               <div className="max-w-md mx-auto space-y-1.5 px-4">
-                <h4 className="font-bold text-white text-base">Henüz Çakışan Rota Bulunmadı</h4>
+                <h4 className="font-bold text-white text-base">{t("match.radarEmptyTitle")}</h4>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Kişisel haritana daha fazla şehir ve seyahat tarihi ekledikçe aynı destinasyonda olan
-                  gezginlerle eşleşme radarın canlanacaktır!
+                  {t("match.radarEmptyDesc")}
                 </p>
               </div>
               <div className="pt-2">
@@ -564,7 +565,7 @@ export function MatchView({
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg shadow-cyan-600/25 cursor-pointer min-h-[44px]"
                 >
                   <Smartphone className="w-4 h-4" />
-                  <span>Rehberimdeki Arkadaşları Tara 📱</span>
+                  <span>{t("match.scanFriendsBtn")}</span>
                 </button>
               </div>
             </div>
@@ -598,11 +599,11 @@ export function MatchView({
                       {isExact ? (
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-pink-950/60 text-pink-300 border border-pink-800/80 flex items-center gap-1">
                           <Sparkles className="w-3 h-3 text-pink-400" />
-                          <span>Tarih Çakışması</span>
+                          <span>{t("match.dateOverlap")}</span>
                         </span>
                       ) : (
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-950/60 text-cyan-300 border border-cyan-800/80">
-                          Ortak Rota
+                          {t("match.sharedRoute")}
                         </span>
                       )}
                     </div>
@@ -617,7 +618,7 @@ export function MatchView({
                     <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
                       <div className="flex items-center gap-1 text-[11px] text-slate-400">
                         <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{cand.userVisitCount} Şehir Ziyareti</span>
+                        <span>{cand.userVisitCount} {t("match.cityVisitsCount")}</span>
                       </div>
 
                       {cand.hasExistingRequest ? (
@@ -635,7 +636,7 @@ export function MatchView({
                           className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold shadow-md shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer min-h-[44px]"
                         >
                           <Coffee className="w-3.5 h-3.5" />
-                          <span>Tanışma Teklifi Gönder</span>
+                          <span>{t("match.sendProposalBtn")}</span>
                         </button>
                       )}
                     </div>

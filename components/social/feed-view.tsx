@@ -24,6 +24,7 @@ import {
   Bike,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "@/lib/i18n/context";
 
 interface FeedViewProps {
   initialFeed: FeedItem[];
@@ -31,6 +32,7 @@ interface FeedViewProps {
 }
 
 export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
+  const { locale, t } = useTranslation();
   const [feedItems, setFeedItems] = useState<FeedItem[]>(initialFeed);
   const [activeTab, setActiveTab] = useState<"all" | "visits" | "trips">("all");
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
@@ -95,7 +97,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
 
     const res = await toggleReaction(item.type, item.id, reactionType);
     if (!res.success) {
-      toast.error("Tepki kaydedilemedi.");
+      toast.error(t("feed.reactionError"));
     }
   }
 
@@ -119,9 +121,9 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
         })
       );
       setCommentInputs((prev) => ({ ...prev, [item.id]: "" }));
-      toast.success("Yorumun paylaşıldı!");
+      toast.success(t("feed.commentSuccess"));
     } else {
-      toast.error(res.message || "Yorum eklenirken hata oluştu.");
+      toast.error(res.message || t("feed.commentError"));
     }
 
     setSubmittingComment((prev) => ({ ...prev, [item.id]: false }));
@@ -152,15 +154,15 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
       <div className="flex items-center justify-between border-b border-slate-800 pb-3">
         <div className="flex items-center gap-2">
           {[
-            { id: "all", label: "Tümü (Keşfet)" },
-            { id: "visits", label: "Şehir Ziyaretleri" },
-            { id: "trips", label: "Rotalar" },
+            { id: "all", label: t("feed.tabAll") },
+            { id: "visits", label: t("feed.tabVisits") },
+            { id: "trips", label: t("feed.tabTrips") },
           ].map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[44px] ${
                 activeTab === tab.id
                   ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shadow-sm"
                   : "text-slate-400 hover:text-white hover:bg-slate-800/60"
@@ -172,7 +174,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
         </div>
 
         <span className="text-xs text-slate-500 font-medium">
-          {filteredItems.length} Gönderi
+          {filteredItems.length} {t("feed.postsCount")}
         </span>
       </div>
 
@@ -180,9 +182,9 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
       {filteredItems.length === 0 ? (
         <div className="py-20 text-center text-slate-400 rounded-3xl bg-slate-900/40 border border-slate-800">
           <Sparkles className="w-10 h-10 mx-auto mb-3 text-cyan-500 opacity-60" />
-          <h4 className="font-bold text-white text-base">Henüz paylaşım bulunamadı</h4>
+          <h4 className="font-bold text-white text-base">{t("feed.emptyTitle")}</h4>
           <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-            Haritaya bayrak veya rota ekleyerek topluluk akışında ilk hikayeni sen başlatabilirsin!
+            {t("feed.emptyDesc")}
           </p>
         </div>
       ) : (
@@ -207,7 +209,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                         {item.author.fullName}
                       </h4>
                       <p className="text-[11px] text-slate-400">
-                        {new Date(item.createdAt).toLocaleDateString("tr-TR", {
+                        {new Date(item.createdAt).toLocaleDateString(locale === "en" ? "en-US" : "tr-TR", {
                           day: "numeric",
                           month: "long",
                           hour: "2-digit",
@@ -220,12 +222,12 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                   {isTrip ? (
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-950/60 text-indigo-300 border border-indigo-800/60">
                       <Navigation className="w-3.5 h-3.5" />
-                      <span>Seyahat Rotası</span>
+                      <span>{t("feed.badgeTrip")}</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-cyan-950/60 text-cyan-300 border border-cyan-800/60">
                       <MapPin className="w-3.5 h-3.5" />
-                      <span>Şehir Ziyareti</span>
+                      <span>{t("feed.badgeVisit")}</span>
                     </span>
                   )}
                 </div>
@@ -266,12 +268,12 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                         {item.status === "planned" ? (
                           <>
                             <Clock className="w-3.5 h-3.5" />
-                            <span>Planlanan Rota</span>
+                            <span>{t("feed.plannedRoute")}</span>
                           </>
                         ) : (
                           <>
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Tamamlandı</span>
+                            <span>{t("feed.completed")}</span>
                           </>
                         )}
                       </span>
@@ -282,7 +284,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                   {isTrip && item.stops && item.stops.length > 0 && (
                     <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
                       <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        Rota Durakları ({item.stops.length})
+                        {t("feed.routeStops")} ({item.stops.length})
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-200">
                         {item.stops.map((stop, idx) => (
@@ -314,9 +316,9 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                   {/* Reaksiyonlar */}
                   <div className="flex items-center gap-1.5">
                     {[
-                      { type: "heart", label: "Beğen", icon: Heart, activeClass: "text-red-500 fill-red-500 bg-red-500/10 border-red-500/30" },
-                      { type: "plane", label: "Hayalim", icon: Plane, activeClass: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" },
-                      { type: "palm", label: "Harika", icon: Palmtree, activeClass: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" },
+                      { type: "heart", label: t("feed.reactHeart"), icon: Heart, activeClass: "text-red-500 fill-red-500 bg-red-500/10 border-red-500/30" },
+                      { type: "plane", label: t("feed.reactPlane"), icon: Plane, activeClass: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" },
+                      { type: "palm", label: t("feed.reactPalm"), icon: Palmtree, activeClass: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" },
                     ].map((btn) => {
                       const Icon = btn.icon;
                       const count = item.reactions.counts[btn.type as ReactionType] || 0;
@@ -327,7 +329,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                           key={btn.type}
                           type="button"
                           onClick={() => handleReaction(item, btn.type as ReactionType)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer min-h-[44px] ${
                             isSelected
                               ? btn.activeClass
                               : "border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800"
@@ -346,10 +348,10 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                     onClick={() =>
                       setOpenComments((prev) => ({ ...prev, [item.id]: !prev[item.id] }))
                     }
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px]"
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
-                    <span>{item.comments.length} Yorum</span>
+                    <span>{item.comments.length} {t("feed.commentsCount")}</span>
                   </button>
                 </div>
 
@@ -360,7 +362,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                     <div className="space-y-2.5 max-h-60 overflow-y-auto">
                       {item.comments.length === 0 ? (
                         <p className="text-xs text-slate-500 italic py-2 text-center">
-                          İlk yorumu sen yaz!
+                          {t("feed.firstComment")}
                         </p>
                       ) : (
                         item.comments.map((comm) => (
@@ -371,7 +373,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                             <div className="flex items-center justify-between">
                               <span className="font-bold text-white">{comm.userName}</span>
                               <span className="text-[10px] text-slate-500">
-                                {new Date(comm.createdAt).toLocaleDateString("tr-TR")}
+                                {new Date(comm.createdAt).toLocaleDateString(locale === "en" ? "en-US" : "tr-TR")}
                               </span>
                             </div>
                             <p className="text-slate-300 leading-relaxed">{comm.commentText}</p>
@@ -394,14 +396,14 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                             handleAddComment(item);
                           }
                         }}
-                        placeholder="Yorumunu yaz..."
-                        className="flex-1 px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-cyan-500"
+                        placeholder={t("feed.commentPlaceholder")}
+                        className="flex-1 px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-cyan-500 min-h-[44px]"
                       />
                       <button
                         type="button"
                         disabled={submittingComment[item.id] || !commentInputs[item.id]?.trim()}
                         onClick={() => handleAddComment(item)}
-                        className="p-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-40 transition-colors cursor-pointer"
+                        className="p-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-40 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
                       >
                         <Send className="w-4 h-4" />
                       </button>

@@ -24,6 +24,7 @@ import {
   Plus,
   ArrowRight,
 } from "lucide-react";
+import { useTranslation } from "@/lib/i18n/context";
 
 interface TatildeyimViewProps {
   userTrips: Trip[];
@@ -46,6 +47,7 @@ export function TatildeyimView({
   stops,
   timeline,
 }: TatildeyimViewProps) {
+  const { locale, t } = useTranslation();
   // Seçili tur ID'si (varsayılan aktif tur)
   const [selectedTripId, setSelectedTripId] = useState<string>(
     activeTrip?.id || (userTrips[0]?.id || "")
@@ -96,21 +98,20 @@ export function TatildeyimView({
 
         <div className="space-y-2">
           <h2 className="text-2xl sm:text-3xl font-black text-white">
-            Henüz Planlanmış Bir Turunuz Yok 🌴
+            {t("tatildeyim.emptyTitle")}
           </h2>
           <p className="text-sm text-slate-400 max-w-md mx-auto">
-            Dünya haritanızdan ilk seyahat rotanızı oluşturun; tur zamanı geldiğinde bu ekranda
-            gittiğiniz şehirlerdeki turistik yerleri tek tek tikleyip puanlayabilirsiniz!
+            {t("tatildeyim.emptyDesc")}
           </p>
         </div>
 
         <div className="flex items-center justify-center gap-3 pt-2">
           <Link
             href="/dashboard"
-            className="px-6 py-3 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm shadow-xl shadow-cyan-600/25 transition-all flex items-center gap-2 cursor-pointer"
+            className="px-6 py-3 rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm shadow-xl shadow-cyan-600/25 transition-all flex items-center gap-2 cursor-pointer min-h-[44px]"
           >
             <Compass className="w-4 h-4" />
-            <span>Haritaya Git ve Rota Oluştur</span>
+            <span>{t("tatildeyim.goToMapBtn")}</span>
           </Link>
         </div>
       </div>
@@ -131,15 +132,15 @@ export function TatildeyimView({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px] font-black uppercase tracking-wider">
-                CANLI TUR REHBERİ
+                {t("tatildeyim.liveGuideBadge")}
               </span>
               <span className="text-xs text-slate-400">
-                • {stops.length} Şehir Durağı
+                • {stops.length} {t("tatildeyim.cityStopsCount")}
               </span>
             </div>
 
             <h1 className="text-xl sm:text-2xl font-black text-white mt-1">
-              {currentTrip?.title || "Aktif Seyahat Turum"}
+              {currentTrip?.title || t("tatildeyim.activeTripDefault")}
             </h1>
 
             {currentTrip?.description && (
@@ -159,7 +160,7 @@ export function TatildeyimView({
                 setSelectedTripId(e.target.value);
                 window.location.href = `/tatildeyim?tripId=${e.target.value}`;
               }}
-              className="w-full sm:w-auto bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
+              className="w-full sm:w-auto bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer min-h-[44px]"
             >
               {userTrips.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -172,14 +173,14 @@ export function TatildeyimView({
           <button
             type="button"
             onClick={() => setShowTimeline((prev) => !prev)}
-            className={`w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`w-full sm:w-auto justify-center px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer min-h-[44px] ${
               showTimeline
                 ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30"
                 : "bg-slate-800/80 text-cyan-400 border border-cyan-500/30 hover:bg-slate-800"
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>{showTimeline ? "Duraklara Dön" : `Zaman Tüneli (${timeline.length})`}</span>
+            <span>{showTimeline ? t("tatildeyim.returnToStops") : `${t("tatildeyim.timeline")} (${timeline.length})`}</span>
           </button>
         </div>
       </div>
@@ -187,7 +188,7 @@ export function TatildeyimView({
       {/* 2. Rota Şehir Akışı Şeridi (Visual Breadcrumbs - Mobil-First: flex-wrap, sıfır yatay kaydırma) */}
       <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
-          Rota Akışı:
+          {t("tatildeyim.routeFlow")}
         </span>
         {stops.map((stop, index) => (
           <div key={stop.id} className="flex items-center gap-1.5">
@@ -212,31 +213,31 @@ export function TatildeyimView({
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Clock className="w-4 h-4 text-cyan-400" />
-                Seyahat Zaman Tüneli & Gezi Günlüğü
+                {t("tatildeyim.timelineTitle")}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Gittiğiniz yerler ve verdiğiniz puanlar kronolojik sırayla listelenir.
+                {t("tatildeyim.timelineSubtitle")}
               </p>
             </div>
             <span className="px-2.5 py-1 rounded-xl bg-cyan-500/20 text-cyan-300 font-mono text-xs font-bold">
-              {timeline.length} Mekan Ziyareti
+              {timeline.length} {t("tatildeyim.placesVisitedCount")}
             </span>
           </div>
 
           {timeline.length === 0 ? (
             <div className="py-12 text-center text-slate-500 text-xs">
-              Henüz bu turda tik atılmış bir mekan bulunmuyor. Aşağıdaki duraklardan turistik yerleri işaretleyebilirsiniz!
+              {t("tatildeyim.timelineEmpty")}
             </div>
           ) : (
             <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-gradient-to-b before:from-cyan-500 before:via-blue-500 before:to-slate-800">
               {timeline.map((event, idx) => {
                 const date = new Date(event.visitedAt);
-                const dateStr = date.toLocaleDateString("tr-TR", {
+                const dateStr = date.toLocaleDateString(locale === "en" ? "en-US" : "tr-TR", {
                   day: "numeric",
                   month: "long",
                   year: "numeric",
                 });
-                const timeStr = date.toLocaleTimeString("tr-TR", {
+                const timeStr = date.toLocaleTimeString(locale === "en" ? "en-US" : "tr-TR", {
                   hour: "2-digit",
                   minute: "2-digit",
                 });

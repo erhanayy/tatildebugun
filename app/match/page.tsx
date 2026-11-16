@@ -3,12 +3,16 @@ import { getTravelMatches, getMyMatchRequests } from "@/lib/actions/match";
 import { AppHeader } from "@/components/navigation/app-header";
 import { MatchView } from "@/components/social/match-view";
 import { redirect } from "next/navigation";
-import { Compass, Sparkles } from "lucide-react";
+import { Compass } from "lucide-react";
+import { getServerTranslation } from "@/lib/i18n/server";
 
-export const metadata = {
-  title: "Gezgin Eşleşmesi & Rota Radarı | TatildeBugün",
-  description: "Aynı şehirde ve tarihlerde seyahat eden diğer gezginlerle tanışın, rotanızı birleştirin.",
-};
+export async function generateMetadata() {
+  const { t } = await getServerTranslation();
+  return {
+    title: `${t("match.title")} | AllTripX`,
+    description: t("match.subtitle"),
+  };
+}
 
 export default async function MatchPage() {
   const session = await auth();
@@ -17,6 +21,7 @@ export default async function MatchPage() {
     redirect("/login");
   }
 
+  const { t } = await getServerTranslation();
   const [candidates, requests] = await Promise.all([
     getTravelMatches(),
     getMyMatchRequests(),
@@ -33,14 +38,13 @@ export default async function MatchPage() {
         <div className="max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-semibold mb-2">
             <Compass className="w-3.5 h-3.5" />
-            <span>Akıllı Rota & Tarih Çakışma Radarı</span>
+            <span>{t("match.badge")}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Gezgin Eşleşmesi 🧭
+            {t("match.title")}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Gittiğin veya planladığın rotalarda seninle aynı tarihte aynı şehirde olan gezginleri
-            keşfet, tanış ve birlikte gez!
+            {t("match.subtitle")}
           </p>
         </div>
 

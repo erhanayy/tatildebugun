@@ -3488,18 +3488,74 @@ Kullanıcının `alltripx.com` canlı ortamında yaptığı ilk kayıt, onay ve 
 
 ---
 
+## 68. Tüm Modüllerde Uçtan Uca İki Dilli (TR / EN) Global Senkronizasyon Analizi (Explore, Radar, On Vacation, Bildirimler, Gezgin Sohbeti, Arkadaşını Davet Et)
 
+Kullanıcının *"Dashboard sayfası üstten TR EN değişikliklerinde değişiyor fakat EN seçtiğim halde Explore , Radar , On Vacation sayfaları, Bildirimler, Gezgin Sohbeti, Arkadaşını Davet Et ekranları hala türkçe İngilizceye dönmedi. Bunları da TR ,EN değişikliklerine uygun hale getirir misin?"* geri bildirimi doğrultusunda sistemdeki tüm açık kalan sayfaların iki dilli mimarisi incelenmiş ve çözüm planı oluşturulmuştur.
 
+### 68.1. Kök Neden Analizi (Root Cause Analysis - 6 Modül)
 
+1. **Explore (Keşfet / `/feed`):**
+   - `app/feed/page.tsx`: Sunucu bileşeni `getServerTranslation()` kullanmamakta; sayfa başlığı *"Topluluk & Keşif Akışı"*, *"Gezginlerin Seyahat Akışı 🌴"* ve metadata *"Gezgin Akışı | TatildeBugün"* olarak Türkçe sabit kodlanmıştır.
+   - `components/social/feed-view.tsx`: Sekmeler (`Tümü (Keşfet)`, `Şehir Ziyaretleri`, `Rotalar`), gönderi sayısı (`X Gönderi`), rozetler (`Seyahat Rotası`, `Şehir Ziyareti`, `Planlanan Rota`, `Tamamlandı`), reaksiyon butonları (`Beğen`, `Hayalim`, `Harika`), yorum alanı (`İlk yorumu sen yaz!`, `Yorumunu yaz...`, `X Yorum`) ve boş durum Türkçe sabit kalmıştır.
 
+2. **Radar (Gezgin Eşleşmesi / `/match`):**
+   - `app/match/page.tsx`: Sunucu bileşeni `getServerTranslation()` kullanmamakta; başlık *"Akıllı Rota & Tarih Çakışma Radarı"*, *"Gezgin Eşleşmesi 🧭"* ve metadata sabit Türkçedir.
+   - `components/social/match-view.tsx`: Üst kısımdaki viral davet banner'ı (`Gezgin Ağını Büyüt`, `Özel davet linkini WhatsApp'ta paylaş...`, `WhatsApp'ta Paylaş`, `Linki Kopyala`), rehber tarama butonları (`Rehberimi Tara 📱`, `Taranıyor...`), çakışma rozetleri (`Tarih Çakışması`, `Ortak Rota`), ziyaret sayaçları (`X Şehir Ziyareti`) ve boş durum bildirimleri Türkçe sabit kalmıştır.
 
+3. **On Vacation (Tatildeyim Canlı Rehber / `/tatildeyim`):**
+   - `app/tatildeyim/page.tsx`: Metadata başlığı ve açıklaması Türkçedir.
+   - `components/places/tatildeyim-view.tsx`: `useTranslation` kancası import edilmemiştir. Boş durum (`Henüz Planlanmış Bir Turunuz Yok 🌴`, `Haritaya Git ve Rota Oluştur`), üst kokpit rozetleri (`CANLI TUR REHBERİ`, `• X Şehir Durağı`), aksiyon butonu (`Duraklara Dön` / `Zaman Tüneli (X)`), görsel rota akış başlığı (`Rota Akışı:`) ve zaman tüneli paneli (`Seyahat Zaman Tüneli & Gezi Günlüğü`, `X Mekan Ziyareti`) Türkçe sabit kalmıştır.
 
+4. **Bildirimler (Notifications Dropdown & Bell):**
+   - `components/navigation/notification-bell.tsx`: `useTranslation()` hiç kullanılmamıştır.
+   - Zil butonu hover tooltip (`Bildirimler (X yeni)`), dropdown başlığı (`Bildirimler`, `X yeni`), okundu butonu (`Tümünü Okundu Yap`), zaman formatlayıcı (`Şimdi`, `X dk önce`, `X saat önce`, `X gün önce`) ve boş durum (`Henüz bildiriminiz yok`, `Seyahatleriniz ve rotalarınızla etkileşim olduğunda...`) tamamen Türkçe sabit kalmıştır.
 
+5. **Gezgin Sohbeti (Traveler Chat & Messages):**
+   - `components/navigation/chat-badge.tsx`: `useTranslation` bulunmamaktadır; `aria-label="Gezgin Sohbeti"` ve tooltip `Gezgin Sohbeti (X yeni)` sabit Türkçedir.
+   - `app/messages/page.tsx`: Metadata AllTripX yerine eski marka ve Türkçe açıklamaya sahiptir.
+   - `components/chat/chat-view.tsx`: Sol panel başlığı (`Gezgin Sohbeti`, `X Eşleşme`), arama kutusu ipucu (`Arkadaş veya şehir ara...`), boş durum ekranı (`Henüz Eşleşmeniz Yok`, `Radara Git`) ve arama sonucu bulunamadı mesajı Türkçe sabit kalmıştır.
 
+6. **Arkadaşını Davet Et (Invite Friends Modal):**
+   - `components/navigation/app-header.tsx`: Satır 290-348 arasındaki modal içeriği; başlık (`Arkadaşını Davet Et 🎁`), alt başlık (`Birlikte gezin, rotalarınızı eşleştirin`), gövde metni (`Özel davet linkin ile arkadaşlarını TatildeBugün'e davet et...`), butonlar (`Kopyala`, `Kopyalandı`, `WhatsApp ile Hemen Paylaş`) sabit Türkçedir ve eski "TatildeBugün" adını taşımaktadır.
 
+---
 
+### 68.2. Çözüm ve Mimari Tasarım
 
+1. **Sözlük Genişletmesi (`lib/i18n/dictionaries/tr.ts` ve `en.ts`):**
+   - `feed`: Sekmeler, rozetler, reaksiyonlar, yorum kutusu, sayaçlar, boş durumlar ve bildirim toastları için eksiksiz TR ve EN çift dilli anahtarlar.
+   - `match`: Üst viral davet banner'ı, rehber tarama butonları, çakışma rozetleri, sayaçlar ve boş durum metinleri.
+   - `tatildeyim`: Canlı rehber rozeti, şehir durağı sayacı, zaman tüneli butonları, rota akış başlığı, kronolojik gezi günlüğü ve boş durum kartları.
+   - `notifications`: Zil başlığı, yeni bildirim sayacı, tümünü okundu yap aksiyonu, boş durum ve göreceli zaman metinleri (`justNow`, `minutesAgo`, `hoursAgo`, `daysAgo`).
+   - `chat`: Badge tooltip'i, sohbet başlığı, eşleşme sayaçları, arama kutusu ipuçları, boş durumlar ve yönlendirmeler.
+   - `inviteModal`: Modal başlığı, alt başlığı, AllTripX açıklaması, kopyalama butonları ve WhatsApp paylaşım metinleri.
 
+2. **Sunucu ve İstemci Bileşenlerinin Bağlanması:**
+   - Sunucu sayfaları (`app/feed/page.tsx`, `app/match/page.tsx`, `app/tatildeyim/page.tsx`, `app/messages/page.tsx`): `getServerTranslation()` ile dile duyarlı `title`, `description` ve sayfa başlıkları.
+   - İstemci bileşenleri (`feed-view.tsx`, `match-view.tsx`, `tatildeyim-view.tsx`, `notification-bell.tsx`, `chat-badge.tsx`, `chat-view.tsx`, `app-header.tsx`): `useTranslation()` kancası ile donatılacak, dil seçildiğinde anında re-render olacak.
 
+3. **Mobil-First ve Dokunmatik Standartlar (Kural 13):**
+   - Tüm etkileşimli butonlar minimum 44px dokunmatik hedef boyutunu koruyacak, `flex-wrap` ile dar ekranlarda sıfır yatay kaydırma garantisi verilecektir.
 
+### 68.3. Uygulanan Geliştirmeler ve Kalite Kapısı Doğrulaması (Kural 1, 10, 12, 13)
 
+1. **Sözlük Dosyaları (`lib/i18n/dictionaries/tr.ts` ve `en.ts`):**
+   - `feed`, `match`, `tatildeyim` bölümleri genişletildi; `notifications`, `chat` ve `inviteModal` modülleri eksiksiz Türkçe ve İngilizce karşılıklarıyla oluşturuldu.
+2. **Explore / Feed (`app/feed/page.tsx` & `components/social/feed-view.tsx`):**
+   - `getServerTranslation()` ile metadata ve sayfa başlıkları yerelleştirildi.
+   - `feed-view.tsx` içinde sekmeler, sayaçlar, boş durum, gönderi rozetleri, reaksiyon butonları ve yorum toastları `useTranslation()`'a bağlandı.
+3. **Radar / Match (`app/match/page.tsx` & `components/social/match-view.tsx`):**
+   - `getServerTranslation()` ile sunucu tarafı başlık ve açıklamaları iki dilli yapıldı.
+   - `match-view.tsx` içinde davet banner'ı, rehber tarama butonları, çakışma rozetleri, sayaçlar ve teklif gönderme akışları yerelleştirildi.
+4. **On Vacation / Tatildeyim (`app/tatildeyim/page.tsx` & `components/places/tatildeyim-view.tsx`):**
+   - `tatildeyim-view.tsx`'e `useTranslation()` bağlandı; boş durum ekranı, canlı rehber kokpiti, durak sayısı, zaman tüneli geçiş butonu, rota akış başlığı ve gezi günlüğü yerelleştirildi.
+5. **Bildirimler (`components/navigation/notification-bell.tsx`):**
+   - Zil ikonu erişilebilirlik etiketleri, tooltip'i, açılır panel başlığı, "Tümünü Okundu Yap" butonu, göreceli zaman formatlayıcı (`formatTime`) ve boş durum yerelleştirildi.
+6. **Gezgin Sohbeti (`components/navigation/chat-badge.tsx`, `app/messages/page.tsx`, `components/chat/chat-view.tsx`):**
+   - Chat badge ikonu, mesajlar sayfası metadata'sı, sol liste başlığı, arama kutusu ipucu, boş durum ve yönlendirme butonları yerelleştirildi.
+7. **Arkadaşını Davet Et Modalı (`components/navigation/app-header.tsx`):**
+   - Modal başlığı, alt başlığı, AllTripX açıklaması, kopyalama butonu ("Kopyala" / "Copy"), kopyalandı durumu ("Kopyalandı" / "Copied") ve WhatsApp paylaşım butonu `t("inviteModal.*")` anahtarlarına bağlandı.
+8. **Kalite Kapısı ve Tip Güvenliği Doğrulaması:**
+   - `npx tsc --noEmit`: Sıfır hata ile tamamlandı (Kural 10).
+   - `npm run build`: Turbopack ile tüm dinamik ve statik sayfalar başarıyla derlendi (Kural 12).
+   - Kural 2 ve 3 uyarınca otomatik push ve otomatik deploy yapılmamış, kullanıcı onayına sunulmuştur.
