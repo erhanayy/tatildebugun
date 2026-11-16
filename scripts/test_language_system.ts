@@ -55,7 +55,7 @@ async function runTests() {
   // TEST 2: E-posta Şablonları Çoklu Dil ve Marka Kontrolü
   console.log("\n--- 2. E-posta Şablonları Çoklu Dil ve Marka Kontrolü ---");
   const trResetHtml = getPasswordResetEmailTemplate("Erhan Ayyıldız", "123456", "tr");
-  assert(trResetHtml.includes("TatildeBugün"), "Türkçe Şifre Sıfırlama E-postası TatildeBugün Markasını İçeriyor");
+  assert(trResetHtml.includes("AllTripX"), "Türkçe Şifre Sıfırlama E-postası AllTripX Markasını İçeriyor");
   assert(trResetHtml.includes("Merhaba Erhan Ayyıldız"), "Türkçe Şifre Sıfırlama E-postası Türkçe Selamlamayı İçeriyor");
   assert(trResetHtml.includes("123456"), "Türkçe Şifre Sıfırlama E-postası OTP Kodunu İçeriyor");
 
@@ -65,7 +65,7 @@ async function runTests() {
   assert(enResetHtml.includes("654321"), "İngilizce Şifre Sıfırlama E-postası OTP Kodunu İçeriyor");
 
   const trRegHtml = getRegisterActivationEmailTemplate("Erhan Ayyıldız", "789012", "tr");
-  assert(trRegHtml.includes("TatildeBugün'e Hoş Geldiniz!"), "Türkçe Kayıt E-postası Türkçe Hoş Geldin Başlığı İçeriyor");
+  assert(trRegHtml.includes("AllTripX'e Hoş Geldiniz!"), "Türkçe Kayıt E-postası Türkçe Hoş Geldin Başlığı İçeriyor");
   assert(trRegHtml.includes("789012"), "Türkçe Kayıt E-postası Aktivasyon Kodunu İçeriyor");
 
   const enRegHtml = getRegisterActivationEmailTemplate("Erhan Ayyıldız", "210987", "en");
