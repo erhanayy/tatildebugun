@@ -3695,4 +3695,39 @@ Read more: https://nextjs.org/docs/messages/invalid-use-server-value
    - `npx tsc --noEmit` 0 hata ile geçti.
    - `npm run build` Next.js derlemesi 2.3 saniyede hatasız tamamlandı.
 
+---
+
+## 73. Profil Fotoğrafı Anında Otomatik Kaydetme ve Gezgin Arama Kendi Profilini Görüntüleme Geliştirmesi
+
+### 73.1. Kök Neden Analizi (Kullanıcı Geri Bildirimi: "EA yerine eklediğim profil resmi gelmeliydi gelmedi")
+Kullanıcının ilettiği canlı arama ekran görüntüsü ve veritabanı sorguları derinlemesine incelendi:
+1. **İstemci Tarafında Yüklenen Fotoğrafın Veritabanına Yazılmaması:**
+   - [components/profile/profile-view.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/profile/profile-view.tsx) içerisinde cihazdan fotoğraf seçilip HTML5 Canvas ile 256x256 kırpıldığında yalnızca React yerel state'i (`setAvatarUrl(compressedDataUrl)`) güncelleniyordu.
+   - Kullanıcı fotoğrafın daire içine yerleştiğini görünce kaydedildi sanarak sayfanın en altına kaydırıp genel formdaki "Değişiklikleri Kaydet" butonuna basmadan `/match` sayfasına geçmişti.
+   - Sonuç olarak hem `erhanayyildiz@hotmail.com` hem de `erhanayyildiz@gmail.com` hesaplarının `users.avatar_url` alanı veritabanında `null` kalmıştı.
+2. **Gezgin Aramada Kendi Hesabının Hariç Tutulması (`ne(users.id, currentUserId)`):**
+   - [lib/actions/search-travelers.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/search-travelers.ts) içinde oturum açmış kullanıcı arama sonuçlarından filtreleniyordu.
+   - `erhanayyildiz@hotmail.com` ile giriş yapan kullanıcı "erhan" yazdığında, kendi hesabı filtrelendiği için ekranda yalnızca diğer hesabı olan `erhanayyildiz@gmail.com` geliyordu. O hesapta da henüz fotoğraf yüklenmediği için isim baş harfleri olan `"EA"` gösteriliyordu.
+
+### 73.2. Uygulanan Mimari & Kod Çözümü
+1. **Anında Otomatik Avatar Kaydetme Server Action'ı ([lib/actions/user.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/user.ts)):**
+   - `updateAvatarAction(avatarUrl: string | null)` eklendi.
+   - Fotoğraf seçildiği veya emoji değiştirildiği anda genel form onayını beklemeksizin `users.avatar_url` sütununa doğrudan yazması ve tüm ilgili sayfaları (`/profile`, `/dashboard`, `/feed`, `/match`, `/messages`) anında `revalidatePath` ile tazelemesi sağlandı.
+2. **Kullanıcı Geri Bildirimi ve Yükleme Göstergesi ([components/profile/profile-view.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/profile/profile-view.tsx)):**
+   - `handlePhotoSelected` içine anında `await updateAvatarAction(compressedDataUrl)` bağlandı.
+   - Fotoğraf işlenirken avatar üzerinde dönen `Loader2` animasyonlu yarı şeffaf bir katman (`isUploadingPhoto`) gösterilerek kullanıcıya işlemin kaydedildiği hissettirildi.
+   - Başarılı olduğunda *"Profil fotoğrafınız başarıyla kaydedildi! 📸"* bildirimi gösterildi.
+   - "Fotoğrafı Kaldır" aksiyonu da aynı şekilde anında veritabanındaki avatarı 🌴 emojisine sıfırlayacak şekilde güncellendi.
+3. **Kendi Profilini Arama ve Doğrulama Yeteneği ([lib/actions/search-travelers.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/search-travelers.ts)):**
+   - Arama koşullarından `ne(users.id, currentUserId)` filtresi kaldırıldı.
+   - Kullanıcı kendi adını veya @nickname'ini aradığında, sonuçlar arasına kendi kartı da dahil edildi ve `isSelf: true` bayrağı ile işaretlendi.
+   - Kendi profil kartı her zaman arama sonuçlarının en başına (`results.sort`) taşındı.
+4. **Kendi Kartında Rozet ve Profil Bağlantısı ([components/social/match-view.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/social/match-view.tsx)):**
+   - Kullanıcının kendi kartı çıktığında "Bağlantı Kur" butonu yerine `👤 Sen (Profilin)` rozeti gösterilerek tıklanınca `/profile` sayfasına gitmesi sağlandı (Kural 13 dokunmatik buton standardı ile).
+
+### 73.3. Kalite Kapısı & Doğrulama
+- `npx tsc --noEmit`: 0 hata ile doğrulandı.
+- `npm run build`: Next.js 16.1.6 üretim derlemesi 2.2 saniyede hatasız tamamlandı.
+
+
 

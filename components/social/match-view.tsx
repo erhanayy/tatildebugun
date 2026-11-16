@@ -1029,7 +1029,15 @@ export function MatchView({
                       <span>{traveler.tripCount} Rota 🗺️</span>
                     </div>
 
-                    {traveler.connectionStatus === "accepted" ? (
+                    {traveler.isSelf ? (
+                      <Link
+                        href="/profile"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all min-h-[36px]"
+                      >
+                        <User className="w-3.5 h-3.5" />
+                        <span>{locale === "en" ? "You (Your Profile)" : "Sen (Profilin)"}</span>
+                      </Link>
+                    ) : traveler.connectionStatus === "accepted" ? (
                       <div className="flex items-center gap-2">
                         <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/80">
                           {traveler.relationshipType === "family"

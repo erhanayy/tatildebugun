@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { UserProfileData } from "@/lib/actions/user";
-import { updateProfile, changePassword, checkUsernameAction } from "@/lib/actions/user";
+import { updateProfile, updateAvatarAction, changePassword, checkUsernameAction } from "@/lib/actions/user";
 import { InternationalPhoneInput } from "@/components/ui/international-phone-input";
 import {
   User,
@@ -74,6 +74,7 @@ export function ProfileView({ initialData }: ProfileViewProps) {
   );
 
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   // Kullanıcı adı müsaitlik canlı kontrolü
   useEffect(() => {
@@ -137,7 +138,7 @@ export function ProfileView({ initialData }: ProfileViewProps) {
     setIsUpdatingProfile(false);
   }
 
-  // Cihazdan Profil Fotoğrafı Yükleme (Kare Kırpma & Sıkıştırma)
+  // Cihazdan Profil Fotoğrafı Yükleme (Kare Kırpma, Sıkıştırma & Anında DB Kaydı)
   function handlePhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -155,7 +156,7 @@ export function ProfileView({ initialData }: ProfileViewProps) {
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         try {
           const canvas = document.createElement("canvas");
           const targetSize = 256;
@@ -176,13 +177,24 @@ export function ProfileView({ initialData }: ProfileViewProps) {
 
           const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.82);
           setAvatarUrl(compressedDataUrl);
-          toast.success(
-            locale === "en"
-              ? "Profile photo ready! Remember to save changes below. 📸"
-              : "Profil fotoğrafı hazır! Alttaki 'Değişiklikleri Kaydet' butonu ile kaydedebilirsiniz. 📸"
-          );
+
+          // Anında veritabanına kaydet
+          setIsUploadingPhoto(true);
+          const res = await updateAvatarAction(compressedDataUrl);
+          setIsUploadingPhoto(false);
+
+          if (res.success) {
+            toast.success(
+              locale === "en"
+                ? "Profile photo saved successfully! 📸"
+                : "Profil fotoğrafınız başarıyla kaydedildi! 📸"
+            );
+          } else {
+            toast.error(res.message || "Fotoğraf kaydedilemedi.");
+          }
         } catch (err) {
           console.error("Canvas crop error:", err);
+          setIsUploadingPhoto(false);
           toast.error(locale === "en" ? "Failed to crop image." : "Fotoğraf kırpılırken hata oluştu.");
         }
       };
@@ -247,15 +259,26 @@ export function ProfileView({ initialData }: ProfileViewProps) {
               className="border-2 border-white/20 shadow-xl shadow-cyan-500/20"
             />
 
+            {isUploadingPhoto && (
+              <div className="absolute inset-0 rounded-3xl bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-20">
+                <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+              </div>
+            )}
+
             {/* Hızlı Fotoğraf Yükleme Butonu (Kamera İkonu) */}
             <button
               type="button"
               onClick={() => document.getElementById("avatar-upload-file")?.click()}
-              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-lg border-2 border-slate-900 transition-transform hover:scale-110 cursor-pointer"
+              disabled={isUploadingPhoto}
+              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-lg border-2 border-slate-900 transition-transform hover:scale-110 cursor-pointer disabled:opacity-50"
               title={locale === "en" ? "Upload Profile Photo" : "Profil Fotoğrafı Yükle"}
               aria-label={locale === "en" ? "Upload Profile Photo" : "Profil Fotoğrafı Yükle"}
             >
-              <Camera className="w-4 h-4 text-slate-950" />
+              {isUploadingPhoto ? (
+                <Loader2 className="w-4 h-4 text-slate-950 animate-spin" />
+              ) : (
+                <Camera className="w-4 h-4 text-slate-950" />
+              )}
             </button>
           </div>
 
@@ -401,8 +424,19 @@ export function ProfileView({ initialData }: ProfileViewProps) {
                 {avatarUrl && (avatarUrl.startsWith("data:image") || avatarUrl.startsWith("http")) && (
                   <button
                     type="button"
-                    onClick={() => setAvatarUrl("🌴")}
-                    className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                    onClick={async () => {
+                      setAvatarUrl("🌴");
+                      setIsUploadingPhoto(true);
+                      const res = await updateAvatarAction("🌴");
+                      setIsUploadingPhoto(false);
+                      if (res.success) {
+                        toast.success(
+                          locale === "en" ? "Photo removed, reset to 🌴" : "Fotoğraf kaldırıldı, 🌴 emojisine sıfırlandı"
+                        );
+                      }
+                    }}
+                    disabled={isUploadingPhoto}
+                    className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
                   >
                     {locale === "en" ? "Remove Photo (Reset to 🌴)" : "Fotoğrafı Kaldır (🌴 Sıfırla)"}
                   </button>

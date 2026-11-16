@@ -23,6 +23,7 @@ export interface SearchedTraveler {
   connectionStatus: "none" | "pending_outgoing" | "pending_incoming" | "accepted";
   relationshipType?: "friend" | "relative" | "family" | null;
   matchId?: string | null;
+  isSelf?: boolean;
 }
 
 const sendConnectionSchema = z.object({
@@ -121,11 +122,8 @@ export async function searchTravelers(
 
     // 1. Arama Kriterlerine Göre Adayları Çek
     // Nickname her zaman aranabilir. Ad-Soyad ve Email izin bayraklarına tabidir.
-    // Akıllı Eşleşme: Boşluksuz ve Türkçe karakterden bağımsız (TRANSLATE)
+    // Kullanıcının kendi profilini de bulup doğrulayabilmesi için hariç tutulmaz; isSelf ile işaretlenir.
     const baseConditions = [eq(users.isActive, true)];
-    if (currentUserId) {
-      baseConditions.push(ne(users.id, currentUserId));
-    }
 
     const searchConditions = or(
       sql`LOWER(${users.username}) LIKE ${pattern}`,
@@ -218,18 +216,18 @@ export async function searchTravelers(
     const results: SearchedTraveler[] = [];
 
     for (const target of candidateUsers) {
-      // Kullanıcının searchPrivacy gereksinimi:
-      const requiredPrivacyLevel = PRIVACY_LEVELS[target.searchPrivacy || "public"] ?? 4;
+      const isSelf = Boolean(currentUserId && target.id === currentUserId);
 
-      // İstek yapanın bu kullanıcıya göre ilişki seviyesi
-      const viewerWeight = currentUserId
-        ? await getRelationshipWeight(currentUserId, target.id)
-        : 4; // anonim / public
+      // Kendi profili değilse hiyerarşik gizlilik kontrolü uygula:
+      if (!isSelf) {
+        const requiredPrivacyLevel = PRIVACY_LEVELS[target.searchPrivacy || "public"] ?? 4;
+        const viewerWeight = currentUserId
+          ? await getRelationshipWeight(currentUserId, target.id)
+          : 4; // anonim / public
 
-      // Kural: viewerWeight <= requiredPrivacyLevel olmalı
-      if (viewerWeight > requiredPrivacyLevel) {
-        // İzin verilen seviyeden daha uzak bir ilişkide (Örn: searchPrivacy 'friend' (3) ama viewer 'public' (4))
-        continue;
+        if (viewerWeight > requiredPrivacyLevel) {
+          continue;
+        }
       }
 
       // Mevcut eşleşme/istek durumu bul
@@ -253,13 +251,13 @@ export async function searchTravelers(
         }
       }
 
-      // Maskeleme
+      // Maskeleme (Kullanıcı kendisi ise tüm verileri açık görür)
       results.push({
         id: target.id,
         username: target.username || "gezgin",
-        fullName: target.showFullName ? target.fullName : null,
-        email: target.showEmail ? target.email : null,
-        phoneNumber: target.showPhone ? target.phoneNumber : null,
+        fullName: isSelf ? target.fullName : target.showFullName ? target.fullName : null,
+        email: isSelf ? target.email : target.showEmail ? target.email : null,
+        phoneNumber: isSelf ? target.phoneNumber : target.showPhone ? target.phoneNumber : null,
         avatarUrl: target.avatarUrl,
         baseCountry: target.baseCountry || "TR",
         baseCity: target.baseCity || "İstanbul",
@@ -268,8 +266,12 @@ export async function searchTravelers(
         connectionStatus,
         relationshipType: relType,
         matchId,
+        isSelf,
       });
     }
+
+    // Kendi profilini en başa al
+    results.sort((a, b) => (a.isSelf ? -1 : b.isSelf ? 1 : 0));
 
     return results;
   } catch (error) {

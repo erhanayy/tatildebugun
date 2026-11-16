@@ -376,6 +376,39 @@ export async function updateProfile(input: z.infer<typeof updateProfileSchema>):
 }
 
 /**
+ * Profil fotoğrafını veya avatar emojisini anında veritabanına kaydeder.
+ */
+export async function updateAvatarAction(avatarUrl: string | null) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, message: "Oturum bulunamadı." };
+    }
+
+    const cleanAvatar = avatarUrl ? avatarUrl.trim() : null;
+
+    await db
+      .update(users)
+      .set({
+        avatarUrl: cleanAvatar,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, session.user.id));
+
+    revalidatePath("/profile");
+    revalidatePath("/dashboard");
+    revalidatePath("/feed");
+    revalidatePath("/match");
+    revalidatePath("/messages");
+
+    return { success: true, message: "Profil fotoğrafı başarıyla kaydedildi! 📸" };
+  } catch (error) {
+    console.error("Avatar kaydetme hatası:", error);
+    return { success: false, message: "Profil fotoğrafı kaydedilirken bir hata oluştu." };
+  }
+}
+
+/**
  * Giriş yapmış kullanıcının şifresini değiştirir.
  */
 export async function changePassword(input: z.infer<typeof changePasswordSchema>): Promise<{
