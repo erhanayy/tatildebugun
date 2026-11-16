@@ -25,6 +25,7 @@ import {
 } from "@/lib/actions/chat";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/i18n/context";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface ChatViewProps {
   initialConversations: ConversationItem[];
@@ -234,13 +235,11 @@ export function ChatView({
                 >
                   {/* Avatar */}
                   <div className="relative shrink-0 mt-0.5">
-                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white text-sm font-bold shadow-md">
-                      {item.partner.avatarUrl ? (
-                        <span className="text-xl">{item.partner.avatarUrl}</span>
-                      ) : (
-                        item.partner.fullName.slice(0, 2).toUpperCase()
-                      )}
-                    </div>
+                    <UserAvatar
+                      avatarUrl={item.partner.avatarUrl}
+                      name={item.partner.fullName}
+                      size="md"
+                    />
                   </div>
 
                   {/* Detaylar */}
@@ -307,13 +306,11 @@ export function ChatView({
                   <ArrowLeft className="w-4 h-4" />
                 </button>
 
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white text-sm font-bold shadow-md">
-                  {activeConversation.partner.avatarUrl ? (
-                    <span className="text-xl">{activeConversation.partner.avatarUrl}</span>
-                  ) : (
-                    activeConversation.partner.fullName.slice(0, 2).toUpperCase()
-                  )}
-                </div>
+                <UserAvatar
+                  avatarUrl={activeConversation.partner.avatarUrl}
+                  name={activeConversation.partner.fullName}
+                  size="md"
+                />
 
                 <div>
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-2">

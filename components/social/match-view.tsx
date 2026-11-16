@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/i18n/context";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface MatchViewProps {
   candidates: MatchCandidate[];
@@ -347,7 +348,7 @@ export function MatchView({
       setIsSearching(true);
       setHasSearched(true);
       try {
-        const results = await searchTravelers(q);
+        const results = await searchTravelers(q, currentUser?.id);
         setSearchResults(results);
       } catch (err) {
         console.error("Gezgin arama hatası:", err);
@@ -582,9 +583,11 @@ export function MatchView({
                     {/* Üst: Profil ve Şehir */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-extrabold text-base shadow-lg shadow-cyan-500/20">
-                          {cand.user.fullName.slice(0, 2).toUpperCase()}
-                        </div>
+                        <UserAvatar
+                          avatarUrl={cand.user.avatarUrl}
+                          name={cand.user.fullName}
+                          size="lg"
+                        />
                         <div>
                           <h4 className="font-bold text-sm text-white leading-tight">
                             {cand.user.fullName}
@@ -718,9 +721,11 @@ export function MatchView({
                       {/* Üst: Profil ve Konum */}
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-extrabold text-base shadow-lg shadow-cyan-500/20">
-                            {friend.fullName.slice(0, 2).toUpperCase()}
-                          </div>
+                          <UserAvatar
+                            avatarUrl={friend.avatarUrl}
+                            name={friend.fullName}
+                            size="lg"
+                          />
                           <div>
                             <h4 className="font-bold text-sm text-white leading-tight">
                               {friend.fullName}
@@ -801,9 +806,11 @@ export function MatchView({
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-cyan-600/20 text-cyan-400 flex items-center justify-center font-bold text-sm">
-                      {item.sender.fullName.slice(0, 2).toUpperCase()}
-                    </div>
+                    <UserAvatar
+                      avatarUrl={item.sender.avatarUrl}
+                      name={item.sender.fullName}
+                      size="md"
+                    />
                     <div>
                       <h4 className="font-bold text-sm text-white">{item.sender.fullName}</h4>
                       <p className="text-xs text-cyan-400 mt-0.5">
@@ -877,11 +884,18 @@ export function MatchView({
                 key={item.match.id}
                 className="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 shadow-md flex items-center justify-between"
               >
-                <div>
-                  <h4 className="font-bold text-sm text-white">{item.receiver.fullName}</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {item.match.cityName} seyahati için teklif iletildi
-                  </p>
+                <div className="flex items-center gap-3">
+                  <UserAvatar
+                    avatarUrl={item.receiver.avatarUrl}
+                    name={item.receiver.fullName}
+                    size="md"
+                  />
+                  <div>
+                    <h4 className="font-bold text-sm text-white">{item.receiver.fullName}</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {item.match.cityName} seyahati için teklif iletildi
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="px-3 py-1 rounded-full text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300">
@@ -973,17 +987,11 @@ export function MatchView({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-extrabold text-base shadow-lg shadow-cyan-500/20 shrink-0">
-                        {traveler.avatarUrl ? (
-                          <img
-                            src={traveler.avatarUrl}
-                            alt={traveler.username}
-                            className="w-full h-full rounded-2xl object-cover"
-                          />
-                        ) : (
-                          (traveler.fullName || traveler.username).slice(0, 2).toUpperCase()
-                        )}
-                      </div>
+                      <UserAvatar
+                        avatarUrl={traveler.avatarUrl}
+                        name={traveler.fullName || traveler.username}
+                        size="lg"
+                      />
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
                           <span className="font-black text-sm text-cyan-400 font-mono">

@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { POPULAR_COUNTRIES } from "@/lib/world-cities";
 import { useTranslation } from "@/lib/i18n/context";
 import { Locale } from "@/lib/i18n/types";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface ProfileViewProps {
   initialData: UserProfileData;
@@ -136,6 +137,64 @@ export function ProfileView({ initialData }: ProfileViewProps) {
     setIsUpdatingProfile(false);
   }
 
+  // Cihazdan Profil Fotoğrafı Yükleme (Kare Kırpma & Sıkıştırma)
+  function handlePhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error(locale === "en" ? "Please select an image file." : "Lütfen geçerli bir resim dosyası seçin.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(locale === "en" ? "Image size should be under 10MB." : "Fotoğraf boyutu 10MB'tan küçük olmalıdır.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const targetSize = 256;
+          canvas.width = targetSize;
+          canvas.height = targetSize;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            toast.error(locale === "en" ? "Failed to process photo." : "Fotoğraf işlenirken hata oluştu.");
+            return;
+          }
+
+          // Merkezden kare kırpma
+          const minDim = Math.min(img.width, img.height);
+          const sx = (img.width - minDim) / 2;
+          const sy = (img.height - minDim) / 2;
+
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, targetSize, targetSize);
+
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          setAvatarUrl(compressedDataUrl);
+          toast.success(
+            locale === "en"
+              ? "Profile photo ready! Remember to save changes below. 📸"
+              : "Profil fotoğrafı hazır! Alttaki 'Değişiklikleri Kaydet' butonu ile kaydedebilirsiniz. 📸"
+          );
+        } catch (err) {
+          console.error("Canvas crop error:", err);
+          toast.error(locale === "en" ? "Failed to crop image." : "Fotoğraf kırpılırken hata oluştu.");
+        }
+      };
+      img.onerror = () => {
+        toast.error(locale === "en" ? "Failed to load image." : "Resim yüklenemedi.");
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
   // Şifre Değiştir
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -179,11 +238,25 @@ export function ProfileView({ initialData }: ProfileViewProps) {
         <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-cyan-500/10 to-transparent rounded-full blur-2xl pointer-events-none" />
 
         <div className="flex flex-col sm:flex-row items-center gap-6 relative z-10">
-          {/* Avatar */}
+          {/* Avatar & Fotoğraf Yükleme Overlay */}
           <div className="relative group">
-            <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-4xl shadow-xl shadow-cyan-500/20 select-none border-2 border-white/20">
-              {avatarUrl.length <= 4 ? avatarUrl : "🌴"}
-            </div>
+            <UserAvatar
+              avatarUrl={avatarUrl}
+              name={fullName}
+              size="xl"
+              className="border-2 border-white/20 shadow-xl shadow-cyan-500/20"
+            />
+
+            {/* Hızlı Fotoğraf Yükleme Butonu (Kamera İkonu) */}
+            <button
+              type="button"
+              onClick={() => document.getElementById("avatar-upload-file")?.click()}
+              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 flex items-center justify-center shadow-lg border-2 border-slate-900 transition-transform hover:scale-110 cursor-pointer"
+              title={locale === "en" ? "Upload Profile Photo" : "Profil Fotoğrafı Yükle"}
+              aria-label={locale === "en" ? "Upload Profile Photo" : "Profil Fotoğrafı Yükle"}
+            >
+              <Camera className="w-4 h-4 text-slate-950" />
+            </button>
           </div>
 
           {/* İsim ve Başlık */}
@@ -319,26 +392,69 @@ export function ProfileView({ initialData }: ProfileViewProps) {
           </div>
 
           <div className="space-y-4">
-            {/* Avatar Seçimi */}
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                {t("profile.avatarLabel")}
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
-                {PRESET_AVATARS.map((av) => (
+            {/* Avatar & Profil Fotoğrafı Seçimi */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  {locale === "en" ? "Profile Photo & Avatar" : "Profil Fotoğrafı ve Avatar"}
+                </label>
+                {avatarUrl && (avatarUrl.startsWith("data:image") || avatarUrl.startsWith("http")) && (
                   <button
-                    key={av}
                     type="button"
-                    onClick={() => setAvatarUrl(av)}
-                    className={`w-10 h-10 rounded-2xl text-xl flex items-center justify-center border transition-all cursor-pointer ${
-                      avatarUrl === av
-                        ? "bg-cyan-500/20 border-cyan-500 scale-110 shadow-md shadow-cyan-500/20"
-                        : "bg-slate-800/80 border-slate-700 hover:border-slate-500"
-                    }`}
+                    onClick={() => setAvatarUrl("🌴")}
+                    className="text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1 cursor-pointer transition-colors"
                   >
-                    {av}
+                    {locale === "en" ? "Remove Photo (Reset to 🌴)" : "Fotoğrafı Kaldır (🌴 Sıfırla)"}
                   </button>
-                ))}
+                )}
+              </div>
+
+              {/* Cihazdan Fotoğraf Yükleme Butonu */}
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  id="avatar-upload-file"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/jpg"
+                  onChange={handlePhotoSelected}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById("avatar-upload-file")?.click()}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold cursor-pointer transition-all hover:scale-105"
+                >
+                  <Camera className="w-4 h-4 text-cyan-400" />
+                  <span>{locale === "en" ? "Upload Photo from Device" : "Cihazdan Fotoğraf Yükle"}</span>
+                </button>
+
+                <span className="text-[11px] text-slate-500">
+                  {locale === "en"
+                    ? "PNG, JPG or WebP (Auto-cropped to square)"
+                    : "PNG, JPG veya WebP (Otomatik kare kırpılır)"}
+                </span>
+              </div>
+
+              {/* Hazır Seyahat Emojileri */}
+              <div>
+                <span className="block text-[11px] text-slate-400 mb-1.5">
+                  {locale === "en" ? "Or choose a travel avatar:" : "Veya hazır bir gezgin emojisi seçin:"}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {PRESET_AVATARS.map((av) => (
+                    <button
+                      key={av}
+                      type="button"
+                      onClick={() => setAvatarUrl(av)}
+                      className={`w-10 h-10 rounded-2xl text-xl flex items-center justify-center border transition-all cursor-pointer ${
+                        avatarUrl === av
+                          ? "bg-cyan-500/20 border-cyan-500 scale-110 shadow-md shadow-cyan-500/20"
+                          : "bg-slate-800/80 border-slate-700 hover:border-slate-500"
+                      }`}
+                    >
+                      {av}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

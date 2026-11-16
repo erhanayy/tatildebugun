@@ -99,10 +99,13 @@ export async function searchTravelers(
   try {
     let currentUserId = overrideUserId;
     if (!currentUserId) {
-      const session = await auth();
-      currentUserId = session?.user?.id;
+      try {
+        const session = await auth();
+        currentUserId = session?.user?.id;
+      } catch {
+        // Oturum çözülemezse public modda arama yapılır
+      }
     }
-    if (!currentUserId) return [];
 
     const cleanQuery = query.trim().toLowerCase().replace(/^@/, "");
 
@@ -110,10 +113,51 @@ export async function searchTravelers(
       return [];
     }
 
+    const noSpaceQuery = cleanQuery.replace(/\s+/g, "");
+    const turkishNorm = (str: string) =>
+      str
+        .replace(/ı/g, "i")
+        .replace(/ğ/g, "g")
+        .replace(/ü/g, "u")
+        .replace(/ş/g, "s")
+        .replace(/ö/g, "o")
+        .replace(/ç/g, "c");
+    const normalizedNoSpace = turkishNorm(noSpaceQuery);
+
     const pattern = `%${cleanQuery}%`;
+    const noSpacePattern = `%${noSpaceQuery}%`;
+    const normNoSpacePattern = `%${normalizedNoSpace}%`;
 
     // 1. Arama Kriterlerine Göre Adayları Çek
     // Nickname her zaman aranabilir. Ad-Soyad ve Email izin bayraklarına tabidir.
+    // Akıllı Eşleşme: Boşluksuz ve Türkçe karakterden bağımsız (TRANSLATE)
+    const baseConditions = [eq(users.isActive, true)];
+    if (currentUserId) {
+      baseConditions.push(ne(users.id, currentUserId));
+    }
+
+    const searchConditions = or(
+      sql`LOWER(${users.username}) LIKE ${pattern}`,
+      sql`LOWER(REPLACE(${users.username}, ' ', '')) LIKE ${noSpacePattern}`,
+      sql`LOWER(${users.email}) LIKE ${pattern}`,
+      and(
+        eq(users.showFullName, true),
+        or(
+          sql`LOWER(${users.fullName}) LIKE ${pattern}`,
+          sql`LOWER(REPLACE(${users.fullName}, ' ', '')) LIKE ${noSpacePattern}`,
+          sql`TRANSLATE(LOWER(REPLACE(${users.fullName}, ' ', '')), 'ığüşöç', 'igusoc') LIKE ${normNoSpacePattern}`
+        )
+      ),
+      and(
+        eq(users.showEmail, true),
+        sql`LOWER(${users.email}) LIKE ${pattern}`
+      )
+    );
+
+    if (searchConditions) {
+      baseConditions.push(searchConditions);
+    }
+
     const candidateUsers = await db
       .select({
         id: users.id,
@@ -130,17 +174,7 @@ export async function searchTravelers(
         searchPrivacy: users.searchPrivacy,
       })
       .from(users)
-      .where(
-        and(
-          eq(users.isActive, true),
-          ne(users.id, currentUserId),
-          or(
-            sql`LOWER(${users.username}) LIKE ${pattern}`,
-            and(eq(users.showFullName, true), sql`LOWER(${users.fullName}) LIKE ${pattern}`),
-            and(eq(users.showEmail, true), sql`LOWER(${users.email}) LIKE ${pattern}`)
-          )
-        )
-      )
+      .where(and(...baseConditions))
       .limit(30);
 
     if (candidateUsers.length === 0) {
@@ -150,21 +184,23 @@ export async function searchTravelers(
     const candidateIds = candidateUsers.map((u) => u.id);
 
     // 2. Mevcut Bağlantı ve İstek Durumlarını Tek Seferde Çek
-    const existingMatches = await db
-      .select({
-        id: travelMatches.id,
-        senderId: travelMatches.senderId,
-        receiverId: travelMatches.receiverId,
-        status: travelMatches.status,
-        relationshipType: travelMatches.relationshipType,
-      })
-      .from(travelMatches)
-      .where(
-        or(
-          and(eq(travelMatches.senderId, currentUserId), inArray(travelMatches.receiverId, candidateIds)),
-          and(eq(travelMatches.receiverId, currentUserId), inArray(travelMatches.senderId, candidateIds))
-        )
-      );
+    const existingMatches = currentUserId
+      ? await db
+          .select({
+            id: travelMatches.id,
+            senderId: travelMatches.senderId,
+            receiverId: travelMatches.receiverId,
+            status: travelMatches.status,
+            relationshipType: travelMatches.relationshipType,
+          })
+          .from(travelMatches)
+          .where(
+            or(
+              and(eq(travelMatches.senderId, currentUserId), inArray(travelMatches.receiverId, candidateIds)),
+              and(eq(travelMatches.receiverId, currentUserId), inArray(travelMatches.senderId, candidateIds))
+            )
+          )
+      : [];
 
     // 3. Gezgin İstatistiklerini (Visits & Trips) Çek
     const userVisits = await db
@@ -195,7 +231,9 @@ export async function searchTravelers(
       const requiredPrivacyLevel = PRIVACY_LEVELS[target.searchPrivacy || "public"] ?? 4;
 
       // İstek yapanın bu kullanıcıya göre ilişki seviyesi
-      const viewerWeight = await getRelationshipWeight(currentUserId, target.id);
+      const viewerWeight = currentUserId
+        ? await getRelationshipWeight(currentUserId, target.id)
+        : 4; // anonim / public
 
       // Kural: viewerWeight <= requiredPrivacyLevel olmalı
       if (viewerWeight > requiredPrivacyLevel) {

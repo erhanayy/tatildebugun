@@ -3591,3 +3591,77 @@ Kullanıcının ilettiği ekran görüntüsü ve *"Bu bizim palmiye logosu Web E
 3. `app/apple-icon.png` & `public/apple-icon.png`: Mobil Safari ve iOS için 180x180 Retina ikon üretildi.
 4. `app/layout.tsx`: `metadata.icons` konfigürasyonu SVG, PNG, ICO ve Apple Touch Icon formatlarını kapsayacak şekilde güncellendi.
 5. Kalite Kapısı: `npx tsc --noEmit` 0 hata, `npm run build` ile Next.js `/icon.svg` ve `/apple-icon.png` statik route'ları başarıyla derlendi.
+
+---
+
+## 70. Find Travelers (Gezgin Arama) Canlı Teşhis ve Akıllı Eşleştirme Analizi
+
+Kullanıcının ilettiği *"Erhanayyildiz@hotmail..com ile giriş yaptım. FindTraverllers dan erhanayyildiz diye aradım kimseyi bulamadım, erhanayyildiz@gmail.com diye yine kimseyi bulamadım. Kontrol edebilir misin?"* geri bildirimi üzerine canlı Cloud Run logları ve PostgreSQL veritabanı derinlemesine incelenmiştir.
+
+### 70.1. Canlı Log ve Kök Neden Tespiti
+1. **Canlı Dağıtım Sonrası Eski İstemci Chunk Hatası (Stale Server Action ID):**
+   - Cloud Run loglarında tam o dakikalarda (`21:18 - 21:20 UTC`) şu hata yakalanmıştır:
+     `Error: Failed to find Server Action "00e89532a13f1854f7bcaa4e2c1d890636c89acba5". This request might be from an older or newer deployment.`
+   - **Neden:** `tatilde-bugun-00020-ndv` revizyonu canlıya alındığı sırada kullanıcının tarayıcısında önceki derlemenin JavaScript chunk'ları yüklü kalmıştır. Kullanıcı arama kutusuna yazdığında, tarayıcı önceki derlemenin Server Action ID'sini göndermiş ve yeni container bu eski ID'yi tanımayarak 500 hatası üretmiştir.
+2. **Boşluksuz ve Türkçe Karakter Ayrışması (Space & Turkish Character Divergence):**
+   - Veritabanında `erhanayyildiz@gmail.com` hesabının adı `Erhan Ayyıldız` (noktasız ı ve boşluklu), kullanıcı adı `erhanayyildiz`dır.
+   - `search-travelers.ts` dosyasında `LOWER(fullName) LIKE pattern` sorgusu, kullanıcı `erhanayyildiz` yazdığında boşluk (` `) ve Türkçe karakter (`ı` - `i`) farkı sebebiyle `fullName` üzerinden eşleşememektedir.
+3. **İstemci Tarafından `currentUser.id` Aktarımı:**
+   - `components/social/match-view.tsx` bileşeni `searchTravelers(q)` çağrısı yaparken elindeki `currentUser.id` parametresini geçmemektedir.
+
+### 70.2. Çözüm ve Dayanıklılık Mimarisi
+1. **Çift Yönlü Normalizasyon & Boşluksuz Eşleme:**
+   - Arama sorgusundaki ve veritabanındaki isim alanlarında boşluklar temizlenerek (`REPLACE(LOWER(fullName), ' ', '')`) ve Türkçe karakterler (`TRANSLATE(..., 'ıiğüşöç', 'iigusoec')`) normalize edilerek aranacak; böylece `erhanayyildiz`, `erhan ayyıldız` veya `Erhan Ayyildiz` yazıldığında anında sonuç dönecektir.
+2. **`match-view.tsx` Parametre Desteği:**
+   - `searchTravelers(q, currentUser?.id)` şeklinde çağrı yapılarak oturum ID'si garantiye alınacaktır.
+3. **Hatasız Oturum Toleransı:**
+   - `currentUserId` çözülemese dahi arama iptal edilmeyecek, herkese açık gezginler listelenecektir.
+
+---
+
+## 71. Profil Fotoğrafı Yükleme (Photo Upload) & Akıllı Gezgin Arama Mimarisi
+
+Kullanıcının *"İsterim bulmayı kolaylaştırmak lazım. Hatta bir de profil resmi ekleme ekleyelim. Böylece gelenlerden doğru kişiyi ekleme şansını da arttıralım. Bunu da ekler misin?"* talebi doğrultusunda profil fotoğrafı yükleme ve akıllı arama mimarisi tasarlanmıştır.
+
+### 71.1. Profil Fotoğrafı Yükleme Mimarisi
+1. **İstemci Tarafı Sıfır Kotalı Optimizasyon (Client-Side Canvas Compressor):**
+   - Kullanıcı galerisinden veya kamerasından bir fotoğraf seçtiğinde (`<input type="file" accept="image/*">`), tarayıcı üzerinde HTML5 Canvas API ile fotoğraf otomatik olarak kare (1:1) oranında kırpılacak ve 256x256 piksel çözünürlüğe ölçeklenecektir.
+   - WebP / JPEG (0.85 kalite) formatında sıkıştırılarak yaklaşık 20-30 KB boyutunda optimize bir Data URL elde edilir.
+   - Bu yöntem; sunucuya veya bulut depolama kotalarına (S3/GCS bucket izinleri, presigned URL vb.) hiçbir ek yük bindirmeden doğrudan PostgreSQL `users.avatar_url` (text) kolonunda kalıcı, güvenli ve anında saklanmasını sağlar.
+2. **Arayüz Tasarımı (`components/profile/profile-view.tsx`):**
+   - Profil kartındaki büyük avatarın üzerine ve form içine şık bir 📷 "Fotoğraf Yükle" butonu eklenir.
+   - Fotoğraf yüklendiğinde anında canlı önizleme yapılır; dileyen kullanıcılar için "Fotoğrafı Kaldır" (varsayılan emojiye dön) seçeneği sunulur.
+   - Mevcut seyahat emojisi seçimi korunarak kullanıcıya hem emoji hem de gerçek fotoğraf özgürlüğü tanınır.
+3. **Tüm Platformda Gerçek Fotoğraf Desteği:**
+   - Gezgin Arama kartları (`match-view.tsx`),
+   - Radar eşleşme kartları (`match-view.tsx`),
+   - Gezgin Sohbeti avatarı (`chat-view.tsx`),
+   - Üst bar profil avatarı (`app-header.tsx`),
+   - Bildirimler (`notification-bell.tsx`) bileşenlerinde; `avatarUrl` bir resim (`data:image` veya `http`) ise dairesel/squircle `<img>` etiketi ile pürüzsüzce render edilir.
+
+### 71.2. Akıllı Gezgin Arama (Smart Search) Mimarisi
+1. **Boşluksuz İsim Eşleştirme:**
+   - `REPLACE(LOWER(users.fullName), ' ', '') LIKE pattern` ile kullanıcının `erhanayyildiz` yazması durumunda `Erhan Ayyıldız` hesabı tam eşleşmeyle bulunacaktır.
+2. **Türkçe Karakter Eşleştirme:**
+   - `TRANSLATE(LOWER(...), 'ıiğüşöç', 'iigusoec')` ile `i`/`ı`, `s`/`ş` vb. klavye farklılıkları ortadan kaldırılacaktır.
+3. **Kullanıcı Adı ve E-posta Önceliği:**
+   - `@username` ve `email` alanları doğrudan temizlenmiş sorgu ile taranacaktır.
+4. **İstemci ID Entegrasyonu:**
+   - `match-view.tsx` içerisinden `searchTravelers(q, currentUser?.id)` çağrılarak sunucu tarafı oturum bağımlılığı ve gecikmeler bertaraf edilecektir.
+
+### 71.3. Uygulanan Geliştirmeler ve Doğrulama
+1. **Evrensel Avatar Bileşeni (`components/ui/user-avatar.tsx`):**
+   - Resim (data URL / HTTP URL), emoji (<=8 karakter), baş harfler (initials) veya seyahat emojisi (🌴) desteği sunan, `onError` durumunda otomatik kurtarılan ve 5 farklı boyutta (`xs`, `sm`, `md`, `lg`, `xl`) çalışan modüler bileşen geliştirildi.
+2. **Profil Fotoğrafı Yükleme & Kırpma (`components/profile/profile-view.tsx`):**
+   - İstemci tarafında HTML5 Canvas tabanlı 1:1 merkezden kırpma ve 256x256 WebP/JPEG kalitesinde sıkıştırma mekanizması eklendi.
+   - Profil pasaport kartı üzerine kamera rozeti ve form içerisine "Cihazdan Fotoğraf Yükle" / "Fotoğrafı Kaldır" kontrolleri yerleştirildi.
+3. **Akıllı Gezgin Arama Güçlendirmesi (`lib/actions/search-travelers.ts`):**
+   - `noSpacePattern` ve PostgreSQL `TRANSLATE(LOWER(REPLACE(fullName, ' ', '')), 'ığüşöç', 'igusoc')` ile boşluksuz ve Türkçe karakter farklarını tolere eden akıllı arama devreye alındı.
+   - `match-view.tsx` üzerinde `currentUser?.id` doğrudan server action'a iletilerek tam oturum dayanıklılığı sağlandı.
+4. **Bileşen Entegrasyonları:**
+   - `app-header.tsx`, `match-view.tsx`, `chat-view.tsx` ve `notification-bell.tsx` bileşenlerinin tamamı `UserAvatar` bileşenine geçirilerek profil fotoğrafı desteği tüm sisteme yayıldı.
+   - `auth.ts` oturum ve token yönetiminde `image: user.avatarUrl` eşlemesi yapılarak üst barda anında görünüm sağlandı.
+5. **Kalite Kapısı:**
+   - `npx tsc --noEmit` hatasız tamamlandı (0 hata).
+   - `npm run build` Next.js 16.1.6 üretim derlemesi 2.7 saniyede optimize edildi.
+

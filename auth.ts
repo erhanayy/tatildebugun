@@ -85,6 +85,7 @@ const nextAuthResult = NextAuth({
               id: user.id,
               name: user.fullName,
               email: user.email,
+              image: user.avatarUrl,
               role: user.role,
               forcePasswordChange: user.forcePasswordChange,
             };
@@ -97,11 +98,15 @@ const nextAuthResult = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id ?? "";
         token.role = (user as any).role ?? "guest";
+        token.picture = (user as any).image ?? (user as any).avatarUrl ?? null;
         token.forcePasswordChange = (user as any).forcePasswordChange ?? false;
+      }
+      if (trigger === "update" && session?.user?.image) {
+        token.picture = session.user.image;
       }
       return token;
     },
@@ -110,6 +115,9 @@ const nextAuthResult = NextAuth({
         session.user.id = token.id as string;
         (session.user as any).role = token.role as string;
         (session.user as any).forcePasswordChange = token.forcePasswordChange as boolean;
+        if (token.picture) {
+          session.user.image = token.picture as string;
+        }
       }
       return session;
     },

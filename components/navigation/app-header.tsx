@@ -28,6 +28,7 @@ import { ContractEnforcer } from "@/components/agreements/contract-enforcer";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { Contract } from "@/lib/db/schema";
 import { useTranslation } from "@/lib/i18n/context";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface AppHeaderProps {
   user: {
@@ -210,9 +211,12 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               className="relative p-1 rounded-xl hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition-all cursor-pointer group flex items-center"
               aria-label={t("nav.profile")}
             >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform">
-                {user.name ? user.name.slice(0, 2).toUpperCase() : "🌴"}
-              </div>
+              <UserAvatar
+                avatarUrl={user.image}
+                name={user.name}
+                size="sm"
+                className="group-hover:scale-105 transition-transform"
+              />
 
               {/* Tooltip */}
               <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">

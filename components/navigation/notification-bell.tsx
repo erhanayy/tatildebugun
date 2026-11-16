@@ -21,6 +21,7 @@ import {
 } from "@/lib/actions/notifications";
 import { toast } from "sonner";
 import { useTranslation } from "@/lib/i18n/context";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 export function NotificationBell() {
   const router = useRouter();
@@ -219,13 +220,11 @@ export function NotificationBell() {
                 >
                   {/* Aktör Avatarı ve İkon Rozeti */}
                   <div className="relative shrink-0 mt-0.5">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
-                      {item.actor.avatarUrl ? (
-                        <span className="text-base">{item.actor.avatarUrl}</span>
-                      ) : (
-                        item.actor.fullName?.slice(0, 2).toUpperCase() || "🌴"
-                      )}
-                    </div>
+                    <UserAvatar
+                      avatarUrl={item.actor.avatarUrl}
+                      name={item.actor.fullName}
+                      size="sm"
+                    />
                     <div className="absolute -bottom-1 -right-1 p-0.5 rounded-full bg-slate-900 border border-slate-700 shadow-sm">
                       {getIcon(item.type)}
                     </div>
