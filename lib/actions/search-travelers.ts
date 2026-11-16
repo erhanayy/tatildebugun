@@ -7,16 +7,7 @@ import { eq, and, ne, or, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createNotification } from "@/lib/actions/notifications";
-
-// Gizlilik Hiyerarşisi Ağırlıkları:
-// private: 0, family: 1, relative: 2, friend: 3, public: 4
-export const PRIVACY_LEVELS: Record<string, number> = {
-  private: 0,
-  family: 1,
-  relative: 2,
-  friend: 3,
-  public: 4,
-};
+import { PRIVACY_LEVELS } from "@/lib/constants/privacy";
 
 export interface SearchedTraveler {
   id: string;

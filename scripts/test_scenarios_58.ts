@@ -9,7 +9,8 @@ import { eq, and, or, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { generateUniqueUsername, isUsernameAvailable } from "../lib/utils/username";
 import { getUserByIdentifier } from "../auth";
-import { searchTravelers, PRIVACY_LEVELS, getRelationshipWeight } from "../lib/actions/search-travelers";
+import { searchTravelers, getRelationshipWeight } from "../lib/actions/search-travelers";
+import { PRIVACY_LEVELS } from "../lib/constants/privacy";
 import { completeOnboardingAction, getOnboardingStatus } from "../lib/actions/user";
 
 interface TestReport {

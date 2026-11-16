@@ -3665,3 +3665,34 @@ Kullanıcının *"İsterim bulmayı kolaylaştırmak lazım. Hatta bir de profil
    - `npx tsc --noEmit` hatasız tamamlandı (0 hata).
    - `npm run build` Next.js 16.1.6 üretim derlemesi 2.7 saniyede optimize edildi.
 
+---
+
+## 72. Gezgin Arama Canlı 500 Hatası Kök Neden Analizi & Çözümü (Invalid Use Server Value)
+
+### 72.1. Sorunun Tespiti & Canlı Log Analizi
+Kullanıcının ilettiği görselde arama yapıldığında *"Arama yapılırken hata alındı"* uyarısı çıkması üzerine Google Cloud Run canlı logları (`severity>=WARNING` ve `textPayload`) incelendi:
+```text
+⨯ Error: A "use server" file can only export async functions, found object.
+Read more: https://nextjs.org/docs/messages/invalid-use-server-value
+  at module evaluation (.next/server/chunks/ssr/_7039aef5._.js:1:12072)
+```
+
+### 72.2. Kök Neden (Root Cause)
+- Next.js Server Actions mimarisinde (`"use server"` direktifi taşıyan dosyalarda), istemci tarafı RPC köprüsü gereği **yalnızca asenkron fonksiyonlar (`async function`) export edilebilir**.
+- [lib/actions/search-travelers.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/search-travelers.ts) dosyasının 13. satırında yer alan:
+  ```ts
+  export const PRIVACY_LEVELS: Record<string, number> = { private: 0, family: 1, ... };
+  ```
+  tanımı nesne (`object`) türünde bir dışa aktarma olduğu için Turbopack/Next.js çalışma zamanında anında HTTP 500 fırlatarak Server Action fonksiyonunun çalışmasını tamamen engellemekteydi.
+
+### 72.3. Uygulanan Çözüm & Doğrulama
+1. **Sabitlerin Ayrıştırılması ([lib/constants/privacy.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/constants/privacy.ts)):**
+   - `PRIVACY_LEVELS` sabiti `"use server"` dosyasından çıkarılarak bağımsız `lib/constants/privacy.ts` dosyasına taşındı.
+   - [lib/actions/search-travelers.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/actions/search-travelers.ts) ve test betikleri bu dosyadan import edecek şekilde düzenlendi.
+2. **Doğrudan Node.js / DB Testi:**
+   - `searchTravelers("Erhan Ayy")` çağrısı canlı veritabanında çalıştırıldı ve sonuç olarak hem `erhanayyildiz@hotmail.com` (username `erhanayyildiz1`, fullName `ERHAN AYYILDIZ`) hem de `erhanayyildiz@gmail.com` (username `erhanayyildiz`, fullName `Erhan Ayyıldız`) hesaplarının başarıyla döndüğü teyit edildi.
+3. **Derleme:**
+   - `npx tsc --noEmit` 0 hata ile geçti.
+   - `npm run build` Next.js derlemesi 2.3 saniyede hatasız tamamlandı.
+
+
