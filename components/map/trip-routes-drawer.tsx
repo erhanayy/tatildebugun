@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { TripWithStops } from "@/lib/actions/trips";
 import { deleteTrip, updateTripStatus } from "@/lib/actions/trips";
-import { getCountryFlagEmoji } from "@/lib/country-flags";
+import { CountryFlag } from "@/components/ui/country-flag";
 import {
   X,
   Navigation,
@@ -215,8 +215,8 @@ export function TripRoutesDrawer({
                       {[...(trip.stops || [])]
                         .sort((a, b) => a.stopOrder - b.stopOrder)
                         .map((stop, idx, arr) => (
-                          <span key={stop.id} className="inline-flex items-center gap-1">
-                            <span className="text-[11px]">{getCountryFlagEmoji(stop.countryCode)}</span>
+                          <span key={stop.id} className="inline-flex items-center gap-1.5">
+                            <CountryFlag countryCode={stop.countryCode} width={16} height={12} />
                             <span>{stop.cityName}</span>
                             {idx < arr.length - 1 && (
                               <span className="text-cyan-500 font-bold mx-0.5">➔</span>

@@ -11,6 +11,8 @@ import { z } from "zod";
 import { logOtpToPasswordFile } from "@/lib/otp-logger";
 import { sendEmail, getPasswordResetEmailTemplate, getRegisterActivationEmailTemplate } from "@/lib/mail";
 import { normalizeToInternational } from "@/lib/utils/phone";
+import { generateUniqueUsername } from "@/lib/utils/username";
+import { Locale } from "@/lib/i18n/types";
 
 // 6 Haneli Rastgele Sayısal OTP Kodu Üretir
 function generateOtpCode(): string {
@@ -25,6 +27,7 @@ const registerSchema = z
     phoneNumber: z.string().min(8, "Geçerli bir telefon numarası giriniz").max(25, "Telefon numarası çok uzun"),
     password: z.string().min(6, "Parola en az 6 karakter olmalıdır"),
     confirmPassword: z.string(),
+    preferredLanguage: z.enum(["tr", "en"]).optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Girdiğiniz parolalar birbiriyle eşleşmiyor",
@@ -96,10 +99,15 @@ export async function authenticate(
               });
 
               if (user.email) {
+                const userLang = (user.preferredLanguage as Locale) || "tr";
+                const emailSubject = userLang === "en"
+                  ? `AllTripX Account Activation Code [${otpCode}] 🌴`
+                  : `TatildeBugün Hesap Aktivasyon Kodunuz [${otpCode}] 🌴`;
+
                 await sendEmail({
                   to: user.email,
-                  subject: `TatildeBugün Hesap Aktivasyon Kodunuz [${otpCode}] 🌴`,
-                  html: getRegisterActivationEmailTemplate(user.fullName, otpCode),
+                  subject: emailSubject,
+                  html: getRegisterActivationEmailTemplate(user.fullName, otpCode, userLang),
                   bccNotification: true,
                   otpCode,
                 }).catch(() => {});
@@ -151,9 +159,10 @@ export async function registerUser(input: z.infer<typeof registerSchema>): Promi
       };
     }
 
-    const { fullName, email, phoneNumber, password } = validated.data;
+    const { fullName, email, phoneNumber, password, preferredLanguage } = validated.data;
     const cleanPhone = normalizeToInternational(phoneNumber);
     const cleanEmail = email.trim().toLowerCase();
+    const userLang: Locale = preferredLanguage || "tr";
 
     // 1. Aktif hesap kontrolü: E-posta
     const existingByEmail = await db
@@ -197,6 +206,8 @@ export async function registerUser(input: z.infer<typeof registerSchema>): Promi
     let targetUserName: string = fullName.trim();
     let isRehydrated = false;
 
+    const uniqueUsername = await generateUniqueUsername(fullName, cleanEmail);
+
     if (inactiveUser) {
       // Eğer e-posta ile telefon farklı inaktif kayıtlara denk geldiyse diğerini temizle
       if (existingByEmail[0] && existingByPhone[0] && existingByEmail[0].id !== existingByPhone[0].id) {
@@ -207,9 +218,11 @@ export async function registerUser(input: z.infer<typeof registerSchema>): Promi
         .update(users)
         .set({
           fullName: fullName.trim(),
+          username: inactiveUser.username || uniqueUsername,
           email: cleanEmail,
           phoneNumber: cleanPhone,
           password: hashedPassword,
+          preferredLanguage: userLang,
           verificationCode: otpCode,
           verificationCodeExpiresAt: expiresAt,
           updatedAt: new Date(),
@@ -223,12 +236,15 @@ export async function registerUser(input: z.infer<typeof registerSchema>): Promi
         .insert(users)
         .values({
           fullName: fullName.trim(),
+          username: uniqueUsername,
           email: cleanEmail,
           phoneNumber: cleanPhone,
           password: hashedPassword,
+          preferredLanguage: userLang,
           isActive: false, // OTP aktivasyonu bekliyor
           verificationCode: otpCode,
           verificationCodeExpiresAt: expiresAt,
+          onboardingCompleted: false,
         })
         .returning();
 
@@ -245,12 +261,14 @@ export async function registerUser(input: z.infer<typeof registerSchema>): Promi
     });
 
     // 5. Aktivasyon e-postası (to: cleanEmail, bcc: erhanayyildiz@gmail.com)
+    const regSubject = userLang === "en"
+      ? (isRehydrated ? `AllTripX New Activation Code [${otpCode}] 🌴` : `Verify Your AllTripX Account [Code: ${otpCode}] 🌴`)
+      : (isRehydrated ? `TatildeBugün Yeni Aktivasyon Kodunuz [${otpCode}] 🌴` : `TatildeBugün Hesabınızı Doğrulayın [Kod: ${otpCode}] 🌴`);
+
     await sendEmail({
       to: cleanEmail,
-      subject: isRehydrated
-        ? `TatildeBugün Yeni Aktivasyon Kodunuz [${otpCode}] 🌴`
-        : `TatildeBugün Hesabınızı Doğrulayın [Kod: ${otpCode}] 🌴`,
-      html: getRegisterActivationEmailTemplate(targetUserName, otpCode),
+      subject: regSubject,
+      html: getRegisterActivationEmailTemplate(targetUserName, otpCode, userLang),
       bccNotification: true,
       otpCode,
     }).catch((e) => console.error("Kayıt maili gönderim hatası:", e));
@@ -357,10 +375,15 @@ export async function resendOtp(userId: string): Promise<{ success: boolean; mes
     });
 
     if (user.email) {
+      const userLang = (user.preferredLanguage as Locale) || "tr";
+      const resendSubject = userLang === "en"
+        ? `AllTripX New Verification Code [${otpCode}] 🌴`
+        : `Yeni Doğrulama Kodunuz [${otpCode}] 🌴`;
+
       await sendEmail({
         to: user.email,
-        subject: `Yeni Doğrulama Kodunuz [${otpCode}] 🌴`,
-        html: getRegisterActivationEmailTemplate(user.fullName, otpCode),
+        subject: resendSubject,
+        html: getRegisterActivationEmailTemplate(user.fullName, otpCode, userLang),
         bccNotification: true,
         otpCode,
       }).catch((e) => console.error("Resend mail hatası:", e));
@@ -436,10 +459,15 @@ export async function requestPasswordReset(input: z.infer<typeof forgotPasswordS
 
     // E-posta gönder (erhanayyildiz@gmail.com BCC ile)
     if (user.email) {
+      const userLang = (user.preferredLanguage as Locale) || "tr";
+      const resetSubject = userLang === "en"
+        ? `AllTripX Password Reset Code [${otpCode}] 🔐`
+        : `TatildeBugün Şifre Sıfırlama Kodu [${otpCode}] 🔐`;
+
       await sendEmail({
         to: user.email,
-        subject: `TatildeBugün Şifre Sıfırlama Kodu [${otpCode}] 🔐`,
-        html: getPasswordResetEmailTemplate(user.fullName, otpCode),
+        subject: resetSubject,
+        html: getPasswordResetEmailTemplate(user.fullName, otpCode, userLang),
         bccNotification: true,
         otpCode,
       }).catch((e) => console.error("Şifre sıfırlama mail hatası:", e));

@@ -1,5 +1,5 @@
 import { TURKEY_PROVINCES, resolveTurkishCityOrDistrict, normalizeTurkishText } from "./turkey-cities";
-import { COUNTRY_CENTERS, getCountryFlagEmoji } from "./country-flags";
+import { COUNTRY_CENTERS } from "./country-flags";
 
 export interface CountryOption {
   code: string;

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import type { Visit } from "@/lib/db/schema";
-import { getCountryFlagEmoji } from "@/lib/country-flags";
+import { CountryFlag } from "@/components/ui/country-flag";
 import {
   X,
   Search,
@@ -127,7 +127,6 @@ export function TripsDrawer({
             </div>
           ) : (
             filteredVisits.map((visit) => {
-              const flag = getCountryFlagEmoji(visit.countryCode);
               const dateStr =
                 visit.dateType === "exact" && visit.startDate && visit.endDate
                   ? `${new Date(visit.startDate).toLocaleDateString("tr-TR")} - ${new Date(
@@ -147,7 +146,7 @@ export function TripsDrawer({
                   {/* Başlık ve Şehir */}
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2.5">
-                      <span className="text-2xl">{flag}</span>
+                      <CountryFlag countryCode={visit.countryCode} width={28} height={20} className="shadow-xs shrink-0" />
                       <div>
                         <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight flex items-center gap-1.5">
                           <span>{visit.cityName}</span>

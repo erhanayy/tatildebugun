@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { COUNTRIES, CountryInfo, splitPhone, normalizeToInternational } from "@/lib/utils/phone";
 import { ChevronDown, Search, Check, Phone } from "lucide-react";
+import { CountryFlag } from "./country-flag";
 
 interface InternationalPhoneInputProps {
   value: string;
@@ -126,7 +127,7 @@ export function InternationalPhoneInput({
         className="flex items-center gap-1.5 px-3 py-2.5 rounded-l-xl bg-slate-100 dark:bg-slate-800 border-y border-l border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-750 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 z-10 min-h-[44px] cursor-pointer"
         title="Ülke ve alan kodunu değiştir"
       >
-        <span className="text-base leading-none">{selectedCountry.flag}</span>
+        <CountryFlag countryCode={selectedCountry.code} width={20} height={14} alt={selectedCountry.name} />
         <span className="font-mono text-xs">{selectedCountry.dialCode}</span>
         <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
       </button>
@@ -182,7 +183,7 @@ export function InternationalPhoneInput({
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
-                      <span className="text-base">{c.flag}</span>
+                      <CountryFlag countryCode={c.code} width={20} height={14} alt={c.name} />
                       <span className="truncate">{c.name}</span>
                     </div>
                     <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">

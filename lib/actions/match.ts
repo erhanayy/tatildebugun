@@ -8,9 +8,10 @@ import {
   tripStops,
   users,
   travelMatches,
+  userConnections,
   type TravelMatch,
 } from "@/lib/db/schema";
-import { eq, and, ne, desc, sql } from "drizzle-orm";
+import { eq, and, ne, desc, sql, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createNotification } from "@/lib/actions/notifications";
@@ -21,6 +22,7 @@ const sendMatchRequestSchema = z.object({
   cityName: z.string().min(1, "Şehir adı zorunludur"),
   overlapStartDate: z.string().optional().nullable(),
   overlapEndDate: z.string().optional().nullable(),
+  relationshipType: z.enum(["friend", "relative", "family"]).default("friend").optional(),
   introMessage: z.string().max(500, "Mesaj en fazla 500 karakter olabilir").optional(),
 });
 
@@ -311,7 +313,7 @@ export async function sendMatchRequest(input: z.infer<typeof sendMatchRequestSch
       return { success: false, message: "Geçersiz istek parametreleri." };
     }
 
-    const { receiverId, cityName, overlapStartDate, overlapEndDate, introMessage } = validated.data;
+    const { receiverId, cityName, overlapStartDate, overlapEndDate, introMessage, relationshipType } = validated.data;
     const senderId = session.user.id;
 
     if (senderId === receiverId) {
@@ -344,6 +346,7 @@ export async function sendMatchRequest(input: z.infer<typeof sendMatchRequestSch
         cityName,
         overlapStartDate: overlapStartDate ? new Date(overlapStartDate) : null,
         overlapEndDate: overlapEndDate ? new Date(overlapEndDate) : null,
+        relationshipType: relationshipType || "friend",
         introMessage: introMessage || defaultIntro,
         status: "pending",
       })
@@ -451,6 +454,36 @@ export async function respondMatchRequest(
       );
 
     if (m[0] && action === "accepted") {
+      // Çift taraflı userConnections tablosunu senkronize et
+      const rel = (m[0].relationshipType as "friend" | "relative" | "family") || "friend";
+      try {
+        await db
+          .delete(userConnections)
+          .where(
+            or(
+              and(eq(userConnections.userId, m[0].senderId), eq(userConnections.targetUserId, m[0].receiverId)),
+              and(eq(userConnections.userId, m[0].receiverId), eq(userConnections.targetUserId, m[0].senderId))
+            )
+          );
+
+        await db.insert(userConnections).values([
+          {
+            userId: m[0].senderId,
+            targetUserId: m[0].receiverId,
+            relationshipType: rel,
+            status: "accepted",
+          },
+          {
+            userId: m[0].receiverId,
+            targetUserId: m[0].senderId,
+            relationshipType: rel,
+            status: "accepted",
+          },
+        ]);
+      } catch (connErr) {
+        console.error("userConnections senkronizasyon hatası:", connErr);
+      }
+
       createNotification({
         userId: m[0].senderId,
         actorId: session.user.id,

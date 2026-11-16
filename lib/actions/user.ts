@@ -9,13 +9,23 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { normalizeToInternational } from "@/lib/utils/phone";
 
+import { isUsernameAvailable } from "@/lib/utils/username";
+
 const updateProfileSchema = z.object({
   fullName: z.string().min(2, "Ad Soyad en az 2 karakter olmalıdır"),
+  username: z.string().min(3, "Kullanıcı adı en az 3 karakter olmalıdır").max(30, "Kullanıcı adı en fazla 30 karakter olabilir").optional().nullable(),
   phoneNumber: z.string().optional().nullable(),
   bio: z.string().max(500, "Biyografi en fazla 500 karakter olabilir").optional().nullable(),
   avatarUrl: z.string().optional().nullable(),
   baseCountry: z.string().length(2).optional().nullable(),
-  baseCity: z.string().max(100).optional().nullable(),
+  baseCity: z.string().min(1, "Ana şehir boş bırakılamaz").max(100).optional().nullable(),
+  preferredLanguage: z.enum(["tr", "en"]).optional(),
+  showFullName: z.boolean().optional(),
+  showEmail: z.boolean().optional(),
+  showPhone: z.boolean().optional(),
+  searchPrivacy: z.enum(["public", "friend", "relative", "family", "private"]).optional(),
+  radarPrivacy: z.enum(["public", "friend", "relative", "family", "private"]).optional(),
+  mapPrivacy: z.enum(["public", "friend", "relative", "family", "private"]).optional(),
 });
 
 const changePasswordSchema = z
@@ -33,6 +43,7 @@ export interface UserProfileData {
   user: {
     id: string;
     fullName: string;
+    username: string | null;
     email: string | null;
     phoneNumber: string | null;
     bio: string | null;
@@ -40,6 +51,14 @@ export interface UserProfileData {
     role: string;
     baseCountry: string | null;
     baseCity: string | null;
+    preferredLanguage: "tr" | "en";
+    showFullName: boolean;
+    showEmail: boolean;
+    showPhone: boolean;
+    searchPrivacy: string;
+    radarPrivacy: string;
+    mapPrivacy: string;
+    onboardingCompleted: boolean;
     createdAt: Date;
   };
   stats: {
@@ -99,6 +118,7 @@ export async function getUserProfile(): Promise<UserProfileData | null> {
       user: {
         id: user.id,
         fullName: user.fullName,
+        username: user.username,
         email: user.email,
         phoneNumber: user.phoneNumber,
         bio: user.bio,
@@ -106,6 +126,14 @@ export async function getUserProfile(): Promise<UserProfileData | null> {
         role: user.role,
         baseCountry: user.baseCountry || "TR",
         baseCity: user.baseCity || "İstanbul",
+        preferredLanguage: (user.preferredLanguage as "tr" | "en") || "tr",
+        showFullName: user.showFullName ?? true,
+        showEmail: user.showEmail ?? true,
+        showPhone: user.showPhone ?? false,
+        searchPrivacy: user.searchPrivacy || "public",
+        radarPrivacy: user.radarPrivacy || "public",
+        mapPrivacy: user.mapPrivacy || "public",
+        onboardingCompleted: user.onboardingCompleted ?? false,
         createdAt: user.createdAt,
       },
       stats: {
@@ -119,6 +147,134 @@ export async function getUserProfile(): Promise<UserProfileData | null> {
   } catch (error) {
     console.error("Profil getirilirken hata:", error);
     return null;
+  }
+}
+
+/**
+ * Kullanıcı adının müsaitliğini istemciye bildiren server action.
+ */
+export async function checkUsernameAction(username: string): Promise<{ available: boolean; error?: string }> {
+  const session = await auth();
+  return await isUsernameAvailable(username, session?.user?.id);
+}
+
+/**
+ * Kullanıcının ilk kurulum sihirbazını (Onboarding Wizard) tamamlayıp tamamlamadığını sorgular.
+ */
+export async function getOnboardingStatus(): Promise<{
+  needsOnboarding: boolean;
+  user?: {
+    id: string;
+    fullName: string;
+    username: string | null;
+    baseCountry: string | null;
+    baseCity: string | null;
+    showFullName: boolean;
+    showEmail: boolean;
+    showPhone: boolean;
+    radarPrivacy: string;
+  };
+}> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) return { needsOnboarding: false };
+
+    const u = await db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        username: users.username,
+        baseCountry: users.baseCountry,
+        baseCity: users.baseCity,
+        onboardingCompleted: users.onboardingCompleted,
+        showFullName: users.showFullName,
+        showEmail: users.showEmail,
+        showPhone: users.showPhone,
+        radarPrivacy: users.radarPrivacy,
+      })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
+
+    if (u.length === 0) return { needsOnboarding: false };
+
+    const user = u[0];
+    const needsOnboarding = !user.onboardingCompleted || !user.baseCity;
+
+    return {
+      needsOnboarding,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        username: user.username,
+        baseCountry: user.baseCountry || "TR",
+        baseCity: user.baseCity || "İstanbul",
+        showFullName: user.showFullName ?? true,
+        showEmail: user.showEmail ?? true,
+        showPhone: user.showPhone ?? false,
+        radarPrivacy: user.radarPrivacy || "public",
+      },
+    };
+  } catch (error) {
+    console.error("Onboarding durumu sorgulanırken hata:", error);
+    return { needsOnboarding: false };
+  }
+}
+
+/**
+ * Gezgin Kurulum Sihirbazı (Onboarding Wizard) Tamamlama Eylemi
+ */
+export async function completeOnboardingAction(data: {
+  username?: string;
+  baseCountry: string;
+  baseCity: string;
+  showFullName?: boolean;
+  showEmail?: boolean;
+  showPhone?: boolean;
+  radarPrivacy?: "public" | "friend" | "relative" | "family" | "private";
+}): Promise<{ success: boolean; message?: string }> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, message: "Oturum açmanız gerekmektedir." };
+    }
+
+    if (!data.baseCity || !data.baseCity.trim()) {
+      return { success: false, message: "Lütfen ana ikamet şehrinizi seçiniz." };
+    }
+
+    let cleanUsername: string | undefined = undefined;
+    if (data.username && data.username.trim()) {
+      const avail = await isUsernameAvailable(data.username.trim(), session.user.id);
+      if (!avail.available) {
+        return { success: false, message: avail.error || "Kullanıcı adı kullanılamaz." };
+      }
+      cleanUsername = data.username.trim().toLowerCase();
+    }
+
+    await db
+      .update(users)
+      .set({
+        ...(cleanUsername ? { username: cleanUsername } : {}),
+        baseCountry: data.baseCountry || "TR",
+        baseCity: data.baseCity.trim(),
+        showFullName: data.showFullName !== undefined ? data.showFullName : true,
+        showEmail: data.showEmail !== undefined ? data.showEmail : true,
+        showPhone: data.showPhone !== undefined ? data.showPhone : false,
+        radarPrivacy: data.radarPrivacy || "public",
+        onboardingCompleted: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, session.user.id));
+
+    revalidatePath("/dashboard");
+    revalidatePath("/profile");
+    revalidatePath("/match");
+
+    return { success: true, message: "Kurulum tamamlandı! Hoş geldiniz 🌴" };
+  } catch (error) {
+    console.error("Onboarding tamamlama hatası:", error);
+    return { success: false, message: "Kurulum kaydedilirken bir hata oluştu." };
   }
 }
 
@@ -143,7 +299,33 @@ export async function updateProfile(input: z.infer<typeof updateProfileSchema>):
       };
     }
 
-    const { fullName, phoneNumber, bio, avatarUrl, baseCountry, baseCity } = validated.data;
+    const {
+      fullName,
+      username,
+      phoneNumber,
+      bio,
+      avatarUrl,
+      baseCountry,
+      baseCity,
+      preferredLanguage,
+      showFullName,
+      showEmail,
+      showPhone,
+      searchPrivacy,
+      radarPrivacy,
+      mapPrivacy,
+    } = validated.data;
+
+    // Kullanıcı adı değiştiyse müsaitlik kontrolü
+    let cleanUsername: string | undefined = undefined;
+    if (username && username.trim()) {
+      const avail = await isUsernameAvailable(username.trim(), session.user.id);
+      if (!avail.available) {
+        return { success: false, message: avail.error || "Bu kullanıcı adı kullanılamaz." };
+      }
+      cleanUsername = username.trim().toLowerCase();
+    }
+
     const cleanPhone = phoneNumber ? normalizeToInternational(phoneNumber) : null;
 
     if (cleanPhone) {
@@ -164,11 +346,19 @@ export async function updateProfile(input: z.infer<typeof updateProfileSchema>):
       .update(users)
       .set({
         fullName: fullName.trim(),
+        ...(cleanUsername ? { username: cleanUsername } : {}),
         phoneNumber: cleanPhone,
         bio: bio?.trim() || null,
         avatarUrl: avatarUrl?.trim() || null,
         baseCountry: baseCountry || "TR",
         baseCity: baseCity?.trim() || "İstanbul",
+        ...(preferredLanguage ? { preferredLanguage } : {}),
+        ...(showFullName !== undefined ? { showFullName } : {}),
+        ...(showEmail !== undefined ? { showEmail } : {}),
+        ...(showPhone !== undefined ? { showPhone } : {}),
+        ...(searchPrivacy ? { searchPrivacy } : {}),
+        ...(radarPrivacy ? { radarPrivacy } : {}),
+        ...(mapPrivacy ? { mapPrivacy } : {}),
         updatedAt: new Date(),
       })
       .where(eq(users.id, session.user.id));
@@ -176,6 +366,7 @@ export async function updateProfile(input: z.infer<typeof updateProfileSchema>):
     revalidatePath("/profile");
     revalidatePath("/dashboard");
     revalidatePath("/feed");
+    revalidatePath("/match");
 
     return { success: true, message: "Profil bilgileriniz başarıyla güncellendi! ✅" };
   } catch (error) {
@@ -237,3 +428,31 @@ export async function changePassword(input: z.infer<typeof changePasswordSchema>
     return { success: false, message: "Şifre değiştirilemedi." };
   }
 }
+
+/**
+ * Kullanıcının dil tercihini günceller.
+ */
+export async function setLanguagePreference(lang: "tr" | "en"): Promise<{ success: boolean; message?: string }> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, message: "Oturum açmanız gerekmektedir." };
+    }
+
+    await db
+      .update(users)
+      .set({
+        preferredLanguage: lang,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, session.user.id));
+
+    revalidatePath("/profile");
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (error) {
+    console.error("Dil tercihi güncellenirken hata:", error);
+    return { success: false, message: "Dil tercihi güncellenemedi." };
+  }
+}
+

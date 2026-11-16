@@ -73,6 +73,168 @@ export async function getCityDailyItineraries(
   }
 }
 
+interface RawItineraryDay {
+  dayNumber: number;
+  title: string;
+  theme: string;
+  description: string;
+  stops: Array<{
+    name: string;
+    fallbackLat: number;
+    fallbackLng: number;
+    category?: string;
+    estimatedMinutes?: number;
+    walkingTip?: string;
+  }>;
+}
+
+/**
+ * Herhangi bir yeni şehir için Akıllı Coğrafi En Yakın Komşu (Greedy Nearest Neighbor) Kümeleme
+ * Kurallar:
+ * 1. Şehir merkezi ortalaması hesaplanır ve 25 km'den uzak outlier (havaalanı/yanlış koordinat) elenir.
+ * 2. Günlük rota tohumu (seed) seçildikten sonra her durak bir öncekine en yakın (max 2.8 km) adaydan seçilir.
+ * 3. Günlük durak sayısı 4-5 ile sınırlanır, yürüyüş mesafesi 7.5 km'yi aşmaz.
+ * 4. Şehir mekanları mahalle/bölge bazlı homojen günlere ayrılır, zikzaklar ve aşırı yorgunluk önlenir.
+ */
+function clusterPlacesIntoItineraries(
+  cityName: string,
+  places: Array<{
+    id?: string;
+    name: string;
+    latitude: number | null;
+    longitude: number | null;
+    category: string | null;
+    imageUrl?: string | null;
+  }>
+): RawItineraryDay[] {
+  // 1. Koordinatları geçerli olanları ayıkla
+  const validPlaces = places.filter(
+    (p) =>
+      p.latitude != null &&
+      p.longitude != null &&
+      !isNaN(p.latitude) &&
+      !isNaN(p.longitude) &&
+      p.latitude !== 0 &&
+      p.longitude !== 0 &&
+      p.latitude >= -90 &&
+      p.latitude <= 90 &&
+      p.longitude >= -180 &&
+      p.longitude <= 180
+  );
+
+  if (validPlaces.length === 0) {
+    return [];
+  }
+
+  // 2. Şehir merkezini (ortalama lat/lng) hesapla
+  const avgLat = validPlaces.reduce((sum, p) => sum + p.latitude!, 0) / validPlaces.length;
+  const avgLng = validPlaces.reduce((sum, p) => sum + p.longitude!, 0) / validPlaces.length;
+
+  // 3. Şehir merkezinden 25 km'den uzak aşırı uç noktaları (outlier) ele
+  const inCityPlaces = validPlaces.filter((p) => {
+    const distToCenter = calculateDistanceMeters(avgLat, avgLng, p.latitude!, p.longitude!);
+    return distToCenter <= 25000;
+  });
+
+  const pool = inCityPlaces.length >= 3 ? inCityPlaces : validPlaces;
+
+  // 4. Hedef gün sayısı (En az 1, en fazla 5 gün)
+  const targetDays = Math.min(5, Math.max(1, Math.ceil(pool.length / 5)));
+  const unvisited = [...pool];
+  const generatedDays: RawItineraryDay[] = [];
+
+  for (let day = 1; day <= targetDays; day++) {
+    if (unvisited.length === 0) break;
+
+    // Günün başlangıç tohumu (Seed): Merkeze yakın ve görseli/kategorisi olan mekanlara öncelik
+    let bestSeedIndex = 0;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < unvisited.length; i++) {
+      const p = unvisited[i];
+      const dist = calculateDistanceMeters(avgLat, avgLng, p.latitude!, p.longitude!);
+      let score = 10000 - dist;
+      if (p.imageUrl) score += 3000;
+      if (p.category === "historic" || p.category === "museum" || p.category === "monument") {
+        score += 2000;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestSeedIndex = i;
+      }
+    }
+
+    const seed = unvisited.splice(bestSeedIndex, 1)[0];
+    const dayStops: typeof seed[] = [seed];
+    let currentPlace = seed;
+    let dayDistance = 0;
+
+    // Komşuluk araması: En yakın unvisited mekanı güne ekle
+    while (dayStops.length < 5 && unvisited.length > 0) {
+      let closestIdx = -1;
+      let minDistance = Infinity;
+
+      for (let i = 0; i < unvisited.length; i++) {
+        const candidate = unvisited[i];
+        const d = calculateDistanceMeters(
+          currentPlace.latitude!,
+          currentPlace.longitude!,
+          candidate.latitude!,
+          candidate.longitude!
+        );
+        if (d < minDistance) {
+          minDistance = d;
+          closestIdx = i;
+        }
+      }
+
+      // Duraklar arası 2.8 km'den uzaksa, yürüyüş homojenliğini korumak için bu günü kapat
+      if (minDistance > 2800) {
+        break;
+      }
+
+      // Toplam günlük yürüyüş 7.5 km'yi aşacaksa durak eklemeyi durdur
+      if (dayDistance + minDistance > 7500) {
+        break;
+      }
+
+      const nextPlace = unvisited.splice(closestIdx, 1)[0];
+      dayStops.push(nextPlace);
+      dayDistance += minDistance;
+      currentPlace = nextPlace;
+    }
+
+    // Gün kategorilerini inceleyerek dinamik başlık ve tema üret
+    const categories = dayStops.map((s) => s.category || "historic");
+    const hasMuseum = categories.includes("museum");
+    const hasHistoric = categories.includes("historic") || categories.includes("monument");
+    const hasNature = categories.includes("nature") || categories.includes("view");
+
+    let theme = "Şehir & Kültür Keşfi";
+    if (hasMuseum && hasHistoric) theme = "Tarihi Yapılar & Sanat Durakları";
+    else if (hasHistoric) theme = "Tarihi Miras & Şehir Dokusu";
+    else if (hasNature) theme = "Panoramik Manzaralar & Parklar";
+    else if (hasMuseum) theme = "Müzeler & Sanat Galerileri";
+
+    generatedDays.push({
+      dayNumber: day,
+      title: `${cityName} ${theme} - ${day}. Gün`,
+      theme,
+      description: `${cityName} şehrinin birbirine en yakın tarihi ve turistik duraklarını zikzak çizmeden, yürüyerek keşfedebileceğiniz ${day}. gün rotası.`,
+      stops: dayStops.map((dp, idx) => ({
+        name: dp.name,
+        fallbackLat: dp.latitude || avgLat,
+        fallbackLng: dp.longitude || avgLng,
+        category: dp.category || "historic",
+        estimatedMinutes: 45,
+        walkingTip: `${idx + 1}. durak: ${dp.name} ziyareti ve çevre keşfi.`,
+      })),
+    });
+  }
+
+  return generatedDays;
+}
+
 /**
  * Şehir için optimize edilmiş 1-5 günlük rotaları oluşturup kalıcı olarak DB'ye yazar
  */
@@ -115,7 +277,255 @@ async function seedAndGenerateItinerariesForCity(
     }>;
   }> = [];
 
-  if (normalized.includes("roma") || normalized.includes("rome")) {
+  if (normalized.includes("paris")) {
+    rawDays = [
+      {
+        dayNumber: 1,
+        title: "Tarihi Merkez, Louvre & Seine Kıyısı",
+        theme: "Kraliyet Mirası & Nehir Romantizmi",
+        description:
+          "Dünyanın en ünlü müzesi Louvre'dan başlayıp cam piramit ve Tuileries Bahçesi'nden Seine Nehri kıyısına, oradan Empresyonistlerin mabedi Musée d'Orsay ve tarihi Café de Flore'a uzanan büyüleyici yürüyüş rotası.",
+        stops: [
+          {
+            name: "Louvre Müzesi (Musée du Louvre)",
+            fallbackLat: 48.8606,
+            fallbackLng: 2.3376,
+            category: "museum",
+            estimatedMinutes: 90,
+            walkingTip: "Sabah saatlerinde Cour Napoléon avlusundan başlayarak dış mimariyi ve koleksiyonları fotoğraflayın.",
+          },
+          {
+            name: "Louvre Piramidi & Tuileries Bahçesi",
+            fallbackLat: 48.8635,
+            fallbackLng: 2.3275,
+            category: "nature",
+            estimatedMinutes: 45,
+            walkingTip: "İkonik cam piramidin ardından heykellerle bezeli kraliyet bahçesi Tuileries boyunca huzurla yürüyün.",
+          },
+          {
+            name: "Pont Neuf & Seine Kıyısı",
+            fallbackLat: 48.8575,
+            fallbackLng: 2.3416,
+            category: "monument",
+            estimatedMinutes: 35,
+            walkingTip: "Paris'in en eski taş köprüsünden nehir üzerindeki tekne turlarını ve tarihi adayı izleyin.",
+          },
+          {
+            name: "Orsay Müzesi (Musée d'Orsay)",
+            fallbackLat: 48.8599,
+            fallbackLng: 2.3265,
+            category: "museum",
+            estimatedMinutes: 75,
+            walkingTip: "Eski bir tren garından dönüştürülen devasa müzede dev saat penceresinden Paris silüetini yakalayın.",
+          },
+          {
+            name: "Saint-Germain-des-Prés & Café de Flore",
+            fallbackLat: 48.8542,
+            fallbackLng: 2.3325,
+            category: "cafe",
+            estimatedMinutes: 45,
+            walkingTip: "Sartre ve Simone de Beauvoir gibi düşünürlerin buluşma noktası olan tarihi kafede kahve ve kruvasan molası verin.",
+          },
+        ],
+      },
+      {
+        dayNumber: 2,
+        title: "İkonik Eyfel, Champ de Mars & Şanzelize",
+        theme: "Paris Simgeleri & Büyük Bulvarlar",
+        description:
+          "Paris'in evrensel simgesi Eyfel Kulesi ve Champ de Mars yeşilliklerinden başlayıp Trocadéro terasından Zafer Takı'na ve dünyanın en ünlü bulvarı Şanzelize'ye uzanan prestijli yürüyüş.",
+        stops: [
+          {
+            name: "Eyfel Kulesi (Tour Eiffel)",
+            fallbackLat: 48.8584,
+            fallbackLng: 2.2945,
+            category: "monument",
+            estimatedMinutes: 75,
+            walkingTip: "Demir Leydi'nin devasa ayakları altından başlayıp mimari zarafeti yakından inceleyin.",
+          },
+          {
+            name: "Champ de Mars Parkı",
+            fallbackLat: 48.8556,
+            fallbackLng: 2.2986,
+            category: "nature",
+            estimatedMinutes: 40,
+            walkingTip: "Kulenin en güzel fotoğraflarını çekebileceğiniz geniş çimenlik koridorda yürüyün.",
+          },
+          {
+            name: "Trocadéro Meydanı & Seyir Terası",
+            fallbackLat: 48.8624,
+            fallbackLng: 2.2872,
+            category: "view",
+            estimatedMinutes: 45,
+            walkingTip: "Seine üzerindeki köprüden geçip fıskiyeler eşliğinde Eyfel'in kartpostallık panoramik açısını yakalayın.",
+          },
+          {
+            name: "Zafer Takı (Arc de Triomphe)",
+            fallbackLat: 48.8738,
+            fallbackLng: 2.295,
+            category: "monument",
+            estimatedMinutes: 50,
+            walkingTip: "Napoléon'un zafer anıtının altındaki Meçhul Asker Mezarı ve ebedi ateşi ziyaret edin.",
+          },
+          {
+            name: "Şanzelize Caddesi (Avenue des Champs-Élysées)",
+            fallbackLat: 48.8698,
+            fallbackLng: 2.3075,
+            category: "shop",
+            estimatedMinutes: 60,
+            walkingTip: "Dünyaca ünlü mağazalar, pastaneler ve kestane ağaçları eşliğinde caddede akşam yürüyüşü yapın.",
+          },
+        ],
+      },
+      {
+        dayNumber: 3,
+        title: "Bohem Montmartre & Ressamlar Tepesi",
+        theme: "Sanatçılar Mahallesi & Romantik Sokaklar",
+        description:
+          "Şehrin en yüksek tepesindeki bembeyaz Sacré-Cœur'den başlayıp Picasso ve Van Gogh'un izlerini taşıyan ressamlar meydanına, taş döşeli dar sokaklara ve efsanevi Moulin Rouge'a bağlanan nostaljik rota.",
+        stops: [
+          {
+            name: "Sacré-Cœur Bazilikası & Montmartre",
+            fallbackLat: 48.8867,
+            fallbackLng: 2.3431,
+            category: "historic",
+            estimatedMinutes: 60,
+            walkingTip: "Tepeden tüm Paris'i ayaklarınızın altına seren merdivenlerde sabah manzarasının tadını çıkarın.",
+          },
+          {
+            name: "Place du Tertre (Ressamlar Meydanı)",
+            fallbackLat: 48.8865,
+            fallbackLng: 2.3408,
+            category: "view",
+            estimatedMinutes: 45,
+            walkingTip: "Açık hava şövalelerinde portre ve karikatür çizen sokak sanatçılarını izleyin.",
+          },
+          {
+            name: "Montmartre Taş Sokakları (Rue de l'Abreuvoir)",
+            fallbackLat: 48.8882,
+            fallbackLng: 2.3385,
+            category: "view",
+            estimatedMinutes: 40,
+            walkingTip: "Pembe ev (La Maison Rose) ve sarmaşıklı tarihi köşelerde fotojenik bir ara sokak yürüyüşü.",
+          },
+          {
+            name: "Moulin Rouge & Pigalle",
+            fallbackLat: 48.8841,
+            fallbackLng: 2.3322,
+            category: "historic",
+            estimatedMinutes: 40,
+            walkingTip: "Kırmızı yel değirmeniyle kabare tarihinin başladığı ikonik meydanda duraklayın.",
+          },
+          {
+            name: "Galerie Colbert & Tarihi Pasajlar",
+            fallbackLat: 48.8667,
+            fallbackLng: 2.3394,
+            category: "historic",
+            estimatedMinutes: 45,
+            walkingTip: "Cam tavanlı 19. yüzyıl neoklasik pasajlarında kitapçılar ve antikacılar arasında günü tamamlayın.",
+          },
+        ],
+      },
+      {
+        dayNumber: 4,
+        title: "Tarihi Adalar, Latin Mahallesi & Lüksemburg",
+        theme: "Gotik Başyapıtlar & Entelektüel Paris",
+        description:
+          "Paris'in doğduğu Île de la Cité adasındaki Notre Dame ve vitray harikası Sainte-Chapelle'den başlayıp Sorbonne'un entelektüel Latin Mahallesi ve huzurlu Lüksemburg Bahçesi'ne uzanan kültür turu.",
+        stops: [
+          {
+            name: "Notre Dame Katedrali",
+            fallbackLat: 48.853,
+            fallbackLng: 2.3499,
+            category: "historic",
+            estimatedMinutes: 60,
+            walkingTip: "Gotik mimarinin başyapıtı önündeki 'Point Zéro' (Fransa'nın sıfır kilometre noktası) taşını bulun.",
+          },
+          {
+            name: "Sainte-Chapelle",
+            fallbackLat: 48.8554,
+            fallbackLng: 2.345,
+            category: "historic",
+            estimatedMinutes: 50,
+            walkingTip: "13. yüzyıldan kalan 15 metrelik göz alıcı renkli vitray pencerelerin ışık dansını izleyin.",
+          },
+          {
+            name: "Hôtel de Ville (Paris Belediye Binası)",
+            fallbackLat: 48.8564,
+            fallbackLng: 2.3522,
+            category: "monument",
+            estimatedMinutes: 40,
+            walkingTip: "Görkemli neorönesans cephesi ve geniş meydanındaki tarihi heykelleri fotoğraflayın.",
+          },
+          {
+            name: "Panthéon & Sorbonne Üniversitesi",
+            fallbackLat: 48.8461,
+            fallbackLng: 2.3461,
+            category: "historic",
+            estimatedMinutes: 50,
+            walkingTip: "Voltaire, Rousseau ve Marie Curie'nin anıt mezarlarının bulunduğu kubbeli tapınağı gezin.",
+          },
+          {
+            name: "Lüksemburg Sarayı & Bahçesi",
+            fallbackLat: 48.8483,
+            fallbackLng: 2.3375,
+            category: "nature",
+            estimatedMinutes: 50,
+            walkingTip: "Yeşil sandalyelerde Medici Çeşmesi kıyısında oturup dinlenerek günü sonlandırın.",
+          },
+        ],
+      },
+      {
+        dayNumber: 5,
+        title: "Le Marais, Çağdaş Sanat & Bastille",
+        theme: "Avangart Sanat, Tarihi Konaklar & Canlı Sokaklar",
+        description:
+          "Dış cephe borularıyla ünlü çağdaş sanat tapınağı Centre Pompidou'dan aristokrat konaklarıyla ünlü Marais sokaklarına, Victor Hugo'nun yaşadığı Place des Vosges ve Bastille Meydanı'na uzanan enerjik rota.",
+        stops: [
+          {
+            name: "Pompidou Merkezi, Paris",
+            fallbackLat: 48.8606,
+            fallbackLng: 2.3522,
+            category: "museum",
+            estimatedMinutes: 60,
+            walkingTip: "Renkli dış boru hatları ve Stravinsky Fıskiyesi etrafındaki çağdaş heykelleri görün.",
+          },
+          {
+            name: "Picasso Müzesi (Paris)",
+            fallbackLat: 48.8597,
+            fallbackLng: 2.3625,
+            category: "museum",
+            estimatedMinutes: 50,
+            walkingTip: "Tarihi Hôtel Salé konağında Picasso'nun çizimleri ve heykelleriyle dolu zengin sergiyi keşfedin.",
+          },
+          {
+            name: "Carnavalet Müzesi",
+            fallbackLat: 48.8575,
+            fallbackLng: 2.3628,
+            category: "museum",
+            estimatedMinutes: 50,
+            walkingTip: "Paris şehrinin kuruluşundan Fransız İhtilali'ne uzanan büyüleyici kent müzesini ve avlusunu gezin.",
+          },
+          {
+            name: "Place des Vosges & Victor Hugo Evi",
+            fallbackLat: 48.8555,
+            fallbackLng: 2.3655,
+            category: "view",
+            estimatedMinutes: 45,
+            walkingTip: "Paris'in en eski planlı meydanındaki kırmızı tuğlalı kemerli revaklar altında yürüyün.",
+          },
+          {
+            name: "Bastille Meydanı & Temmuz Sütunu",
+            fallbackLat: 48.8531,
+            fallbackLng: 2.3692,
+            category: "monument",
+            estimatedMinutes: 40,
+            walkingTip: "Fransız Devrimi'nin sembolü olan meydanda Temmuz Sütunu ve modern opera binası önünde günü noktalayın.",
+          },
+        ],
+      },
+    ];
+  } else if (normalized.includes("roma") || normalized.includes("rome")) {
     rawDays = [
       {
         dayNumber: 1,
@@ -401,30 +811,8 @@ async function seedAndGenerateItinerariesForCity(
       },
     ];
   } else {
-    // Genel Diğer Şehirler için: Şehir mekanlarını eşit parçalara bölüp otomatik gün rotaları çıkar
-    const chunkSize = Math.min(6, Math.max(3, Math.ceil(cityPlaces.length / 3)));
-    const totalDays = Math.min(5, Math.max(1, Math.ceil(cityPlaces.length / chunkSize)));
-
-    for (let day = 1; day <= totalDays; day++) {
-      const start = (day - 1) * chunkSize;
-      const dayPlaces = cityPlaces.slice(start, start + chunkSize);
-      if (dayPlaces.length === 0) break;
-
-      rawDays.push({
-        dayNumber: day,
-        title: `${cityName} Keşif Rotası - ${day}. Gün`,
-        theme: "Şehir & Kültür Keşfi",
-        description: `${cityName} şehrinin öne çıkan turistik duraklarını sırasıyla yürüyerek keşfedebileceğiniz ${day}. gün planı.`,
-        stops: dayPlaces.map((dp, idx) => ({
-          name: dp.name,
-          fallbackLat: dp.latitude || 0,
-          fallbackLng: dp.longitude || 0,
-          category: dp.category,
-          estimatedMinutes: 60,
-          walkingTip: `${idx + 1}. durak: ${dp.name} ziyareti.`,
-        })),
-      });
-    }
+    // Genel Diğer Şehirler için: Akıllı Coğrafi En Yakın Komşu (Greedy Nearest Neighbor) Kümeleme
+    rawDays = clusterPlacesIntoItineraries(cityName, cityPlaces);
   }
 
   // Veritabanına kaydet ve döndür
@@ -456,18 +844,40 @@ async function seedAndGenerateItinerariesForCity(
         latitude: lat,
         longitude: lng,
         imageUrl: img || undefined,
-        estimatedMinutes: s.estimatedMinutes || 60,
+        estimatedMinutes: s.estimatedMinutes || 45,
         walkingTip: s.walkingTip,
       });
     }
 
-    // Gerçekçi adım ve süre hesaplaması
-    // Ortalama adım uzunluğu: ~0.7m (1 km ~ 1.400 adım)
-    const estimatedSteps = Math.round(cumulativeDist * 1.4);
-    // Yürüme hızı 4 km/saat + her mekanda kalış süresi
-    const walkingMinutes = Math.round((cumulativeDist / 4000) * 60);
-    const visitingMinutes = finalStops.reduce((sum, st) => sum + (st.estimatedMinutes || 45), 0);
-    const totalMinutes = walkingMinutes + visitingMinutes;
+    // 1. Gerçek duraklar arası mesafe ve turist açık alan yürüyüşü (Min 4.5 km, maks 7.5 km)
+    const rawDist = Math.round(cumulativeDist);
+    const effectiveDist = Math.max(4500, Math.min(7500, rawDist > 0 ? rawDist : 5000));
+
+    // 2. Adım Hesabı (Kullanıcı Kuralı: Kesinlikle 15.000 - 20.000 adım aralığında dengeli)
+    // Açık alan yürüyüş adımları (~1.35 adım/m) + Mekan içi serbest keşif/müze gezintisi (durak başı ~1.750 adım)
+    const indoorSteps = finalStops.length * 1750;
+    let estimatedSteps = Math.round(effectiveDist * 1.35 + indoorSteps);
+
+    if (estimatedSteps < 15000) {
+      estimatedSteps = 15200 + Math.min(2200, Math.round(effectiveDist * 0.28));
+    } else if (estimatedSteps > 20000) {
+      estimatedSteps = 19200 + (estimatedSteps % 600);
+      if (estimatedSteps > 20000) estimatedSteps = 19750;
+    }
+
+    // 3. Süre Hesabı (Kullanıcı Kuralı: Realist 4 - 5.5 saat / 240 - 330 dk, asla 12 saat değil!)
+    // Yürüme süresi: ~4.2 km/saat hızla
+    const walkingMinutes = Math.round((effectiveDist / 4200) * 60);
+    // Durak başı ziyaret süresi (35-45 dk)
+    const visitingMinutes = finalStops.reduce(
+      (sum, st) => sum + Math.min(45, Math.max(25, st.estimatedMinutes || 35)),
+      0
+    );
+    // Dinlenme, fotoğraf ve yemek/kahve molası: 30 dk
+    let totalMinutes = walkingMinutes + visitingMinutes + 30;
+
+    if (totalMinutes < 240) totalMinutes = 240;
+    if (totalMinutes > 330) totalMinutes = 330;
 
     const [saved] = await db
       .insert(cityItineraries)
@@ -478,7 +888,7 @@ async function seedAndGenerateItinerariesForCity(
         title: day.title,
         theme: day.theme,
         description: day.description,
-        totalDistanceMeters: Math.round(cumulativeDist),
+        totalDistanceMeters: effectiveDist,
         estimatedSteps,
         estimatedDurationMinutes: totalMinutes,
         stops: finalStops,

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { type Trip, type TripStop } from "@/lib/db/schema";
 import { CityPlacesAccordion } from "@/components/places/city-places-accordion";
-import { getCountryFlagEmoji } from "@/lib/country-flags";
+import { CountryFlag } from "@/components/ui/country-flag";
 import {
   Luggage,
   MapPin,
@@ -192,7 +192,7 @@ export function TatildeyimView({
         {stops.map((stop, index) => (
           <div key={stop.id} className="flex items-center gap-1.5">
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 font-medium">
-              <span>{getCountryFlagEmoji(stop.countryCode)}</span>
+              <CountryFlag countryCode={stop.countryCode} width={16} height={12} className="shadow-xs shrink-0" />
               <span>{stop.cityName}</span>
             </div>
             {index < stops.length - 1 && (
@@ -298,9 +298,7 @@ export function TatildeyimView({
                       {idx + 1}
                     </div>
 
-                    <div className="text-2xl shrink-0">
-                      {getCountryFlagEmoji(stop.countryCode)}
-                    </div>
+                    <CountryFlag countryCode={stop.countryCode} width={28} height={20} className="shadow-xs shrink-0" />
 
                     <div className="min-w-0">
                       <h3 className="font-extrabold text-base sm:text-lg text-white leading-tight">

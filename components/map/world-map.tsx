@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import type { Visit } from "@/lib/db/schema";
-import { getCountryFlagEmoji, COUNTRY_CENTERS } from "@/lib/country-flags";
+import { getCountryFlagHtml, COUNTRY_CENTERS } from "@/lib/country-flags";
 import { MapThemeSwitcher, MAP_THEMES, type MapThemeId } from "./map-theme-switcher";
 import { AddVisitModal } from "./add-visit-modal";
 import { TripsDrawer } from "./trips-drawer";
@@ -473,27 +473,20 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
         countryAggregates.forEach((item) => {
           const cityCount = item.distinctCities.size;
           const totalVisits = item.visits.length;
-          const flag = getCountryFlagEmoji(item.countryCode);
+          const flagHtml = getCountryFlagHtml(item.countryCode, {
+            width: 26,
+            height: 18,
+            alt: item.countryName,
+          });
 
           // Tek şehirde çoklu ziyaret varsa (örn: Batum 3) ziyaret adedini (3) gösterir, birden çok şehir varsa şehir adedini gösterir
           const badgeText = cityCount === 1 && totalVisits > 1 ? totalVisits : cityCount;
           const badgeTitle = `${item.countryName}: ${cityCount} Şehir, ${totalVisits} Ziyaret`;
-          const isKktc = item.countryCode === "KKTC";
-          const flagContent = isKktc
-            ? `<svg width="24" height="16" viewBox="0 0 30 20" style="border: 1px solid #e2e8f0; border-radius: 2px;">
-                <rect width="30" height="20" fill="#fff"/>
-                <rect y="2" width="30" height="2.5" fill="#e30a17"/>
-                <rect y="15.5" width="30" height="2.5" fill="#e30a17"/>
-                <circle cx="12" cy="10" r="4.2" fill="#e30a17"/>
-                <circle cx="13.2" cy="10" r="3.3" fill="#fff"/>
-                <polygon points="16.5,10 14.5,10.6 15.2,12 13.8,11 13.2,12.5 13,10.7 11.5,10.7 12.7,9.7 11.8,8.5 13.4,9.1 14.2,7.7 14.2,9.5" fill="#e30a17"/>
-              </svg>`
-            : `<span class="text-xl select-none">${flag}</span>`;
 
           const html = `
             <div class="relative group cursor-pointer transform hover:scale-125 transition-transform duration-200" title="${badgeTitle}">
               <div class="flex items-center justify-center w-11 h-11 rounded-2xl bg-white dark:bg-slate-900 shadow-xl border-2 border-cyan-500/80 hover:border-cyan-400">
-                ${flagContent}
+                ${flagHtml}
               </div>
               <div class="absolute -top-2 -right-2 flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-[11px] font-extrabold shadow-md border-2 border-white dark:border-slate-900">
                 ${badgeText}
@@ -525,7 +518,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
           const popupHtml = `
             <div class="p-3 text-slate-900 font-sans">
               <div class="flex items-center gap-2 mb-1.5">
-                <span class="text-2xl">${flag}</span>
+                <span class="inline-flex items-center shrink-0">${flagHtml}</span>
                 <span class="font-extrabold text-sm">${item.countryName}</span>
               </div>
               <p class="text-xs text-slate-600 mb-2">
@@ -542,7 +535,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
         // --- 2. ŞEHİR SEVİYESİ (Şehir Pini + Toplam Ziyaret Sayısı + Doğrudan Düzenleme/Silme) ---
         cityAggregates.forEach((city) => {
           const visitCount = city.visitCount;
-          const flag = getCountryFlagEmoji(city.countryCode);
+          const flag = getCountryFlagHtml(city.countryCode, { width: 22, height: 16 });
 
           const html = `
             <div class="relative group cursor-pointer transform hover:scale-125 transition-transform duration-200">
@@ -625,7 +618,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
 
           popupContent.innerHTML = `
             <div class="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200">
-              <span class="text-xl">${flag}</span>
+              <span class="inline-flex items-center shrink-0">${flag}</span>
               <div>
                 <h4 class="font-bold text-sm leading-tight">${city.cityName}</h4>
                 <p class="text-[11px] text-slate-500">${city.countryName}</p>
@@ -724,7 +717,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
             : "Tarihsiz Rota";
 
         const stopsFlow = sortedStops
-          .map((s) => `<b>${s.cityName}</b> (${getCountryFlagEmoji(s.countryCode)})`)
+          .map((s) => `<b>${s.cityName}</b> ${getCountryFlagHtml(s.countryCode, { width: 16, height: 11 })}`)
           .join(" ➔ ");
 
         const popupHtml = `
@@ -791,7 +784,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
 
         // Varış veya ana rota ülkesi bayrağı
         const destStop = sortedStops.length > 2 ? sortedStops[1] : sortedStops[sortedStops.length - 1];
-        const mainFlag = getCountryFlagEmoji(destStop.countryCode);
+        const mainFlagHtml = getCountryFlagHtml(destStop.countryCode, { width: 18, height: 12, alt: destStop.countryCode });
 
         // Çizgi Ortası Rota Rozeti / Bayrağı (Route Center Badge)
         const centerBadgeBg = isSelected ? "#2563eb" : isPlanned ? "#ec4899" : "#059669";
@@ -814,7 +807,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
                 white-space: nowrap;
               ">
                 <span style="font-size: 12px;">${transportEmoji}</span>
-                <span style="font-size: 13px;">${mainFlag}</span>
+                ${mainFlagHtml}
                 <span style="max-width: 110px; overflow: hidden; text-overflow: ellipsis;">${trip.title}</span>
                 <span style="
                   background: ${centerBadgeBg};
@@ -856,7 +849,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
         sortedStops.forEach((stop, idx) => {
           const isOrigin = stop.stopOrder === 0 || idx === 0;
           const isReturn = stop.stopOrder === sortedStops.length - 1 || idx === sortedStops.length - 1;
-          const flag = getCountryFlagEmoji(stop.countryCode);
+          const flagHtml = getCountryFlagHtml(stop.countryCode, { width: 16, height: 11, alt: stop.countryCode });
           const badgeLabel = isOrigin ? "🛫" : isReturn ? "🛬" : `${idx}`;
           const badgeBg = isOrigin ? "#10b981" : isReturn ? "#6366f1" : isPlanned ? "#ec4899" : "#06b6d4";
 
@@ -865,7 +858,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
             html: `
               <div style="display:flex; flex-direction:column; align-items:center; cursor:pointer;">
                 <div style="background: white; border-radius: 999px; padding: 2px 7px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); display: flex; align-items: center; gap: 4px; border: 2px solid ${badgeBg}; font-size: 11px; font-weight: bold; white-space: nowrap;">
-                  <span style="font-size: 13px;">${flag}</span>
+                  ${flagHtml}
                   <span style="font-size: 10px; color: #1e293b; max-width: 75px; overflow: hidden; text-overflow: ellipsis;">${stop.cityName}</span>
                   <span style="background: ${badgeBg}; color: white; border-radius: 999px; padding: 1px 4px; font-size: 9px; line-height: 1;">${badgeLabel}</span>
                 </div>
@@ -889,7 +882,7 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
           const marker = L.marker([stop.latitude, stop.longitude], { icon }).addTo(routesLayer);
           marker.bindPopup(`
             <div style="padding: 4px 6px; font-family: sans-serif; font-size: 12px;">
-              <div style="font-weight: bold; font-size: 13px; margin-bottom: 2px;">${flag} ${stop.cityName}</div>
+              <div style="font-weight: bold; font-size: 13px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">${flagHtml} <span>${stop.cityName}</span></div>
               <div style="font-size: 11px; color: #64748b;">${stop.notes || (isOrigin ? "Başlangıç Noktası" : isReturn ? "Dönüş Noktası" : `${idx}. Durak`)}</div>
               ${stopDates ? `<div style="font-size: 11px; color: #0284c7; font-weight: 600; margin-top: 4px;">📅 ${stopDates}</div>` : ""}
             </div>

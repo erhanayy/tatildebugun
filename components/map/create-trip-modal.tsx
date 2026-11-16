@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   Clock,
   Moon,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -68,7 +69,9 @@ export function CreateTripModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<"planned" | "completed">("planned");
-  const [visibility, setVisibility] = useState<"public" | "friends" | "family">("public");
+  const [visibility, setVisibility] = useState<
+    "public" | "friend" | "friends" | "relative" | "family" | "private"
+  >("public");
 
   // Başlangıç Tarihi (Varsayılan bugün)
   const defaultStartDate = useMemo(() => {
@@ -135,7 +138,7 @@ export function CreateTripModal({
       setTitle(initialTrip.title || "");
       setDescription(initialTrip.description || "");
       setStatus(initialTrip.status as "planned" | "completed");
-      setVisibility(initialTrip.visibility as "public" | "friends" | "family");
+      setVisibility((initialTrip.visibility as any) || "public");
       if (initialTrip.startDate) {
         setStartDate(new Date(initialTrip.startDate).toISOString().split("T")[0]);
       }
@@ -604,6 +607,39 @@ export function CreateTripModal({
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Görünürlük & Paylaşım Tercihi (Hiyerarşik: Herkes > Arkadaş > Akraba > Aile > Gizli) */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-cyan-500" />
+              <span>Rotayı Kimler Görebilir? (Görünürlük)</span>
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+              {(
+                [
+                  { id: "public", label: "Herkes", icon: "🌐" },
+                  { id: "friend", label: "Arkadaşım", icon: "👥" },
+                  { id: "relative", label: "Akrabam", icon: "🤝" },
+                  { id: "family", label: "Ailem", icon: "🏡" },
+                  { id: "private", label: "Gizli", icon: "🔒" },
+                ] as const
+              ).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setVisibility(item.id)}
+                  className={`py-2 px-1.5 rounded-xl border text-[11px] font-medium flex flex-col items-center gap-0.5 transition-all cursor-pointer min-h-[44px] ${
+                    visibility === item.id || (item.id === "friend" && visibility === "friends")
+                      ? "border-cyan-500 bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 font-bold shadow-sm"
+                      : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <span className="text-sm">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
             </div>
           </div>
 

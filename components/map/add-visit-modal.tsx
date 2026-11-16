@@ -8,7 +8,7 @@ import {
   type CreateVisitInput,
 } from "@/lib/actions/visits";
 import type { Visit } from "@/lib/db/schema";
-import { getCountryFlagEmoji } from "@/lib/country-flags";
+import { CountryFlag } from "@/components/ui/country-flag";
 import {
   TURKEY_PROVINCES,
   TURKEY_DISTRICT_TO_PROVINCE,
@@ -99,7 +99,9 @@ export function AddVisitModal({
 
   const [stayDurationDays, setStayDurationDays] = useState<number>(3);
   const [visitType, setVisitType] = useState<"touristic" | "business">("touristic");
-  const [visibility, setVisibility] = useState<"public" | "friends" | "family">("public");
+  const [visibility, setVisibility] = useState<
+    "public" | "friend" | "friends" | "relative" | "family" | "private"
+  >("public");
   const [notes, setNotes] = useState("");
 
   // Dropdown dışına tıklandığında listeyi kapat
@@ -324,7 +326,7 @@ export function AddVisitModal({
         {/* Üst Başlık Barı */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{getCountryFlagEmoji(countryCode)}</span>
+            <CountryFlag countryCode={countryCode} width={28} height={20} className="shadow-xs shrink-0" />
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span>{isEditing ? "Seyahati Düzenle" : "Haritaya Bayrak Ekle"}</span>
@@ -696,23 +698,27 @@ export function AddVisitModal({
               <Users className="w-3.5 h-3.5 text-teal-500" />
               <span>Görünürlük & Paylaşım</span>
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: "public", label: "Herkese Açık", icon: "🌐" },
-                { id: "friends", label: "Arkadaşlarım", icon: "👥" },
-                { id: "family", label: "Ailem", icon: "👨‍👩‍👦" },
-              ].map((item) => (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+              {(
+                [
+                  { id: "public", label: "Herkes", icon: "🌐" },
+                  { id: "friend", label: "Arkadaşım", icon: "👥" },
+                  { id: "relative", label: "Akrabam", icon: "🤝" },
+                  { id: "family", label: "Ailem", icon: "🏡" },
+                  { id: "private", label: "Gizli", icon: "🔒" },
+                ] as const
+              ).map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setVisibility(item.id as any)}
-                  className={`py-2 px-2.5 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
-                    visibility === item.id
+                  onClick={() => setVisibility(item.id)}
+                  className={`py-2 px-1.5 rounded-xl border text-[11px] font-medium flex flex-col items-center gap-0.5 transition-all cursor-pointer min-h-[44px] ${
+                    visibility === item.id || (item.id === "friend" && visibility === "friends")
                       ? "border-cyan-500 bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 font-bold shadow-sm"
                       : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
                   }`}
                 >
-                  <span className="text-base">{item.icon}</span>
+                  <span className="text-sm">{item.icon}</span>
                   <span>{item.label}</span>
                 </button>
               ))}

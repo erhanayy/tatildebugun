@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { FeedItem, ReactionType } from "@/lib/actions/social";
 import { toggleReaction, addComment } from "@/lib/actions/social";
-import { getCountryFlagEmoji } from "@/lib/country-flags";
+import { CountryFlag } from "@/components/ui/country-flag";
 import {
   Heart,
   Plane,
@@ -189,7 +189,6 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
         <div className="space-y-5">
           {filteredItems.map((item) => {
             const isTrip = item.type === "trip";
-            const flag = getCountryFlagEmoji(item.countryCode);
             const isCommentsOpen = !!openComments[item.id];
 
             return (
@@ -235,7 +234,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                 <div className="p-5 space-y-4">
                   {/* Başlık & Bayrak */}
                   <div className="flex items-start gap-3">
-                    <span className="text-3xl select-none">{flag}</span>
+                    <CountryFlag countryCode={item.countryCode} width={32} height={22} className="shadow-md shrink-0 mt-0.5" />
                     <div className="flex-1">
                       <h3 className="font-extrabold text-base text-white">{item.title}</h3>
                       <p className="text-xs text-cyan-400 font-medium mt-0.5">{item.subtitle}</p>
@@ -291,7 +290,7 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                             <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px] flex items-center justify-center font-bold">
                               {idx + 1}
                             </span>
-                            <span>{getCountryFlagEmoji(stop.countryCode)}</span>
+                            <CountryFlag countryCode={stop.countryCode} width={16} height={12} className="shadow-xs shrink-0" />
                             <span>{stop.cityName}</span>
                             {idx < item.stops!.length - 1 && (
                               <span className="text-cyan-500 font-bold mx-1">➔</span>

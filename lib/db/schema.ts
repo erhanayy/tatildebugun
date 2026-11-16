@@ -14,6 +14,15 @@ export const users = pgTable(
     bio: text("bio"),
     baseCountry: varchar("base_country", { length: 2 }).default("TR"),
     baseCity: varchar("base_city", { length: 100 }).default("İstanbul"),
+    username: varchar("username", { length: 50 }).unique(),
+    showFullName: boolean("show_full_name").default(true).notNull(),
+    showEmail: boolean("show_email").default(true).notNull(),
+    showPhone: boolean("show_phone").default(false).notNull(),
+    onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+    preferredLanguage: varchar("preferred_language", { length: 5 }).default("tr").notNull(),
+    searchPrivacy: varchar("search_privacy", { length: 20 }).default("public").notNull(),
+    radarPrivacy: varchar("radar_privacy", { length: 20 }).default("public").notNull(),
+    mapPrivacy: varchar("map_privacy", { length: 20 }).default("public").notNull(),
     forcePasswordChange: boolean("force_password_change").default(false).notNull(),
     verificationCode: text("verification_code"),
     verificationCodeExpiresAt: timestamp("verification_code_expires_at"),
@@ -24,6 +33,7 @@ export const users = pgTable(
   (table) => ({
     emailIdx: index("users_email_idx").on(table.email),
     phoneIdx: uniqueIndex("users_phone_number_unique_idx").on(table.phoneNumber),
+    usernameIdx: uniqueIndex("users_username_unique_idx").on(table.username),
   })
 );
 
@@ -59,7 +69,9 @@ export const visits = pgTable(
       .notNull(),
 
     // Paylaşım ve Gizlilik
-    visibility: text("visibility", { enum: ["public", "friends", "family"] })
+    visibility: text("visibility", {
+      enum: ["public", "friend", "friends", "relative", "family", "private"],
+    })
       .default("public")
       .notNull(),
 
@@ -88,7 +100,7 @@ export const userConnections = pgTable(
     targetUserId: uuid("target_user_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    relationshipType: text("relationship_type", { enum: ["friend", "family"] }).notNull(),
+    relationshipType: text("relationship_type", { enum: ["friend", "relative", "family"] }).notNull(),
     status: text("status", { enum: ["pending", "accepted", "blocked"] })
       .default("pending")
       .notNull(),
@@ -118,7 +130,9 @@ export const trips = pgTable(
     })
       .default("mixed")
       .notNull(),
-    visibility: text("visibility", { enum: ["public", "friends", "family"] })
+    visibility: text("visibility", {
+      enum: ["public", "friend", "friends", "relative", "family", "private"],
+    })
       .default("public")
       .notNull(),
     startDate: timestamp("start_date"),
@@ -225,6 +239,9 @@ export const travelMatches = pgTable(
     overlapEndDate: timestamp("overlap_end_date"),
     status: text("status", { enum: ["pending", "accepted", "declined"] })
       .default("pending")
+      .notNull(),
+    relationshipType: text("relationship_type", { enum: ["friend", "relative", "family"] })
+      .default("friend")
       .notNull(),
     introMessage: text("intro_message"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

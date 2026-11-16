@@ -33,7 +33,7 @@ const createTripSchema = z.object({
   transportType: z
     .enum(["flight", "car", "train", "bus", "motorbike", "bicycle", "mixed"])
     .default("mixed"),
-  visibility: z.enum(["public", "friends", "family"]).default("public"),
+  visibility: z.enum(["public", "friend", "friends", "relative", "family", "private"]).default("public"),
   startDate: z.string().optional().nullable(),
   endDate: z.string().optional().nullable(),
   stops: z.array(tripStopInputSchema).min(2, "Bir rota oluşturmak için en az 2 durak gereklidir"),

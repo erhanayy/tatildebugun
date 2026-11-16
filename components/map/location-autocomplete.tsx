@@ -7,7 +7,7 @@ import {
   findCountryByNameOrCode,
   type CountryOption,
 } from "@/lib/world-cities";
-import { getCountryFlagEmoji } from "@/lib/country-flags";
+import { CountryFlag } from "@/components/ui/country-flag";
 import { MapPin, Search, ChevronDown, X, Check } from "lucide-react";
 
 /**
@@ -70,8 +70,6 @@ export function CountryAutocomplete({
   // Arama sonuçları
   const filteredCountries = searchCountries(query);
 
-  const displayFlag = countryCode ? getCountryFlagEmoji(countryCode) : "🌍";
-
   function handleSelect(c: CountryOption) {
     setQuery(c.name);
     onChange({ code: c.code, name: c.name });
@@ -105,8 +103,12 @@ export function CountryAutocomplete({
     <div ref={containerRef} className={`relative ${className}`}>
       <div className="relative flex items-center">
         {/* Bayrak Rozeti */}
-        <div className="absolute left-2.5 flex items-center justify-center pointer-events-none text-base select-none">
-          {displayFlag}
+        <div className="absolute left-2.5 flex items-center justify-center pointer-events-none select-none">
+          {countryCode ? (
+            <CountryFlag countryCode={countryCode} width={18} height={13} className="shadow-xs" />
+          ) : (
+            <span className="text-base">🌍</span>
+          )}
         </div>
 
         <input
@@ -158,7 +160,7 @@ export function CountryAutocomplete({
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate">
-                    <span className="text-sm">{c.flag}</span>
+                    <CountryFlag countryCode={c.code} width={16} height={12} className="shadow-xs shrink-0" />
                     <span className="truncate">{c.name}</span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">

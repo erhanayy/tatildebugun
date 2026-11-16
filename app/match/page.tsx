@@ -49,6 +49,10 @@ export default async function MatchPage() {
           candidates={candidates}
           incomingRequests={requests.incoming}
           outgoingRequests={requests.outgoing}
+          currentUser={{
+            id: session.user.id || "",
+            name: session.user.name || "Gezgin",
+          }}
         />
       </main>
     </div>

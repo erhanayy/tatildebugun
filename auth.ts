@@ -9,25 +9,33 @@ import bcrypt from "bcryptjs";
 
 import { normalizeToInternational } from "./lib/utils/phone";
 
+import { generateUniqueUsername } from "./lib/utils/username";
+
 export async function getUserByIdentifier(identifier: string) {
   try {
     const trimmed = identifier.trim();
-    const isEmail = trimmed.includes("@");
+    const isEmail = trimmed.includes("@") && !trimmed.startsWith("@");
     const digits = trimmed.replace(/\D/g, "");
     const last10 = digits.length >= 10 ? digits.slice(-10) : digits;
 
     let filter;
-    if (isEmail) {
+    if (trimmed.startsWith("@")) {
+      filter = sql`LOWER(${users.username}) = ${trimmed.slice(1).toLowerCase()}`;
+    } else if (isEmail) {
       filter = eq(users.email, trimmed.toLowerCase());
     } else if (digits.length >= 7) {
       const normalized = normalizeToInternational(trimmed);
       filter = or(
         eq(users.phoneNumber, trimmed),
         eq(users.phoneNumber, normalized),
-        sql`regexp_replace(${users.phoneNumber}, '[^0-9]', '', 'g') LIKE ${"%" + last10}`
+        sql`regexp_replace(${users.phoneNumber}, '[^0-9]', '', 'g') LIKE ${"%" + last10}`,
+        sql`LOWER(${users.username}) = ${trimmed.toLowerCase()}`
       );
     } else {
-      filter = eq(users.email, trimmed.toLowerCase());
+      filter = or(
+        eq(users.email, trimmed.toLowerCase()),
+        sql`LOWER(${users.username}) = ${trimmed.toLowerCase()}`
+      );
     }
 
     const result = await db.select().from(users).where(filter).limit(1);
@@ -45,7 +53,7 @@ const nextAuthResult = NextAuth({
       async authorize(credentials) {
         const parsedCredentials = z
           .object({
-            identifier: z.string().min(1, "E-posta veya telefon gereklidir"),
+            identifier: z.string().min(1, "E-posta, telefon veya kullanıcı adı gereklidir"),
             password: z.string().min(4, "Şifre en az 4 karakter olmalıdır"),
           })
           .safeParse(credentials);
@@ -59,6 +67,20 @@ const nextAuthResult = NextAuth({
 
           const passwordsMatch = await bcrypt.compare(password, user.password);
           if (passwordsMatch) {
+            // İlk giriş veya login anında nickname yoksa tabloda mükerrerlik kontrolü yaparak üret
+            if (!user.username) {
+              try {
+                const uniqueNick = await generateUniqueUsername(user.fullName, user.email || "gezgin");
+                await db
+                  .update(users)
+                  .set({ username: uniqueNick, updatedAt: new Date() })
+                  .where(eq(users.id, user.id));
+                user.username = uniqueNick;
+              } catch (nickErr) {
+                console.error("Login anında username üretme hatası:", nickErr);
+              }
+            }
+
             return {
               id: user.id,
               name: user.fullName,

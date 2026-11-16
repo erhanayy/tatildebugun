@@ -25,7 +25,9 @@ import { toast } from "sonner";
 import { NotificationBell } from "@/components/navigation/notification-bell";
 import { ChatBadge } from "@/components/navigation/chat-badge";
 import { ContractEnforcer } from "@/components/agreements/contract-enforcer";
+import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { Contract } from "@/lib/db/schema";
+import { useTranslation } from "@/lib/i18n/context";
 
 interface AppHeaderProps {
   user: {
@@ -40,18 +42,21 @@ interface AppHeaderProps {
 
 export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
   const pathname = usePathname();
+  const { locale, setLanguage, t } = useTranslation();
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Davet Linki
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://tatildebugun.com";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://alltripx.com";
   const inviteUrl = `${origin}/davet/${user.id}`;
-  const inviteMessage = `Selam! TatildeBugün'de dünya seyahat haritamı oluşturdum ve rotalarımı paylaştım. Sen de katılarak seyahatlerimizi eşleştirebiliriz: ${inviteUrl}`;
+  const inviteMessage = locale === "en"
+    ? `Hey! I created my world travel map on AllTripX and mapped my routes. Join now to match our journeys: ${inviteUrl}`
+    : `Selam! AllTripX'te dünya seyahat haritamı oluşturdum ve rotalarımı paylaştım. Sen de katılarak seyahatlerimizi eşleştirebiliriz: ${inviteUrl}`;
 
   function handleCopyInvite() {
     navigator.clipboard.writeText(inviteUrl);
     setCopied(true);
-    toast.success("Davet linki kopyalandı! 📋");
+    toast.success(locale === "en" ? "Invite link copied! 📋" : "Davet linki kopyalandı! 📋");
     setTimeout(() => setCopied(false), 2500);
   }
 
@@ -63,25 +68,25 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
   const navLinks = [
     {
       href: "/dashboard",
-      label: "Dünya Haritam",
+      label: t("nav.dashboard") || "Dünya Haritam",
       icon: Globe,
       active: pathname === "/dashboard",
     },
     {
       href: "/feed",
-      label: "Gezgin Akışı & Rotalar",
+      label: t("nav.feed") || "Gezgin Akışı",
       icon: Compass,
       active: pathname.startsWith("/feed"),
     },
     {
       href: "/match",
-      label: "Gezgin Eşleşmesi (Radar)",
+      label: t("nav.radar") || "Rota Radarı",
       icon: Radar,
       active: pathname.startsWith("/match"),
     },
     {
       href: "/tatildeyim",
-      label: "Tatildeyim (Tur Rehberim)",
+      label: t("nav.tatildeyim") || "Tatildeyim",
       icon: Luggage,
       active: pathname.startsWith("/tatildeyim"),
     },
@@ -92,6 +97,9 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
       {/* Zorunlu KVKK ve Sözleşme Onay Denetçisi */}
       <ContractEnforcer userId={user.id} initialPendingContracts={pendingContracts} />
 
+      {/* Gezgin İlk Kurulum & Gizlilik Tercihleri Sihirbazı */}
+      <OnboardingWizard />
+
       <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           {/* Logo & Marka */}
@@ -101,7 +109,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
                 <Palmtree className="w-5 h-5" />
               </div>
               <span className="font-extrabold text-lg text-white">
-                Tatilde<span className="text-cyan-400">Bugün</span>
+                All<span className="text-cyan-400">TripX</span>
               </span>
             </Link>
 
@@ -133,20 +141,38 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
             </nav>
           </div>
 
-          {/* Sağ Alan: Davet Et + Bildirimler + Sohbet + Admin Yönetimi + Profil & Çıkış */}
+          {/* Sağ Alan: Dil Seçici + Davet Et + Bildirimler + Sohbet + Admin Yönetimi + Profil & Çıkış */}
           <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Dil Hızlı Değiştirici (Language Quick Switcher) */}
+            <button
+              type="button"
+              onClick={() => setLanguage(locale === "tr" ? "en" : "tr")}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-bold text-slate-200 transition-all cursor-pointer min-h-[38px] group relative"
+              aria-label={t("nav.language")}
+              title={locale === "tr" ? "Switch to English" : "Türkçe'ye Geç"}
+            >
+              <span className="text-sm">{locale === "tr" ? "🇹🇷" : "🇬🇧"}</span>
+              <span className="text-[11px] font-extrabold text-cyan-400 uppercase tracking-wider">{locale.toUpperCase()}</span>
+
+              {/* Tooltip */}
+              <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
+                {locale === "tr" ? "English (Switch)" : "Türkçe (Geçiş Yap)"}
+                <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
+              </span>
+            </button>
+
             {/* Arkadaşını Davet Et İkon Butonu */}
             <button
               type="button"
               onClick={() => setIsInviteModalOpen(true)}
               className="relative p-2 rounded-xl text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center justify-center group"
-              aria-label="Arkadaşını Davet Et"
+              aria-label={t("nav.invite")}
             >
               <UserPlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
 
               {/* Tooltip */}
               <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
-                Arkadaşını Davet Et 🎁
+                {t("nav.invite")} 🎁
                 <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
               </span>
             </button>
@@ -166,13 +192,13 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
                     ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-md shadow-indigo-500/10"
                     : "text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/40 hover:bg-indigo-500/20"
                 }`}
-                aria-label="Yönetim Merkezi (Admin Hub)"
+                aria-label={t("nav.admin")}
               >
                 <ShieldCheck className="w-5 h-5 group-hover:scale-110 transition-transform" />
 
                 {/* Tooltip */}
                 <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
-                  Yönetim Merkezi 🛡️
+                  {t("nav.admin")} 🛡️
                   <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
                 </span>
               </Link>
@@ -182,7 +208,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
             <Link
               href="/profile"
               className="relative p-1 rounded-xl hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition-all cursor-pointer group flex items-center"
-              aria-label="Profilim & Ayarlar"
+              aria-label={t("nav.profile")}
             >
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform">
                 {user.name ? user.name.slice(0, 2).toUpperCase() : "🌴"}
@@ -190,7 +216,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
 
               {/* Tooltip */}
               <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
-                {user.name || "Gezgin"} (Profilim & Ayarlar)
+                {user.name || "Gezgin"} ({t("nav.profile")})
                 <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
               </span>
             </Link>
@@ -200,13 +226,13 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               <button
                 type="submit"
                 className="relative p-2 rounded-xl text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 transition-colors cursor-pointer flex items-center justify-center group"
-                aria-label="Güvenli Çıkış Yap"
+                aria-label={t("nav.logout")}
               >
                 <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
 
                 {/* Tooltip (Sağ sınıra taşmaması için sağa hizalı) */}
                 <span className="absolute top-full mt-2.5 right-0 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
-                  Güvenli Çıkış Yap
+                  {t("nav.logout")}
                   <span className="absolute -top-1 right-3 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
                 </span>
               </button>
@@ -238,7 +264,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
             }`}
           >
             <MessageCircle className="w-5 h-5 mb-0.5" />
-            <span>Sohbet</span>
+            <span>{t("nav.messages")}</span>
           </Link>
           <Link
             href="/profile"
@@ -247,7 +273,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
             }`}
           >
             <User className="w-5 h-5 mb-0.5" />
-            <span>Profil</span>
+            <span>{t("nav.profile")}</span>
           </Link>
           <button
             type="button"
@@ -255,7 +281,7 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
             className="flex flex-col items-center py-1 px-2.5 rounded-lg text-[10px] font-bold text-emerald-400"
           >
             <UserPlus className="w-5 h-5 mb-0.5" />
-            <span>Davet</span>
+            <span>{t("nav.invite")}</span>
           </button>
         </div>
       </header>

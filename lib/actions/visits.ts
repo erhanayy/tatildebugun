@@ -24,7 +24,7 @@ const createVisitSchema = z
     stayDurationDays: z.number().int().min(0, "Kalış süresi negatif olamaz").default(0),
     count: z.number().int().min(1, "En az 1 adet seçilmelidir").max(50, "Tek seferde en fazla 50 adet girilebilir").default(1),
     visitType: z.enum(["touristic", "business"]).default("touristic"),
-    visibility: z.enum(["public", "friends", "family"]).default("public"),
+    visibility: z.enum(["public", "friend", "friends", "relative", "family", "private"]).default("public"),
     notes: z.string().optional().nullable(),
   })
   .refine(

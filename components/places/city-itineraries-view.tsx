@@ -198,7 +198,7 @@ export function CityItinerariesView({
                 <Clock className="w-3 h-3 text-amber-400" /> Süre
               </span>
               <span className="text-xs sm:text-sm font-black text-amber-200 mt-0.5">
-                ~{Math.round(activeItinerary.estimatedDurationMinutes / 60)} Saat
+                ~{(activeItinerary.estimatedDurationMinutes / 60).toFixed(1).replace(/\.0$/, "")} Saat
               </span>
             </div>
           </div>

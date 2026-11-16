@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { Locale } from "@/lib/i18n/types";
 
 export interface SendMailOptions {
   to: string;
@@ -9,7 +10,7 @@ export interface SendMailOptions {
 }
 
 /**
- * TatildeBugun E-posta Gönderim Servisi
+ * TatildeBugun / AllTripX E-posta Gönderim Servisi
  * Resend altyapısı ile çalışır. Alıcıya ve her zaman erhanayyildiz@gmail.com adresine BCC gizli kopya düşer.
  */
 export async function sendEmail({
@@ -38,7 +39,7 @@ export async function sendEmail({
     console.log(`[sendEmail] E-posta gönderimi deneniyor: From=${sender}, To=${to}, BCC=${bccList.join(", ")}`);
 
     const response = await resend.emails.send({
-      from: `TatildeBugün <${sender}>`,
+      from: `AllTripX <${sender}>`,
       to: [to],
       bcc: bccList.length > 0 ? bccList : undefined,
       subject,
@@ -51,11 +52,11 @@ export async function sendEmail({
       console.warn("[sendEmail] Gönderici adresi veya domain hatası:", response.error.message);
 
       const emergencySubject = otpCode
-        ? `[TatildeBugün Canlı - OTP: ${otpCode}] Kullanıcı: ${to}`
-        : `[TatildeBugün Canlı E-posta Bildirimi] ${subject} (Alıcı: ${to})`;
+        ? `[AllTripX Canlı - OTP: ${otpCode}] Kullanıcı: ${to}`
+        : `[AllTripX Canlı E-posta Bildirimi] ${subject} (Alıcı: ${to})`;
 
       const fallbackResponse = await resend.emails.send({
-        from: "TatildeBugün <onboarding@resend.dev>",
+        from: "AllTripX <onboarding@resend.dev>",
         to: ["erhanayyildiz@gmail.com"],
         subject: emergencySubject,
         html: `
@@ -99,20 +100,33 @@ export async function sendEmail({
 }
 
 /**
- * Şifre Sıfırlama HTML Şablonu
+ * Şifre Sıfırlama HTML Şablonu (Çoklu Dil / i18n Desteği)
  */
-export function getPasswordResetEmailTemplate(fullName: string, otpCode: string): string {
+export function getPasswordResetEmailTemplate(fullName: string, otpCode: string, lang: Locale = "tr"): string {
+  const isEn = lang === "en";
+
+  const brandName = "AllTripX 🌴";
+  const brandSub = isEn ? "Personal Travel Map & Global Traveler Network" : "Kişisel Seyahat Haritası ve Gezgin Ağı";
+  const greeting = isEn ? `Hello ${fullName},` : `Merhaba ${fullName},`;
+  const bodyText = isEn
+    ? "We received a password reset request for your AllTripX account. Use the 6-digit verification code below to set a new password:"
+    : "AllTripX hesabınız için şifre sıfırlama talebinde bulundunuz. Şifrenizi yenilemek için aşağıdaki 6 haneli doğrulama kodunu kullanabilirsiniz:";
+  const expiryNote = isEn
+    ? "⏳ This code is valid for <b>15 minutes</b>. If you did not make this request, you can safely ignore this email."
+    : "⏳ Bu kod <b>15 dakika</b> boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı dikkate almayınız.";
+  const copyright = "© 2026 AllTripX Platform. All rights reserved.";
+
   return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; background-color: #0b1120; border-radius: 24px; color: #f8fafc; border: 1px solid #1e293b;">
       <div style="text-align: center; margin-bottom: 25px;">
-        <h1 style="color: #38bdf8; margin: 0; font-size: 26px; font-weight: 800;">TatildeBugün 🌴</h1>
-        <p style="color: #94a3b8; font-size: 13px; margin-top: 5px;">Kişisel Seyahat & Gezgin Ağı</p>
+        <h1 style="color: #38bdf8; margin: 0; font-size: 26px; font-weight: 800;">${brandName}</h1>
+        <p style="color: #94a3b8; font-size: 13px; margin-top: 5px;">${brandSub}</p>
       </div>
 
       <div style="background-color: #0f172a; padding: 25px; border-radius: 18px; border: 1px solid #334155; margin-bottom: 20px;">
-        <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">Merhaba ${fullName},</h2>
+        <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">${greeting}</h2>
         <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
-          TatildeBugün hesabınız için şifre sıfırlama talebinde bulundunuz. Şifrenizi yenilemek için aşağıdaki 6 haneli doğrulama kodunu kullanabilirsiniz:
+          ${bodyText}
         </p>
 
         <div style="text-align: center; margin: 30px 0;">
@@ -122,32 +136,45 @@ export function getPasswordResetEmailTemplate(fullName: string, otpCode: string)
         </div>
 
         <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-bottom: 0;">
-          ⏳ Bu kod <b>15 dakika</b> boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı dikkate almayınız.
+          ${expiryNote}
         </p>
       </div>
 
       <div style="text-align: center; color: #64748b; font-size: 11px;">
-        © 2026 TatildeBugün Platformu. Tüm hakları saklıdır.
+        ${copyright}
       </div>
     </div>
   `;
 }
 
 /**
- * Kayıt Aktivasyon HTML Şablonu
+ * Kayıt Aktivasyon HTML Şablonu (Çoklu Dil / i18n Desteği)
  */
-export function getRegisterActivationEmailTemplate(fullName: string, otpCode: string): string {
+export function getRegisterActivationEmailTemplate(fullName: string, otpCode: string, lang: Locale = "tr"): string {
+  const isEn = lang === "en";
+
+  const brandName = isEn ? "Welcome to AllTripX! 🌴" : "AllTripX'e Hoş Geldiniz! 🌴";
+  const brandSub = isEn ? "Personal Travel Map & Global Traveler Network" : "Kişisel Seyahat Haritası ve Gezgin Ağı";
+  const greeting = isEn ? `A wonderful journey begins, ${fullName}!` : `Harika bir başlangıç, ${fullName}!`;
+  const bodyText = isEn
+    ? "To activate your account, map your worldwide routes, and meet fellow travelers, please verify your email with the code below:"
+    : "Dünya seyahat haritanızı oluşturmak, rotalarınızı çizmek ve çakışan gezginlerle tanışmak için AllTripX hesabınızı doğrulayınız:";
+  const expiryNote = isEn
+    ? "⏳ Your verification code is valid for <b>15 minutes</b>."
+    : "⏳ Doğrulama kodunuz <b>15 dakika</b> boyunca geçerlidir.";
+  const copyright = "© 2026 AllTripX Platform. All rights reserved.";
+
   return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; background-color: #0b1120; border-radius: 24px; color: #f8fafc; border: 1px solid #1e293b;">
       <div style="text-align: center; margin-bottom: 25px;">
-        <h1 style="color: #38bdf8; margin: 0; font-size: 26px; font-weight: 800;">TatildeBugün'e Hoş Geldiniz! 🌴</h1>
-        <p style="color: #94a3b8; font-size: 13px; margin-top: 5px;">Kişisel Seyahat & Gezgin Ağı</p>
+        <h1 style="color: #38bdf8; margin: 0; font-size: 26px; font-weight: 800;">${brandName}</h1>
+        <p style="color: #94a3b8; font-size: 13px; margin-top: 5px;">${brandSub}</p>
       </div>
 
       <div style="background-color: #0f172a; padding: 25px; border-radius: 18px; border: 1px solid #334155; margin-bottom: 20px;">
-        <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">Harika bir başlangıç, ${fullName}!</h2>
+        <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">${greeting}</h2>
         <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
-          Dünya seyahat haritanızı oluşturmak, rotalarınızı çizmek ve çakışan gezginlerle tanışmak için hesabınızı onaylamanız gerekmektedir:
+          ${bodyText}
         </p>
 
         <div style="text-align: center; margin: 30px 0;">
@@ -157,12 +184,12 @@ export function getRegisterActivationEmailTemplate(fullName: string, otpCode: st
         </div>
 
         <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-bottom: 0;">
-          ⏳ Doğrulama kodunuz <b>15 dakika</b> boyunca geçerlidir.
+          ${expiryNote}
         </p>
       </div>
 
       <div style="text-align: center; color: #64748b; font-size: 11px;">
-        © 2026 TatildeBugün Platformu. Tüm hakları saklıdır.
+        ${copyright}
       </div>
     </div>
   `;
