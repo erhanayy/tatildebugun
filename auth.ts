@@ -81,11 +81,17 @@ const nextAuthResult = NextAuth({
               }
             }
 
+            // Güvenlik & Cookie Boyutu Koruyucu: Base64 data URL asla cookie'ye konulmaz (HTTP 431 önleyici)
+            const cleanImage =
+              user.avatarUrl && user.avatarUrl.startsWith("data:image")
+                ? `/api/user/avatar?id=${user.id}`
+                : user.avatarUrl;
+
             return {
               id: user.id,
               name: user.fullName,
               email: user.email,
-              image: user.avatarUrl,
+              image: cleanImage,
               role: user.role,
               forcePasswordChange: user.forcePasswordChange,
             };
@@ -102,11 +108,23 @@ const nextAuthResult = NextAuth({
       if (user) {
         token.id = user.id ?? "";
         token.role = (user as any).role ?? "guest";
-        token.picture = (user as any).image ?? (user as any).avatarUrl ?? null;
+        const rawImg = (user as any).image ?? (user as any).avatarUrl ?? null;
+        token.picture =
+          rawImg && rawImg.startsWith("data:image")
+            ? `/api/user/avatar?id=${user.id}`
+            : rawImg;
         token.forcePasswordChange = (user as any).forcePasswordChange ?? false;
       }
       if (trigger === "update" && session?.user?.image) {
-        token.picture = session.user.image;
+        const sImg = session.user.image;
+        token.picture =
+          sImg && sImg.startsWith("data:image")
+            ? `/api/user/avatar?id=${token.id}`
+            : sImg;
+      }
+      // Kendi Kendini Onarma: Eğer token.picture içinde eski bir data:image kalmışsa anında endpoint'e çevirip cookie'yi küçült
+      if (typeof token.picture === "string" && token.picture.startsWith("data:image")) {
+        token.picture = token.id ? `/api/user/avatar?id=${token.id}` : null;
       }
       return token;
     },

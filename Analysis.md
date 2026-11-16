@@ -3729,5 +3729,35 @@ Kullanıcının ilettiği canlı arama ekran görüntüsü ve veritabanı sorgul
 - `npx tsc --noEmit`: 0 hata ile doğrulandı.
 - `npm run build`: Next.js 16.1.6 üretim derlemesi 2.2 saniyede hatasız tamamlandı.
 
+---
+
+## 74. HTTP 431 (Request Header Fields Too Large) Kök Neden Analizi & Çözümü
+
+### 74.1. Sorunun Tespiti (Kullanıcı Geri Bildirimi: "Kaydettim. Denemek için logout yaptım ve site düştü. HTTP ERROR 431")
+Kullanıcının profil fotoğrafını yükleyip çıkış yapmak istediğinde karşılaştığı ekran görüntüsü incelendiğinde Google Chrome'un **`HTTP ERROR 431 (Request Header Fields Too Large)`** hata sayfası verdiği görüldü.
+
+### 74.2. Kök Neden (Root Cause)
+1. **NextAuth JWT / Cookie Şişmesi (Base64 Data URL Tuzağı):**
+   - Kullanıcı profil fotoğrafı yüklediğinde, görsel istemci tarafında 256x256 WebP/JPEG olarak küçültülüp `data:image/jpeg;base64,...` formatında veritabanına yazılmaktaydı (~17.895 karakter).
+   - [auth.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/auth.ts) içerisinde `authorize` fonksiyonu `image: user.avatarUrl` döndürmekte, `jwt` callback'i ise `token.picture = user.image` ataması yapmaktaydı.
+   - NextAuth JWT strategy kullandığında, tüm `token` nesnesini JWE (AES-GCM) ile şifreleyerek tarayıcı çerezine (`next-auth.session-token`) yazar. Bir HTTP çerezinin W3C limiti 4096 bayttır. NextAuth 4KB'ı aşan token'ları birden fazla parçaya böler (`next-auth.session-token.0`, `.1`, `.2`, `.3`, `.4`, vb.).
+   - 17.895 karakterlik base64 verisi şifrelendiğinde çerez boyutu ~25KB - 35KB'a ulaşmıştır.
+2. **Web Sunucusu / Node.js Başlık Boyutu Limiti (Max HTTP Header Size):**
+   - Node.js varsayılan olarak gelen HTTP istek başlıklarını en fazla 16.384 bayt (16KB) ile sınırlar.
+   - Kullanıcı logout olmak için butona bastığında veya sayfayı yenilediğinde, tarayıcı 30KB'lık çerez başlığı ile istek göndermiş; Node.js sunucusu isteği karşılayamadan **HTTP 431 Request Header Fields Too Large** ile anında reddetmiştir.
+   - İstek reddedildiği için `logoutAction` (çerezleri silme) çalışamamış ve tarayıcıda o çerezler kaldığı sürece sonraki her yenilemede 431 hatası tekrarlanmıştır.
+
+### 74.3. Uygulanan Mimari & Kesin Çözüm
+1. **Bağımsız Avatar API Rotası ([app/api/user/avatar/route.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/app/api/user/avatar/route.ts)):**
+   - `GET /api/user/avatar?id=[userId]` rotası oluşturuldu.
+   - Veritabanındaki `users.avatar_url` kolonundan base64 verisi okunarak doğrudan binary `Buffer` ve uygun `Content-Type` (image/jpeg) ile HTTP 200 olarak tarayıcıya iletilmesi sağlandı (`Cache-Control: public, max-age=86400`).
+2. **NextAuth JWT & Oturum Hafifleştirmesi ([auth.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/auth.ts)):**
+   - `authorize` ve `jwt` callback'lerinde base64 data URL (`data:image`) tespit edildiği anda JWT içerisine asla yazılmayıp yerine `/api/user/avatar?id=${user.id}` (35 baytlık hafif URL) konulması sağlandı.
+   - Token boyutu 25KB'tan ~500 bayta düşürüldü.
+   - Kendi kendini onarma (Self-healing): `jwt` callback'i içine, tarayıcısında eski 431 çerezi bulunan kullanıcıların token'ındaki `data:image` verisini anında temizleyip çerezi küçülten koruma bloğu eklendi.
+3. **Node.js Başlık Boyutunun Genişletilmesi ([package.json](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/package.json)):**
+   - `start` betiğine `NODE_OPTIONS='--max-http-header-size=65536'` eklenerek sunucunun 64KB'a kadar başlıkları kabul etmesi sağlandı. Böylece tarayıcısında eski şişmiş çerez bulunan kullanıcıların dahi isteği sunucuya ulaşacak ve NextAuth tarafından taze küçük çerez ile ezilerek otomatik düzelecektir.
+
+
 
 
