@@ -27,6 +27,8 @@ export const users = pgTable(
     verificationCode: text("verification_code"),
     verificationCodeExpiresAt: timestamp("verification_code_expires_at"),
     isActive: boolean("is_active").default(true).notNull(),
+    lastLoginAt: timestamp("last_login_at"),
+    travelerScore: integer("traveler_score").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -469,6 +471,65 @@ export const feedMutes = pgTable(
 
 export type FeedMute = typeof feedMutes.$inferSelect;
 export type NewFeedMute = typeof feedMutes.$inferInsert;
+
+// --- 17. Giriş Logları (Login Logs) Tablosu (DAU, WAU, MAU, YAU İstatistikleri) ---
+export const loginLogs = pgTable(
+  "login_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    ipAddress: varchar("ip_address", { length: 50 }),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("login_logs_user_idx").on(table.userId),
+    createdAtIdx: index("login_logs_created_at_idx").on(table.createdAt),
+  })
+);
+
+export type LoginLog = typeof loginLogs.$inferSelect;
+export type NewLoginLog = typeof loginLogs.$inferInsert;
+
+// --- 18. Başarım Rozetleri Kataloğu (Badges) Tablosu ---
+export const badges = pgTable("badges", {
+  id: varchar("id", { length: 50 }).primaryKey(), // 'world_citizen', 'history_hunter' vb.
+  titleTr: varchar("title_tr", { length: 100 }).notNull(),
+  titleEn: varchar("title_en", { length: 100 }).notNull(),
+  descriptionTr: text("description_tr").notNull(),
+  descriptionEn: text("description_en").notNull(),
+  icon: varchar("icon", { length: 50 }).notNull(),
+  category: varchar("category", { length: 30 }).default("travel").notNull(),
+  requiredPoints: integer("required_points").default(0).notNull(),
+});
+
+export type Badge = typeof badges.$inferSelect;
+export type NewBadge = typeof badges.$inferInsert;
+
+// --- 19. Kullanıcı Rozetleri (User Badges) Tablosu ---
+export const userBadges = pgTable(
+  "user_badges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    badgeId: varchar("badge_id", { length: 50 })
+      .references(() => badges.id, { onDelete: "cascade" })
+      .notNull(),
+    unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userBadgeUnique: uniqueIndex("user_badges_unique").on(table.userId, table.badgeId),
+    userIdx: index("user_badges_user_idx").on(table.userId),
+  })
+);
+
+export type UserBadge = typeof userBadges.$inferSelect;
+export type NewUserBadge = typeof userBadges.$inferInsert;
+
 
 
 

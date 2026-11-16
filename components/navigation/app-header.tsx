@@ -20,6 +20,7 @@ import {
   User,
   Luggage,
   ShieldCheck,
+  Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NotificationBell } from "@/components/navigation/notification-bell";
@@ -90,6 +91,12 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
       label: t("nav.tatildeyim") || "Tatildeyim",
       icon: Luggage,
       active: pathname.startsWith("/tatildeyim"),
+    },
+    {
+      href: "/passport",
+      label: t("nav.passport") || "Gezgin Karnesi",
+      icon: Trophy,
+      active: pathname.startsWith("/passport"),
     },
   ];
 
@@ -183,6 +190,25 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
 
             {/* Gezgin Sohbeti & Rozeti */}
             <ChatBadge />
+
+            {/* Gezgin Pasaportu & Karnesi (Trophy İkonu) */}
+            <Link
+              href="/passport"
+              className={`relative p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center group ${
+                pathname.startsWith("/passport")
+                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-md shadow-amber-500/10"
+                  : "text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/40 hover:bg-amber-500/20"
+              }`}
+              aria-label={t("nav.passport") || "Gezgin Karnesi"}
+            >
+              <Trophy className="w-5 h-5 group-hover:scale-110 transition-transform" />
+
+              {/* Tooltip */}
+              <span className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-slate-900/95 text-slate-100 text-[11px] font-semibold rounded-lg shadow-2xl border border-slate-700/80 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-150 z-50">
+                {t("nav.passport") || "Gezgin Karnesi"} 🏆
+                <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-t border-l border-slate-700/80 rotate-45" />
+              </span>
+            </Link>
 
             {/* Yönetici Merkezi (Admin Hub) İkonu */}
             {(user as any).role === "admin" && (

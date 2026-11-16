@@ -377,8 +377,16 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
                     />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-bold text-sm text-white leading-tight truncate">
-                          {item.author.fullName}
+                        <h4 className="font-bold text-sm text-white leading-tight truncate flex items-center gap-1.5">
+                          <span>{item.author.fullName}</span>
+                          {item.author.starDisplay ? (
+                            <span
+                              className="text-amber-400 text-xs shrink-0 font-medium tracking-tight"
+                              title={`${item.author.starCount || 0} Yıldızlı Gezgin`}
+                            >
+                              {item.author.starDisplay}
+                            </span>
+                          ) : null}
                         </h4>
 
                         {/* Bağlantı / İlişki Tipi Rozetleri */}

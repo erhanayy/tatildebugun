@@ -46,6 +46,7 @@ export const en: Dictionary = {
     notifications: "Notifications",
     messages: "Messages",
     language: "Language",
+    passport: "Traveler Passport & Score",
   },
   auth: {
     signIn: "Sign In",

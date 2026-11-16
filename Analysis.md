@@ -3887,8 +3887,185 @@ Kullanıcının gizlediği kişileri inceleyip geri alabilmesi için 2 stratejik
    - [scripts/rollback_feed_mutes.sql](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/scripts/rollback_feed_mutes.sql)
 3. **Kural 13 Mobil-First Standartları:**
    - Modallar ve butonlar 360px-430px ekranlarda sıfır yatay kaydırma ile dikey esnek grid/flex yapısında ve minimum 44px dokunma hedefiyle tasarlanmıştır.
-4. **Çift Dilli Sözlük:**
-   - `tr.ts` ve `en.ts` içerisinde `profile.mutedTravelersTitle`, `profile.mutedTravelersDesc`, `profile.manageMutedBtn`, `profile.mutedTravelersEmpty`, `feed.unmuteBtn` eksiksiz tanımlanmıştır.
+---
+
+## 79. Yönetici Dashboard'u, Üye Yönetimi, Kişisel Gezgin Dashboard'u ve Sosyal Oyunsallaştırma (Gamification) Mimarisi
+
+### 79.1. Giriş ve Kullanıcı Talebi
+Kullanıcı talebi doğrultusunda 3 temel mimari eksen analiz edilmiştir:
+1. **Yönetim Merkezi (Admin Hub) İçi Yönetici Dashboard'u:** Sadece Admin rolüne açık; toplam kullanıcı, harita pini (ziyaret), rota ve tarihi mekan sayaçları ile son 24 saat, son 1 hafta, son 1 ay ve son 1 yıl giriş yapan kullanıcı istatistikleri.
+2. **Yönetim Merkezi Altında Üye Yönetim Ekranı (`/admin/users`):** Üstte ada/kullanıcı adına göre dinamik arama, altta alfabetik sıralı gezgin tablosu ve hesap askıya alma/engelleme altyapısı.
+3. **Kullanıcıların Kişisel Seyahat Dashboard'u (`/passport` veya `/traveler-dashboard`):** Üst barda kupa/başarım ikonu ile erişim; ziyaret edilen ülke adedi, şehir adedi, "Ana İkametgahı Dahil Et / Hariç Tut" seyahat filtresi, çizilen rota adedi ve zengin görsel seyahat karnesi.
+4. **Sosyal Oyunsallaştırma & Liderlik Sıralaması (Gamification & Ranking):** Arkadaşlarım, Akrabalarım, Ailem ve Genel (Global) sekmeleriyle liderlik sıralaması, Gezgin Skoru puanlama motoru ve kilit açılabilir rozetler (Badges).
+
+---
+
+### 79.2. EKSEN 1: Yönetici Dashboard'u (Admin Analytics Hub - `/admin`)
+
+#### 1. Yetkilendirme & Güvenlik
+- Sadece `session.user.role === "admin"` olan yöneticiler erişebilir.
+- Normal kullanıcılar doğrudan ana haritaya yönlendirilir (`redirect("/dashboard")`).
+
+#### 2. Çekirdek Platform Sayaçları (KPI Kartları)
+- 👥 **Toplam Kayıtlı Gezgin:** `SELECT count(*) FROM users`
+- 📍 **Toplam Harita Pini (Ziyaretler):** `SELECT count(*) FROM visits`
+- 🧭 **Toplam Seyahat Rotası:** `SELECT count(*) FROM trips`
+- 🏛️ **Toplam Ziyaret Edilen Mekan / Tarihi Yer:** `SELECT count(*) FROM trip_place_visits`
+
+#### 3. Zaman Dilimli Giriş & Aktivite Analitiği
+Kullanıcı oturum açtığında ve her oturum tazelemesinde zaman damgalı loglama:
+- `login_logs` tablosu:
+  - `id`: uuid (PK)
+  - `user_id`: uuid (FK users.id)
+  - `ip_address`: varchar (Maskelenmiş, Kural 11 Zero-PII)
+  - `user_agent`: text
+  - `created_at`: timestamp (NOW())
+- **Dönemsel Metrikler:**
+  - ⚡ **Son 24 Saat Giriş Yapanlar (Günlük Aktif - DAU):** `WHERE created_at >= NOW() - INTERVAL '24 hours'`
+  - 📅 **Son 7 Gün Giriş Yapanlar (Haftalık Aktif - WAU):** `WHERE created_at >= NOW() - INTERVAL '7 days'`
+  - 📊 **Son 30 Gün Giriş Yapanlar (Aylık Aktif - MAU):** `WHERE created_at >= NOW() - INTERVAL '30 days'`
+  - 📈 **Son 1 Yıl Giriş Yapanlar (Yıllık Aktif - YAU):** `WHERE created_at >= NOW() - INTERVAL '1 year'`
+
+---
+
+### 79.3. EKSEN 2: Üye Yönetim Ekranı (`/admin/users`)
+
+#### 1. Arayüz ve Navigasyon
+- `/admin` modüllerindeki *"Kullanıcı & Gezgin Yönetimi"* kartı doğrudan `/admin/users` rotasına yönlendirir.
+- **Arama & Filtreleme Çubuğu:**
+  - İsim, Soyisim, `@username`, E-posta ve Şehir arama input'u (Debounced 300ms).
+  - Rol filtresi (Admin / Guest / Host).
+  - Durum filtresi (Aktif / Askıda).
+- **Alfabetik Sıralı Üye Listesi & Tablosu:**
+  - Sütunlar:
+    1. **Gezgin Kimliği:** Profil fotoğrafı (`<UserAvatar>`), Ad Soyad, `@kullanıcı_adı`.
+    2. **İletişim & Konum:** E-posta, Ana Şehir / Ülke bayrağı.
+    3. **Seyahat Aktivitesi:** Eklenen Pin Sayısı, Çizilen Rota Sayısı, Ziyaret Edilen Mekan Sayısı.
+    4. **Zaman Damgaları:** Kayıt Tarihi (`createdAt`), Son Görülme (`lastLoginAt`).
+    5. **Durum:** Yeşil "Aktif" rozeti veya Kırmızı "Askıda" rozeti.
+    6. **Aksiyonlar:** "Girişi Engelle / Askıya Al" (`toggleUserStatusAction` ile `is_active` değiştirme), "Kullanıcı Haritasını İncele".
+
+---
+
+### 79.4. EKSEN 3: Kişisel Gezgin Dashboard'u (Traveler Stats Cockpit - `/passport`)
+
+#### 1. Üst Bar Erişimi
+- [components/navigation/app-header.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/navigation/app-header.tsx) sağ aksiyon alanına veya sol menüye parlak bir **Kupa / Başarım İkonu (`Trophy` / `Award`)** eklenir.
+- Tooltip: *"Gezgin Pasaportu & Karnesi 🏆"*. Tıklandığında doğrudan `/passport` sayfasına gider.
+
+#### 2. Temel Seyahat İstatistikleri & Göstergeler
+- 🌍 **Ziyaret Edilen Ülke Sayısı & Dünya Keşif Yüzdesi:** Örn. `14 Ülke (Dünyanın %7.1'i keşfedildi)`.
+- 🏙️ **Ziyaret Edilen Şehir Sayısı:** Örn. `32 Şehir`.
+- 🧭 **Oluşturulan Seyahat Rotaları:** Örn. `5 Rota` (Tamamlanan / Planlanan ayrımıyla).
+- 🏛️ **Keşfedilen İkonik Mekanlar:** Örn. `48 Tarihi Mekan / Müze`.
+- ⏱️ **Toplam Seyahat Süresi:** Haritadaki ziyaret ve rotaların gün bazında toplamı.
+
+#### 3. Kritik Filtre: "Ana İkametgahı Dahil Et / Hariç Tut" Switch'i
+- Kullanıcının profilinde kayıtlı ana ikamet şehri (örn: `İstanbul, TR`).
+- Kullanıcı İstanbul'da yaşadığı için İstanbul'u bir "gezi" olarak saymak istemeyebilir veya tam tersine yerel keşiflerini de dahil etmek isteyebilir.
+- **İnteraktif Switch:**
+  - **Kapalı (Varsayılan):** Ana şehir ziyaretleri hariç tutulur; yalnızca gerçek "seyahat / tatil" lokasyonları sayılır.
+  - **Açık:** Ana ikametgahındaki ziyaret ve mekan check-in'leri de tüm istatistiklere dahil edilir.
+- Değişim anında tüm sayaçlar ve yüzdeler canlı olarak yeniden hesaplanır.
+
+#### 4. Zengin Seyahat Analizleri
+- **Kıta Dağılımı Çizelgesi:** Avrupa (%60), Asya (%30), Afrika (%10).
+- **En Sevilen Ülkeler & Şehirler:** En çok pin konulan veya en uzun kalınan yerler.
+- **Ulaşım Tercihleri:** Uçak, Tren, Araba, Karışık yüzdeleri.
+
+---
+
+### 79.5. EKSEN 4: Oyunsallaştırma (Gamification), Sosyal Sıralama & Rozetler
+
+#### 1. Sosyal Kapsamlı Liderlik Sıralaması (Leaderboard Tabs)
+Kullanıcı yalnızca tüm dünyayla değil, asıl anlamlı olan yakın çevresiyle yarışır:
+- 🤝 **Arkadaşlarım (Friends Ranking):** Kabul edilmiş arkadaşları arasındaki sıralama.
+- 🏡 **Ailem (Family Ranking):** Aile üyeleri arasındaki seyahat karnesi.
+- 👥 **Akrabalarım (Relatives Ranking):** Akrabalar arasındaki sıralama.
+- 🌍 **Genel (Global):** AllTripX platformundaki tüm aktif gezginler.
+- **Özel Motivasyon Rozeti:**
+  > *"Arkadaşlarım arasında #2. sıradasın! (1. sıradaki @ahmet ile aranda sadece 1 şehir var!) 🥈"*
+
+#### 2. Gezgin Skoru (Traveler Score) Puanlama Formülü (Parametrik Yapı)
+Tüm puanlama katsayıları ve eşikler merkezi [lib/constants/gamification.ts](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/lib/constants/gamification.ts) dosyasında parametrik olarak yönetilecektir:
+```ts
+export const POINT_RULES = {
+  PER_COUNTRY: 100,    // Her yeni ülke
+  PER_CITY: 25,        // Her yeni şehir
+  PER_TRIP: 50,        // Her tamamlanan rota
+  PER_POI: 10,         // Her tarihi mekan check-in'i
+  PER_FEED_POST: 5,    // Her topluluk akışı paylaşımı
+};
+```
+*Gelecekte puanların yetmemesi veya dengelenmesi gerektiğinde tek bir dosyadan veya ileride admin panelinden saniyeler içinde güncellenebilir.*
+
+#### 3. Gezgin Rütbeleri (Çift Dilli & Kültürel Yerelleştirme)
+Evliya Çelebi gibi kültürel kahramanlar Türkçe arayüzde gururla korunurken, yabancı kullanıcıların bağ kurabileceği küresel unvanlar (Grand Voyager) tanımlanmıştır:
+1. 🎒 **Çırak Seyyah (TR) / Novice Explorer (EN):** 0 - 249 Puan
+2. 🧭 **Şehir Kaşifi (TR) / City Explorer (EN):** 250 - 749 Puan
+3. 🗺️ **Rota Ustası (TR) / Route Master (EN):** 750 - 1.499 Puan
+4. ✈️ **Kıta Fatihi (TR) / Globe Trotter (EN):** 1.500 - 2.999 Puan
+5. 👑 **Evliya Çelebi (TR) / Grand Voyager (EN):** 3.000+ Puan
+
+#### 4. Kademeli Yıldız Sistemi (Progressive Country Star Rating)
+Kullanıcının önerisi doğrultusunda: 5 ülkeden sonra tıkanan tek seferlik rozet yerine, **sonsuz ölçeklenebilir ve prestij sağlayan Yıldız Sistemi (⭐)** kurgulanmıştır:
+
+- **Mekanik:** Gezilen **her 5 ülke için 1 Yıldız (⭐)** kazanılır:
+  - 1 - 4 Ülke: ⭐ 0 Yıldız (İlerleme göstergesi: *"1. Yıldız için 3/5 ülke tamamlandı"*)
+  - 5 - 9 Ülke: ⭐ 1 Yıldızlı Gezgin (Örn: 7 ülke = ⭐ + *"2. Yıldız için 2/5 ülke tamamlandı"*)
+  - 10 - 14 Ülke: ⭐⭐ 2 Yıldızlı Gezgin
+  - 15 - 19 Ülke: ⭐⭐⭐ 3 Yıldızlı Gezgin
+  - 20 - 24 Ülke: ⭐⭐⭐⭐ 4 Yıldızlı Gezgin
+  - 25 - 29 Ülke: ⭐⭐⭐⭐⭐ 5 Yıldızlı Gezgin
+  - 30+ Ülke: 🌟 5+ Yıldızlı Elit Seyyah (Örn: 🌟 x 6 vb.)
+- **Hesaplama Formülü:** `stars = Math.floor(countryCount / 5)`, `remainingToNext = 5 - (countryCount % 5)`.
+
+#### 5. Topluluk Akışında (Feed), Aramada ve Profilde Canlı Yıldız Prestiji
+- **Keşfet Akışında (Feed):** Yazar adının hemen sağında altın renkli yıldızlar parlar:
+  > **Erhan Ayyıldız ⭐⭐⭐** `(Arkadaşım)`
+- **Hover / Tooltip:** Yıldızların üzerine gelindiğinde *"3 Yıldızlı Kıdemli Gezgin (17 Ülke Ziyareti)"* bilgisi gösterilir.
+- **Arama & Radarda:** Gezgin arama sonuçlarında ve rota radarında gezginlerin yanında yıldızları görünerek güven ve deneyim hissi oluşturur.
+- **Kişisel Pasaport Dashboard'unda:** Gezginin mevcut yıldızları büyük parıltılı ikonlarla sergilenir ve bir sonraki yıldıza kaç ülke kaldığı bir ilerleme çubuğuyla (Progress Bar) net biçimde gösterilir.
+
+---
+
+### 79.6. Veritabanı ve Şema Mimarisi (Kural 8 Reversible Migrations)
+
+```sql
+-- 1. Kullanıcı tablosuna son giriş ve skor eklenmesi
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS traveler_score INTEGER DEFAULT 0 NOT NULL;
+
+-- 2. Giriş Logları Tablosu (DAU, WAU, MAU, YAU Analitiği)
+CREATE TABLE IF NOT EXISTS login_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ip_address VARCHAR(50),
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS login_logs_user_idx ON login_logs(user_id);
+CREATE INDEX IF NOT EXISTS login_logs_created_at_idx ON login_logs(created_at);
+
+-- 3. Rozet Kataloğu ve Kullanıcı Rozetleri Tabloları
+CREATE TABLE IF NOT EXISTS badges (
+    id VARCHAR(50) PRIMARY KEY, -- 'world_citizen', 'history_hunter' vb.
+    title VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+    icon VARCHAR(50) NOT NULL,
+    category VARCHAR(30) DEFAULT 'travel' NOT NULL,
+    required_points INTEGER DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_badges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    badge_id VARCHAR(50) NOT NULL REFERENCES badges(id) ON DELETE CASCADE,
+    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT user_badges_unique UNIQUE (user_id, badge_id)
+);
+```
+
 
 
 

@@ -44,6 +44,7 @@ export const tr = {
     notifications: "Bildirimler",
     messages: "Mesajlar",
     language: "Dil Seçimi",
+    passport: "Gezgin Pasaportu & Karnesi",
   },
   auth: {
     signIn: "Giriş Yap",

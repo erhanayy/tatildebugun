@@ -18,6 +18,7 @@ import {
 import { eq, and, or, desc, inArray, notInArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "@/lib/actions/notifications";
+import { getStarRating } from "@/lib/constants/gamification";
 
 export type ReactionType = "heart" | "plane" | "palm" | "clap";
 
@@ -45,6 +46,8 @@ export interface FeedItem {
     isSelf?: boolean;
     connectionStatus?: "none" | "pending_outgoing" | "pending_incoming" | "accepted";
     relationshipType?: "friend" | "relative" | "family" | null;
+    starDisplay?: string;
+    starCount?: number;
   };
   stops?: TripStop[];
   reactions: {
@@ -351,6 +354,37 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
             )
         : [];
 
+    // 5.1 Yazar Gezgin Yıldızlarını Hesapla (Her 5 ülke = 1 ⭐)
+    const authorVisitsData = authorIds.length > 0
+      ? await db
+          .select({
+            userId: visits.userId,
+            countryCode: visits.countryCode,
+          })
+          .from(visits)
+          .where(inArray(visits.userId, authorIds))
+      : [];
+
+    const authorCountrySets = new Map<string, Set<string>>();
+    for (const v of authorVisitsData) {
+      if (!v.countryCode) continue;
+      let set = authorCountrySets.get(v.userId);
+      if (!set) {
+        set = new Set<string>();
+        authorCountrySets.set(v.userId, set);
+      }
+      set.add(v.countryCode.toUpperCase());
+    }
+
+    function getAuthorStars(authorId: string) {
+      const countryCount = authorCountrySets.get(authorId)?.size || 0;
+      const starInfo = getStarRating(countryCount);
+      return {
+        starCount: starInfo.stars,
+        starDisplay: starInfo.starDisplay,
+      };
+    }
+
     function getAuthorConnection(authorId: string) {
       const isSelf = Boolean(currentUserId && authorId === currentUserId);
       if (isSelf) {
@@ -415,6 +449,8 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
 
       const conn = getAuthorConnection(user.id);
 
+      const authorStars = getAuthorStars(user.id);
+
       return {
         id: visit.id,
         type: "visit",
@@ -433,6 +469,8 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
           isSelf: conn.isSelf,
           connectionStatus: conn.connectionStatus,
           relationshipType: conn.relationshipType,
+          starCount: authorStars.starCount,
+          starDisplay: authorStars.starDisplay,
         },
         reactions: {
           counts,
@@ -479,6 +517,7 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
           : "Tarihsiz Rota";
 
       const conn = getAuthorConnection(user.id);
+      const authorStars = getAuthorStars(user.id);
 
       return {
         id: trip.id,
@@ -496,6 +535,8 @@ export async function getFeedPosts(filter: "all" | "friends" | "family" = "all")
           isSelf: conn.isSelf,
           connectionStatus: conn.connectionStatus,
           relationshipType: conn.relationshipType,
+          starCount: authorStars.starCount,
+          starDisplay: authorStars.starDisplay,
         },
         stops,
         reactions: {

@@ -3,7 +3,7 @@ import { authConfig } from "./auth.config";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { db } from "./lib/db";
-import { users } from "./lib/db/schema";
+import { users, loginLogs } from "./lib/db/schema";
 import { eq, or, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
@@ -86,6 +86,17 @@ const nextAuthResult = NextAuth({
               user.avatarUrl && user.avatarUrl.startsWith("data:image")
                 ? `/api/user/avatar?id=${user.id}`
                 : user.avatarUrl;
+
+            // Giriş zamanını ve logunu kaydet (DAU / MAU Analitiği)
+            try {
+              await db.insert(loginLogs).values({
+                userId: user.id,
+                userAgent: "web",
+              });
+              await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
+            } catch (logErr) {
+              console.error("Giriş loglama hatası:", logErr);
+            }
 
             return {
               id: user.id,
