@@ -4097,3 +4097,18 @@ CREATE TABLE IF NOT EXISTS user_badges (
      - Kıta ve Ülke Analizi: Dinamik `getContinentName()` çevirisi (Europe, Asia, Americas, Africa, Oceania vb.), *"Continent Distribution / Kıta Dağılımı"*, *"Most Visited Countries / En Çok Ziyaret Edilen Ülke"*
      - Sosyal Liderlik Tablosu: *"Social Leaderboard / Sosyal Liderlik Sıralaması"*, Kapsam sekmeleri (*"Friends / Arkadaşlar"*, *"Family / Ailem"*, *"Relatives / Akrabalar"*, *"Global / Genel"*), *"Your Rank / Sıranız"*, *"You / Siz"*, *"Updating leaderboard... / Sıralama güncelleniyor..."*
      - Başarım Rozetleri: *"Achievement Badges & Trophies / Başarım Rozetleri & Kilitler"*, *"Earned / Kazanıldı"*, *"Locked / Kilitli"*
+
+### 80.3. Üst Bar İkon Düzeni: Sol Kapsül Ada (Segmented Dock) & Sağ Birörnek Kokpit Kutuları (1. Tasarım)
+Kullanıcının onayıyla (`Option 1`):
+1. **Sol Navigasyon (Sayfa Sekmeleri):**
+   - 5 sayfa sekmesi (Harita, Akış, Radar, Tatildeyim, Pasaport) tek tek kutular yerine tek parça **"Navigasyon Kapsülü" (Floating Segmented Island / Dock)** içine alındı (`p-1 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-inner shadow-slate-950/40 backdrop-blur-md flex items-center gap-1`).
+   - Normalde arka planlar temiz ve şeffaf kalırken, yalnızca aktif olunan sayfa sekmesi kendi renginde (`link.activeBg`) parlar.
+   - Bu sayede 5 ayrı kutucuk enflasyonu son buldu, tek bir menü hissi sağlandı.
+2. **Sağ Aksiyon Barı (Aksiyon & Araç Çubuğu):**
+   - Sağdaki tüm aksiyon butonları (Dil, Davet, Zil, Mesaj, Admin, Profil, Çıkış) **istisnasız 38x38px kare kutu** standardına (`h-[38px] rounded-xl border border-slate-800/80 bg-slate-900/60 transition-all flex items-center justify-center`) bağlandı.
+   - Önceden kutusuz kalan **Bildirim Zili (`NotificationBell`)** ve **Gezgin Sohbeti (`ChatBadge`)** de bu kutuların içine girdi; canlı kırmızı ve mavi sayaç rozetleri kutunun sağ üst köşesine kusursuz şekilde (`-top-1.5 -right-1.5`) ankrajlandı.
+   - İkonlar kendi tematik renkleriyle (Davet yeşil, Zil amber, Mesaj cyan, Admin mor, Çıkış kırmızı) hover durumunda lüks neon parlaması verir.
+3. **Mobile-First & Sıfır Taşma (Kural 13):**
+   - Mobilde soldaki 5 ikon zaten alt menü barındadır (`md:hidden`).
+   - Üst barda ise telefonlarda (küçük ekranlar) sadece Logo + Dil + Bildirim + Profil fotoğraflı avatar yer alarak üst barın tek satırda tertemiz, ferah ve sıfır yatay kaydırma ile çalışması garanti altına alındı.
+

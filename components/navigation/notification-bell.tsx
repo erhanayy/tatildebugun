@@ -138,22 +138,22 @@ export function NotificationBell() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Zil & Rozet Butonu */}
+      {/* Zil & Rozet Butonu (Kusursuz Kare Kutu & Köşe Rozeti) */}
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`relative p-2 rounded-xl transition-all cursor-pointer group ${
+        className={`relative w-[38px] h-[38px] rounded-xl transition-all cursor-pointer flex items-center justify-center group border ${
           isOpen
-            ? "bg-slate-800 text-cyan-400 border border-slate-700"
-            : "text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent"
+            ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm shadow-amber-500/20"
+            : "bg-slate-900/60 border-slate-800/80 text-amber-400 hover:text-amber-300 hover:border-amber-500/40 hover:bg-amber-500/10"
         }`}
         aria-label={t("notifications.title")}
       >
         <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
 
-        {/* Canlı Kırmızı Bildirim Rozeti (Badge) */}
+        {/* Canlı Kırmızı Bildirim Rozeti (Kutunun Sağ Üst Köşesine Ankrajlı) */}
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[20px] h-[20px] px-1 text-[11px] font-black text-white bg-rose-500 rounded-full border-2 border-slate-900 shadow-lg shadow-rose-500/50 animate-pulse">
+          <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[20px] h-[20px] px-1 text-[11px] font-black text-white bg-rose-500 rounded-full border-2 border-slate-900 shadow-lg shadow-rose-500/50 animate-pulse">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}

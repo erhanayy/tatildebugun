@@ -136,8 +136,8 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               </span>
             </Link>
 
-            {/* Masaüstü Navigasyon Sekmeleri (Zarif Renkli İkon Butonları & Tooltip) */}
-            <nav className="hidden md:flex items-center gap-1.5">
+            {/* Masaüstü Navigasyon Sekmeleri (Zarif Kapsül Ada / Segmented Dock) */}
+            <nav className="hidden md:flex items-center gap-1 p-1 rounded-2xl bg-slate-900/80 border border-slate-800/80 shadow-inner shadow-slate-950/40 backdrop-blur-md">
               {navLinks.map((link) => {
                 const Icon = link.icon;
                 return (
@@ -145,10 +145,10 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
                     key={link.href}
                     href={link.href}
                     aria-label={link.label}
-                    className={`p-2.5 rounded-xl transition-all relative flex items-center justify-center cursor-pointer group border ${
+                    className={`w-9 h-9 rounded-xl transition-all relative flex items-center justify-center cursor-pointer group ${
                       link.active
                         ? link.activeBg
-                        : `${link.colorClass} ${link.hoverBg} border-slate-800/80 bg-slate-900/60`
+                        : `${link.colorClass} ${link.hoverBg} border border-transparent`
                     }`}
                   >
                     <Icon className="w-5 h-5 group-hover:scale-110 transition-transform" />
@@ -164,13 +164,13 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
             </nav>
           </div>
 
-          {/* Sağ Alan: Dil Seçici + Davet Et + Bildirimler + Sohbet + Admin Yönetimi + Profil & Çıkış */}
-          <div className="flex items-center gap-2 sm:gap-2.5">
-            {/* Dil Hızlı Değiştirici (Language Quick Switcher) */}
+          {/* Sağ Alan: Birörnek Kokpit Aksiyon Kutuları (Dil, Davet, Zil, Mesaj, Admin, Profil, Çıkış) */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Dil Hızlı Değiştirici (Language Quick Switcher - Kutulu) */}
             <button
               type="button"
               onClick={() => setLanguage(locale === "tr" ? "en" : "tr")}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-bold text-slate-200 transition-all cursor-pointer min-h-[38px] group relative"
+              className="flex items-center justify-center gap-1.5 px-2.5 h-[38px] rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-slate-700 text-xs font-bold text-slate-200 transition-all cursor-pointer group relative"
               aria-label={t("nav.language")}
               title={locale === "tr" ? "Switch to English" : "Türkçe'ye Geç"}
             >
@@ -184,11 +184,11 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               </span>
             </button>
 
-            {/* Arkadaşını Davet Et İkon Butonu */}
+            {/* Arkadaşını Davet Et İkon Butonu (Masaüstü, 38x38px Kutu) */}
             <button
               type="button"
               onClick={() => setIsInviteModalOpen(true)}
-              className="relative p-2 rounded-xl text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/20 transition-all cursor-pointer flex items-center justify-center group"
+              className="relative w-[38px] h-[38px] rounded-xl text-emerald-400 bg-slate-900/60 border border-slate-800/80 hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-all cursor-pointer hidden sm:flex items-center justify-center group"
               aria-label={t("nav.invite")}
             >
               <UserPlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
@@ -200,20 +200,22 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               </span>
             </button>
 
-            {/* Bildirim Çanı & Rozeti */}
+            {/* Bildirim Çanı & Rozeti (38x38px Kutu) */}
             <NotificationBell />
 
-            {/* Gezgin Sohbeti & Rozeti */}
-            <ChatBadge />
+            {/* Gezgin Sohbeti & Rozeti (Masaüstü, 38x38px Kutu) */}
+            <div className="hidden sm:block">
+              <ChatBadge />
+            </div>
 
-            {/* Yönetici Merkezi (Admin Hub) İkonu */}
+            {/* Yönetici Merkezi (Admin Hub) İkonu (Masaüstü, 38x38px Kutu) */}
             {(user as any).role === "admin" && (
               <Link
                 href="/admin"
-                className={`relative p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center group ${
+                className={`relative w-[38px] h-[38px] rounded-xl transition-all cursor-pointer hidden sm:flex items-center justify-center group border ${
                   pathname.startsWith("/admin")
-                    ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-md shadow-indigo-500/10"
-                    : "text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/40 hover:bg-indigo-500/20"
+                    ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm shadow-indigo-500/20"
+                    : "text-indigo-400 bg-slate-900/60 border-slate-800/80 hover:border-indigo-500/40 hover:bg-indigo-500/10"
                 }`}
                 aria-label={t("nav.admin")}
               >
@@ -227,10 +229,10 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               </Link>
             )}
 
-            {/* Kullanıcı Profili Bağlantısı (Kompakt Avatar) */}
+            {/* Kullanıcı Profili Bağlantısı (38x38px Kutu & Avatar) */}
             <Link
               href="/profile"
-              className="relative p-1 rounded-xl hover:bg-slate-800/80 border border-transparent hover:border-slate-700/80 transition-all cursor-pointer group flex items-center"
+              className="relative w-[38px] h-[38px] rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-cyan-500/40 hover:bg-slate-800/80 transition-all cursor-pointer group flex items-center justify-center p-0.5 overflow-hidden"
               aria-label={t("nav.profile")}
             >
               <UserAvatar
@@ -247,11 +249,11 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
               </span>
             </Link>
 
-            {/* Çıkış Yap (Kompakt İkon) */}
-            <form action={logoutAction}>
+            {/* Çıkış Yap (Masaüstü, 38x38px Kutu) */}
+            <form action={logoutAction} className="hidden sm:block">
               <button
                 type="submit"
-                className="relative p-2 rounded-xl text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 transition-colors cursor-pointer flex items-center justify-center group"
+                className="relative w-[38px] h-[38px] rounded-xl text-rose-400 bg-slate-900/60 border border-slate-800/80 hover:border-rose-500/40 hover:bg-rose-500/10 transition-colors cursor-pointer flex items-center justify-center group"
                 aria-label={t("nav.logout")}
               >
                 <LogOut className="w-4 h-4 group-hover:scale-110 transition-transform" />
