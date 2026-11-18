@@ -219,9 +219,11 @@ export interface UserPointsSummary {
   referralPoints: number;
   activityPoints: number;
   poolSharePercent: number; // örn: 0.45%
+  totalPoolPoints: number;
+  poolSharePercentage: number; // örn: 50.0%
   estimatedNetProfit: number; // 1,000,000 TL
-  communityPoolShareTl: number; // 200,000 TL
-  estimatedEarningsTl: number; // ~900 TL
+  communityPoolShareTl: number; // 500,000 TL
+  estimatedEarningsTl: number; // ~2,500 TL
   referralCode: string;
   invitedCount: number;
   rank: number;
@@ -321,6 +323,8 @@ export async function getUserPointsSummary(
     referralPoints,
     activityPoints,
     poolSharePercent: Number(poolSharePercent.toFixed(2)),
+    totalPoolPoints,
+    poolSharePercentage: Number(pool.poolSharePercentage || 50),
     estimatedNetProfit: pool.estimatedNetProfit,
     communityPoolShareTl,
     estimatedEarningsTl,
@@ -361,4 +365,49 @@ export async function getRecentPointActivities(userId: string, limit = 10) {
     .where(eq(userPointsLedger.userId, userId))
     .orderBy(desc(userPointsLedger.createdAt))
     .limit(limit);
+}
+
+export interface PaginatedActivitiesResult {
+  items: (typeof userPointsLedger.$inferSelect)[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * Kullanıcının Sayfalamalı Puan Defteri Hareketleri (Ledger Paging)
+ */
+export async function getPaginatedPointActivities(
+  userId: string,
+  page: number = 1,
+  pageSize: number = 8
+): Promise<PaginatedActivitiesResult> {
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.min(50, Math.max(1, pageSize));
+  const offset = (safePage - 1) * safePageSize;
+
+  const countResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(userPointsLedger)
+    .where(eq(userPointsLedger.userId, userId));
+
+  const totalCount = Number(countResult[0]?.count || 0);
+  const totalPages = Math.max(1, Math.ceil(totalCount / safePageSize));
+
+  const items = await db
+    .select()
+    .from(userPointsLedger)
+    .where(eq(userPointsLedger.userId, userId))
+    .orderBy(desc(userPointsLedger.createdAt))
+    .limit(safePageSize)
+    .offset(offset);
+
+  return {
+    items,
+    totalCount,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages,
+  };
 }

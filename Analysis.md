@@ -4194,3 +4194,74 @@ Kullanıcı onayı doğrultusunda, sıfır ek maliyet prensibiyle (mevcut Cloud 
    - `npx tsc --noEmit`: 0 hata.
    - `npm run build`: Next.js 16 üretim derlemesi 12/12 sayfa ile başarıyla tamamlandı.
 
+---
+
+### 81.8. Header Kupa Puan Rozeti, Kârın %50'si Simülasyonu, Kural/Ceza Matrisi ve Paging'li Defter Arayüzü Mimarisi
+
+Kullanıcının yeni talepleri doğrultusunda sistem aşağıdaki 4 temel modülle genişletilecektir:
+
+#### 1. Üst Navigasyon Kupa Yanı Canlı Puan Göstergesi (`HeaderPointsBadge`)
+* **Konumlandırma:** `app-header.tsx` içerisinde masaüstü navigasyonundaki `Trophy` (Pasaport) linkinin yanına veya içine, mobilde ise üst bar profil/bildirim alanına entegre altın-amber parlamalı `HeaderPointsBadge` bileşeni.
+* **Canlı Dopamin Senkronizasyonu:**
+  - `award-points` CustomEvent'ini dinler.
+  - Bir mekan check-in yapıldığında (`+200 Puan`), uçan parçacık animasyonu yukarı süzülürken header'daki sayaç anında `currentPoints + newPoints` olarak canlı artar ve altın sarısı glow efekti ile titreşir (`animate-pulse`).
+* **Hızlı Erişim:** Puan rozetine veya kupaya tıklandığında doğrudan `PointsModal` açılır.
+
+#### 2. Kapsamlı Puan ve Value-Share Modalı (`components/points/points-modal.tsx`)
+Açılan modal, 3 sekmeli ve modern dark glassmorphism mimarisinde sunulur:
+
+* **Sekme 1: 💰 Puan - Kâr Dönüşüm Simülasyonu (Net Kârın %50'si):**
+  - **Kural:** Şirket net kârının **%50'si** topluluk havuzuna ayrılır.
+  - **Formül:** `(Kullanıcının Sezon Puanı / Havuz Toplam Puanı) * (Şirket Net Kârı * 0.50)`
+  - **Dinamik Simülasyon Kutusu:**
+    - Varsayılan 1.000.000 TL net kâr (Havuz: 500.000 TL).
+    - Kullanıcının toplam havuz içerisindeki anlık ağırlığı (`%X`).
+    - Tahmini Hakediş Değeri (`~Y TL`).
+  - **Hukuki Güvence (Section 81.5):** "Bu rakam, yıl sonundaki şirket net kârına ve platformdaki tüm kullanıcıların toplam puan havuzuna göre dinamik olarak hesaplanan bir motivasyon simülasyonudur. Kesin bir senet, garanti veya borç taahhüdü niteliği taşımaz."
+
+* **Sekme 2: 📜 Puan Kazanma & Ceza / Oyundan Atılma Kuralları (Adil Oyun Sözleşmesi):**
+  - **Puan Kazanma Matrisi:**
+    - *Fiziki Check-in:* 20x Çarpan! Masabaşı pin yerine sahada deneyimleyen kazanır (**200 Puan**).
+    - *Arkadaş Daveti (Referral):* Davet ettiğin arkadaşının o yılki tüm seyahatlerinden **%20 Pasif Puan Geliri**.
+    - *Hoşgeldin Davet Bonusu:* Davet kodu ile katılımda her iki tarafa **50 Puan**.
+    - *Yeni Mekan / Pin Ekleme:* Keşif haritasına katkı (**10 Puan**).
+    - *Günlük Giriş:* Platforma sadakat ve aktiflik (**5 Puan**).
+    - *Yorum ve Beğeni:* Topluluk etkileşimi (**5 Puan**).
+  - **Ceza, Puan Silme ve Men Kuralları (Anti-Cheat & Ban Hammer):**
+    - *Sahte Konum (GPS Spoofing):* Sahte koordinatla check-in tespitinde puan iptal edilir; tekrarda o sezonluk havuz hakkı dondurulur.
+    - *Küfürlü / Yanıltıcı Pin ve Yorumlar:* İçerik anında kaldırılır, kullanıcıya `-500 Puan` admin cezası (`admin_penalty`) verilir.
+    - *Bot ve Otomasyon:* Otomatik yazılımlarla sahte eylem üreten hesapların tüm puanları silinir ve sistemden kalıcı olarak ihraç edilir (Ban).
+    - *Sezon Geçişi (Carry-Over):* Puanlar tamamen sıfırlanmaz; yıl bitiminde kıdem puanı olarak sonraki sezona taban puan şeklinde aktarılır.
+
+* **Sekme 3: 📊 Puan Detayları ve Paging'li Defter Geçmişi:**
+  - `user_points_ledger` veritabanı kayıtlarının kronolojik olarak sıralanması.
+  - **Paging (Sayfalama):** Sayfa başına 6-8 kayıt. "Önceki Sayfa", "Sonraki Sayfa", `Sayfa X / Y` ve `Toplam Z İşlem`.
+  - Her satırda: Tarih/Saat, Eylem Türü Rozeti (Check-in, Mekan Ekleme, Pasif Gelir vb.), İşlem Açıklaması, Çarpan Bilgisi ve Puan Tutarı (`+200`, `+50`, `-500`).
+
+#### 3. Veritabanı ve Server Actions Güncellemeleri
+* `value_share_pools` tablosunda 2026 sezonu `pool_share_percentage` değeri kullanıcı talimatı doğrultusunda **%50** olarak güncellendi.
+* Geri alınabilir migrasyon disiplini (Kural 8):
+  - UP: `scripts/update_pool_share_50.sql`
+  - DOWN: `scripts/rollback_pool_share_50.sql`
+* `lib/points/engine.ts` ve `lib/actions/points.ts`: `getPaginatedPointActivitiesAction({ page, pageSize })` eklenerek limit/offset tabanlı sayfalamalı defter sorgusu sağlandı.
+
+#### 4. İkonografi ve Tasarım Tercihi: Altın Paralar (`Coins`)
+* Kullanıcı talebi doğrultusunda: Kupa ikonu zaten Pasaport / Liderlik Tablosu için kullanıldığından, puan göstergesi için karışıklığı önlemek ve değer paylaşımı temasını vurgulamak amacıyla altın sarısı çift sikke / paralar (`Coins`) ikonu entegre edildi.
+* Üst navigasyon barında kupa ikonunun hemen solunda konumlandırıldı ve mobilde doğrudan tek tıkla erişilebilir kılındı.
+
+### 82.2. Geliştirme Durumu ve Kalite Kapısı Sonuçları
+* **Durum:** Başarıyla Tamamlandı (Kullanıcı Onayı: *"Onaylıyorum. Geliştirmeleri yap."*)
+* **Geliştirilen Bileşenler & Servisler:**
+  1. `RoadMap.md`: Canlı Mekan Check-In Mekanizması & GPS Konum Doğrulama (Proof-of-Presence) maddesi eklendi.
+  2. `components/points/header-points-badge.tsx`: Altın sikke (`Coins`) ikonlu, `award-points` canlı dopamin animasyonlu ve tıklanabilir puan rozeti.
+  3. `components/points/points-modal.tsx`: `createPortal` ile render edilen, 3 sekmeli (%50 Net Kâr Simülasyonu, Puan & Adil Oyun Matrisi, Sayfalamalı Puan Defteri) kapsamlı ve mobil uyumlu modal.
+  4. `components/navigation/app-header.tsx`: Masaüstü ve mobil başlıklara `HeaderPointsBadge` entegrasyonu.
+  5. `lib/points/engine.ts` & `lib/actions/points.ts`: `getPaginatedPointActivitiesAction` Server Action ve `totalPoolPoints` ile `poolSharePercentage` dinamik alanları.
+* **Kalite Kapısı (Pre-Deploy Quality Gate):**
+  - TypeScript Katı Tip Denetimi (`npx tsc --noEmit`): **Sıfır Hata (0 errors)**.
+  - Next.js Turbopack Derleme Testi (`npm run build`): **Başarılı (12/12 sayfa)**.
+  - Canlı Arayüz ve Tarayıcı Doğrulaması (`localhost:3006/dashboard`): Altın paralar rozeti, kâr simülasyonu, puan kuralları tablosu ve sayfalamalı defter modalı görsel olarak test edildi ve doğrulandı.
+  - **Kural 2 Uyarınca:** GitHub'a otomatik push yapılmadı, kullanıcı onayı bekleniyor.
+  - **Kural 3 Uyarınca:** Canlı ortama (Cloud Run) otomatik deploy yapılmadı.
+
+

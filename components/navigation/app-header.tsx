@@ -30,6 +30,7 @@ import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { Contract } from "@/lib/db/schema";
 import { useTranslation } from "@/lib/i18n/context";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { HeaderPointsBadge } from "@/components/points/header-points-badge";
 
 interface AppHeaderProps {
   user: {
@@ -161,11 +162,20 @@ export function AppHeader({ user, pendingContracts }: AppHeaderProps) {
                   </Link>
                 );
               })}
+
+              {/* Kupanın Yanında Canlı Altın Paralar Puan Rozeti */}
+              <div className="w-[1px] h-5 bg-slate-800 mx-0.5" />
+              <HeaderPointsBadge />
             </nav>
           </div>
 
           {/* Sağ Alan: Birörnek Kokpit Aksiyon Kutuları (Dil, Davet, Zil, Mesaj, Admin, Profil, Çıkış) */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Mobilde Üst Barda Altın Paralar Puan Rozeti */}
+            <div className="md:hidden">
+              <HeaderPointsBadge />
+            </div>
+
             {/* Dil Hızlı Değiştirici (Language Quick Switcher - Kutulu) */}
             <button
               type="button"

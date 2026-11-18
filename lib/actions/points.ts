@@ -6,6 +6,7 @@ import { users } from "@/lib/db/schema";
 import {
   getUserPointsSummary,
   getRecentPointActivities,
+  getPaginatedPointActivities,
   awardPoints,
   CURRENT_SEASON_YEAR,
 } from "@/lib/points/engine";
@@ -53,6 +54,24 @@ export async function getRecentPointActivitiesAction(limit = 10) {
   } catch (error: any) {
     console.error("getRecentPointActivitiesAction error:", error);
     return { success: false, error: error.message || "Hareketler yüklenemedi" };
+  }
+}
+
+/**
+ * Kullanıcının Sayfalamalı Puan Defteri Hareketlerini Getirir (Paging Destekli)
+ */
+export async function getPaginatedPointActivitiesAction(page = 1, pageSize = 8) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { success: false, error: "Yetkisiz erişim" };
+  }
+
+  try {
+    const data = await getPaginatedPointActivities(session.user.id, page, pageSize);
+    return { success: true, ...data };
+  } catch (error: any) {
+    console.error("getPaginatedPointActivitiesAction error:", error);
+    return { success: false, error: error.message || "Puan hareketleri yüklenemedi" };
   }
 }
 

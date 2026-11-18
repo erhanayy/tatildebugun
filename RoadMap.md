@@ -107,6 +107,27 @@ Kullanıcı yabancı şehirde dolaşırken arkada çalışan geofencing sistemiy
 
 ---
 
+## 5. Canlı Mekan Check-In Mekanizması & GPS Konum Doğrulama (Proof-of-Presence)
+> **Öncelik:** Yüksek  
+> **Kapsam:** Web (HTML5 Geolocation) & Mobil  
+> **Maliyet:** 0 TL (Tarayıcı / Cihaz Yerel GPS)  
+> **Durum:** 📝 **Planlandı / Sırada**
+
+Masa başından atılan pinler ile sahada bizzat bulunup deneyimleyen gezginleri ayıran ve 20x çarpanlı (200 Puan) değeri doğrulayan check-in sistemi.
+
+### Alt Maddeler:
+- [ ] **5.1. Canlı Konum Doğrulama (Radius Check):**
+  - Tarayıcı `navigator.geolocation.getCurrentPosition` ile anlık enlem/boylam alınması.
+  - Haversine algoritması ile mekan koordinatına olan kuşuçuşu mesafenin hesaplanması (Örn: Maksimum 150 - 250 metre yakınlık sınırı).
+- [ ] **5.2. Tek Tıkla "Mekandayım / Check-In Yap" Butonu:**
+  - Şehir rehberi ve mekan kartlarında kullanıcı 150m yarıçap içerisindeyse parlayan yeşil **"📍 Mekandasınız • Check-In Yap (+200 Puan 🚀)"** butonu aktifleşir.
+- [ ] **5.3. Sahte Konum & Anti-Spoofing Güvenliği:**
+  - Hızlı sıçramalar (aynı gün 1 saat arayla Roma ve Tokyo gibi imkansız yer değişimleri) tespit edilerek puan dondurma motoru devreye girer.
+- [ ] **5.4. Fotoğraflı Check-In Opsiyonu:**
+  - Kullanıcı isterse mekanda çektiği fotoğrafı ekleyerek rozetini "Doğrulanmış Gezgin Fotoğrafı" seviyesine yükseltir.
+
+---
+
 ## 📊 İlerleme ve Faz Durum Tablosu
 
 | Madde No | Özellik Adı | Hedef Faz | Durum | Tahmini Efor |
@@ -115,6 +136,8 @@ Kullanıcı yabancı şehirde dolaşırken arkada çalışan geofencing sistemiy
 | **Madde 2** | Şehir Bazlı 1-5 Günlük Akıllı Yürüyüş Rotaları | **Faz 2** | ✅ **Tamamlandı** (Canlıda Aktif) | 4-5 Saat |
 | **Madde 3** | Fotoğraf EXIF GPS ile Otomatik Eşleme | **Faz 3** | ✅ **Tamamlandı** (Canlıda Aktif) | 1 Gün |
 | **Madde 4** | Geofencing ve "Sarı ➔ Yeşil" UX Kurgusu | **Faz 4 (Mobil)** | 📝 Analiz Edildi / Sırada | 2 Gün |
+| **Madde 5** | Canlı Mekan Check-In & GPS Doğrulama | **Faz 5** | 📝 **Planlandı / Sırada** | 1 Gün |
 | **İleri Faz**| Gemini Vision AI ile Görsel Tanıma | **İleri Faz** | ⏸️ Ertelendi | - |
 
 ---
+
