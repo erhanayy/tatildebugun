@@ -4314,5 +4314,63 @@ Açılan modal, 3 sekmeli ve modern dark glassmorphism mimarisinde sunulur:
   - **Kural 2 Uyarınca:** GitHub'a otomatik push yapılmadı, kullanıcı onayı bekleniyor.
   - **Kural 3 Uyarınca:** Canlı ortama (Cloud Run) otomatik deploy yapılmadı.
 
+---
+
+## 84. Passport Sosyal Liderlik Tablosunda İlişki Bazlı Küresel Gizlilik ve İsim Maskeleme Analizi (Global Leaderboard Relationship Masking)
+
+### 84.1. Kullanıcı Talebi ve Gizlilik Mantığı
+- **Kullanıcı Talepleri:**
+  1. *"passport ekranında Global kısımda arkadaşım olmayan kimsenin adını A.B. şeklinde baş hafleri ile görmeliyim."*
+  2. *"ilişkim olmatan arakdaş değil. İlişiye girdi isem İsim Soy isim gözükebilir."*
+- **İhtiyaç Analizi ve Kural Seti:**
+  - Kullanıcı, Pasaport ekranındaki Sosyal Liderlik Sıralaması'nda **Genel (Global)** sekmesinde gezinirken tanımadığı veya onaylı bir ilişkisi bulunmayan kullanıcıların tam adını ve kişisel bilgilerini görmemelidir.
+  - Sadece "arkadaş" değil; **herhangi bir kabul edilmiş ilişki** (arkadaş, aile veya akraba) kurulmuş ise o kişinin tam adı ("İsim Soyisim") ve profil resmi açıkça görüntülenebilir.
+  - Kabul edilmiş ilişkisi bulunmayan kullanıcılar için isim baş harfleri ve nokta biçiminde (`A.B.`, `C.S.`, `M.A.Y.` vb.) maskelenecek, kişisel avatar ve kullanıcı adı gizlenecektir.
+
+### 84.2. Veritabanı ve İlişki Modeli Entegrasyonu
+- **İlişki Kaynakları:**
+  1. `travel_matches`: Gezgin eşleşmesi ve yol arkadaşı talepleri tablosu (`status = 'accepted'`). `relationship_type`: `friend`, `family`, `relative`.
+  2. `user_connections`: Sosyal bağlantılar tablosu (`status = 'accepted'`). `relationship_type`: `friend`, `family`, `relative`.
+- **Eşleşme Kuralı:**
+  - `(senderId = currentUserId OR receiverId = currentUserId)` veya `(userId = currentUserId OR targetUserId = currentUserId)`.
+  - Kullanıcı `isSelf === true` ise tam adı görüntülenir.
+  - Kullanıcı `currentUserId` ile kabul edilmiş bir `travelMatches` veya `userConnections` kaydına sahipse tam adı, avatarı ve ilişki rozeti ("Arkadaş", "Aile", "Akraba") görüntülenir.
+  - Kabul edilmiş hiçbir bağı yoksa ve sekme `global` ise:
+    - İsim `formatInitialsName(fullName)` ile maskelenir: Örn. `Cumhur Saraçoğlu` -> `C.S.`, `Altuğ Yalçın` -> `A.Y.`, `Dilruba KOÇ` -> `D.K.`.
+    - Kişisel `avatarUrl` ve `username` null yapılarak gizlilik korunur; `UserAvatar` baş harflerden (CS, AY vb.) oluşan şık bir degrade avatar rozeti sunar.
+    - `isMasked: true` bayrağı ile arayüzde özel mono-font gizlilik tipografisi uygulanır.
+
+### 84.3. Mimari ve Servis Değişiklik Planı
+1. **`lib/actions/traveler-dashboard.ts`:**
+   - `getLeaderboard` fonksiyonunda `scope === "global"` olsa dahi oturum sahibi kullanıcının tüm onaylı `travelMatches` ve `userConnections` kayıtları taranarak `relationshipMap` doldurulacaktır.
+   - `formatInitialsName(name: string)` yardımcı fonksiyonu Türkçe yerel karakter desteği (`toLocaleUpperCase("tr-TR")`) ile yazılacaktır.
+   - `LeaderboardItem` arayüzüne `isMasked?: boolean` alanı eklenecektir.
+2. **`components/dashboard/traveler-dashboard-view.tsx`:**
+   - Liderlik kartında `item.isMasked` durumunda özel mono-font ve gizlilik ikonu/etiketi uygulanacaktır.
+### 84.4. Geliştirme Durumu ve Birim Test (Unit Test) Sonuçları
+- **Durum:** Başarıyla Tamamlandı.
+- **Kullanıcı Talimatı:** *"bırak testi ben yapayım. Sen yaınca sistem çok yavaşlıyor. sen sadece koda unit testi geliştiremeler sonrası. Ekran testlerini ben yapayım."*
+  - Tarayıcı alt ajanı (browser subagent) tamamen durduruldu; ekran testleri kullanıcıya bırakıldı.
+  - Kod tarafında `scripts/test_leaderboard_privacy.ts` adında 24 senaryolu kapsamlı birim test paketi yazıldı ve yürütüldü.
+- **Birim Test Kapsamı ve Sonuçları (`scripts/test_leaderboard_privacy.ts`):**
+  1. **Baş Harf Maskeleme (`formatInitialsName`):**
+     - Cumhur Saraçoğlu -> `C.S.` (Geçti)
+     - Altuğ Yalçın -> `A.Y.` (Geçti)
+     - Mehmet Ali Yılmaz -> `M.A.Y.` (Geçti)
+     - Türkçe karakterler: İlker Baş -> `İ.B.`, Işıl Öztürk -> `I.Ö.`, Şener Şen -> `Ş.Ş.`, Çağlar Göçer -> `Ç.G.` (Geçti)
+     - Fallback: Boş string/null/undefined -> `A.B.` (Geçti)
+  2. **Avatar İki Harf Fallback:**
+     - `C.S.` -> `CS`, `M.A.Y.` -> `MA`, `Erhan Ayyıldız` -> `EA` (Geçti)
+  3. **Veritabanı İlişki İzolasyonu:**
+     - `Erhan Ayyıldız` (isSelf) -> Tam isim gösteriliyor, maskelenmiyor (Geçti)
+     - Onaylı ilişkisi olanlar (`Sevim Ayyıldız`, `ERHAN AYYILDIZ`, `Berna Zeyrek`) -> Tam isim ve arkadaş rozeti gösteriliyor (Geçti)
+     - Onaylı ilişkisi bulunmayan 14 kullanıcı -> `C.S.`, `A.Y.`, `M.B.`, `D.K.` vb. baş harfleriyle maskeleniyor (Geçti)
+     - Kişisel profil resmi (`avatarUrl = null`) ve kullanıcı adı (`username = null`) gizlenerek sıfır veri sızıntısı sağlanıyor (Geçti)
+  - **Sonuç:** 24/24 Test Başarılı (%100).
+- **TypeScript Kalite Kapısı:** `npx tsc --noEmit` hatasız (0 errors).
+- **Kural 2 Uyarınca:** GitHub'a otomatik push yapılmadı.
+- **Kural 3 Uyarınca:** Canlı ortama otomatik deploy yapılmadı.
+
+
 
 

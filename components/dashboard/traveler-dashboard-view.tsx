@@ -671,7 +671,13 @@ export function TravelerDashboardView({
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="text-xs sm:text-sm font-bold text-white truncate">
+                          <h4
+                            className={`text-xs sm:text-sm font-bold truncate ${
+                              item.isMasked
+                                ? "font-mono tracking-wider text-slate-300"
+                                : "text-white"
+                            }`}
+                          >
                             {item.fullName}
                           </h4>
 
@@ -690,6 +696,31 @@ export function TravelerDashboardView({
                           {item.isSelf && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/40">
                               {locale === "en" ? "You" : "Siz"}
+                            </span>
+                          )}
+
+                          {item.relationshipType && !item.isSelf && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              {item.relationshipType === "family"
+                                ? locale === "en"
+                                  ? "Family"
+                                  : "Aile"
+                                : item.relationshipType === "relative"
+                                ? locale === "en"
+                                  ? "Relative"
+                                  : "Akraba"
+                                : locale === "en"
+                                ? "Friend"
+                                : "Arkadaş"}
+                            </span>
+                          )}
+
+                          {item.isMasked && (
+                            <span
+                              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/60"
+                              title={locale === "en" ? "Explorer" : "Gezgin"}
+                            >
+                              {locale === "en" ? "Explorer" : "Gezgin"}
                             </span>
                           )}
                         </div>

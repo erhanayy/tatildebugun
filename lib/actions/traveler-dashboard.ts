@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { users, visits, trips, tripPlaceVisits, travelMatches, userBadges } from "@/lib/db/schema";
+import { users, visits, trips, tripPlaceVisits, travelMatches, userBadges, userConnections } from "@/lib/db/schema";
 import { eq, or, and, sql, desc, inArray } from "drizzle-orm";
 import {
   POINT_RULES,
@@ -279,12 +279,29 @@ export interface LeaderboardItem {
   tierTitleEn: string;
   isSelf: boolean;
   relationshipType?: string | null;
+  isMasked?: boolean;
   rank: number;
+}
+
+/**
+ * Kullanıcı adını baş harfleri ve nokta biçiminde maskeler (Örn: "Cumhur Saraçoğlu" -> "C.S.")
+ */
+function formatInitialsName(name: string | null | undefined): string {
+  if (!name || !name.trim()) return "A.B.";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "A.B.";
+  return parts.map((p) => p.charAt(0).toLocaleUpperCase("tr-TR") + ".").join("");
 }
 
 /**
  * Sosyal Kapsamlı Liderlik Sıralamasını Getirir
  * (friends | family | relatives | global)
+ * 
+ * Gizlilik Kuralı:
+ * - "global" sekmesinde, kullanıcının kendisi (isSelf) değilse ve
+ *   onaylanmış bir ilişkisi (arkadaş, aile veya akraba) bulunmuyorsa
+ *   adı A.B. biçiminde baş harfleriyle maskelenir; kişisel profil resmi ve kullanıcı adı gizlenir.
+ * - Onaylanmış bir ilişki varsa (travelMatches veya userConnections) tam adı ve profil resmi gösterilir.
  */
 export async function getLeaderboard(
   scope: "friends" | "family" | "relatives" | "global" = "friends"
@@ -303,6 +320,48 @@ export async function getLeaderboard(
     let targetUserIds: string[] = [currentUserId];
     const relationshipMap = new Map<string, string>();
 
+    // 1. Kullanıcının kabul edilmiş tüm ilişkilerini (travelMatches + userConnections) sorgula
+    const [matchedPairs, connectedPairs] = await Promise.all([
+      db
+        .select({
+          senderId: travelMatches.senderId,
+          receiverId: travelMatches.receiverId,
+          rel: travelMatches.relationshipType,
+        })
+        .from(travelMatches)
+        .where(
+          and(
+            eq(travelMatches.status, "accepted"),
+            or(eq(travelMatches.senderId, currentUserId), eq(travelMatches.receiverId, currentUserId))
+          )
+        ),
+      db
+        .select({
+          userId: userConnections.userId,
+          targetUserId: userConnections.targetUserId,
+          rel: userConnections.relationshipType,
+        })
+        .from(userConnections)
+        .where(
+          and(
+            eq(userConnections.status, "accepted"),
+            or(eq(userConnections.userId, currentUserId), eq(userConnections.targetUserId, currentUserId))
+          )
+        ),
+    ]);
+
+    matchedPairs.forEach((m) => {
+      const partnerId = m.senderId === currentUserId ? m.receiverId : m.senderId;
+      relationshipMap.set(partnerId, m.rel || "friend");
+    });
+
+    connectedPairs.forEach((c) => {
+      const partnerId = c.userId === currentUserId ? c.targetUserId : c.userId;
+      if (!relationshipMap.has(partnerId)) {
+        relationshipMap.set(partnerId, c.rel || "friend");
+      }
+    });
+
     if (scope === "global") {
       // Genel sıralama: En aktif 50 kullanıcı
       const allActive = await db.select({ id: users.id }).from(users).where(eq(users.isActive, true)).limit(50);
@@ -313,26 +372,11 @@ export async function getLeaderboard(
       const relFilter =
         scope === "friends" ? "friend" : scope === "family" ? "family" : "relative";
 
-      const matchedPairs = await db
-        .select({
-          senderId: travelMatches.senderId,
-          receiverId: travelMatches.receiverId,
-          rel: travelMatches.relationshipType,
-        })
-        .from(travelMatches)
-        .where(
-          and(
-            eq(travelMatches.status, "accepted"),
-            eq(travelMatches.relationshipType, relFilter),
-            or(eq(travelMatches.senderId, currentUserId), eq(travelMatches.receiverId, currentUserId))
-          )
-        );
-
-      matchedPairs.forEach((m) => {
-        const partnerId = m.senderId === currentUserId ? m.receiverId : m.senderId;
-        targetUserIds.push(partnerId);
-        relationshipMap.set(partnerId, m.rel || relFilter);
-      });
+      for (const [partnerId, rel] of relationshipMap.entries()) {
+        if (rel === relFilter) {
+          targetUserIds.push(partnerId);
+        }
+      }
     }
 
     // Hedef kullanıcıların bilgilerini ve seyahatlerini çek
@@ -379,11 +423,21 @@ export async function getLeaderboard(
       const starInfo = getStarRating(countries);
       const tierInfo = getTierByScore(score);
 
+      const isSelf = u.id === currentUserId;
+      const relationshipType = relationshipMap.get(u.id) || null;
+      const hasRelationship = Boolean(relationshipType);
+
+      // Kural: Global sekmesinde kendisi değilse ve onaylanmış ilişkisi yoksa A.B. şeklinde maskelenir
+      const shouldMask = scope === "global" && !isSelf && !hasRelationship;
+      const displayName = shouldMask ? formatInitialsName(u.fullName) : u.fullName;
+      const displayAvatar = shouldMask ? null : u.avatarUrl;
+      const displayUsername = shouldMask ? null : u.username;
+
       return {
         id: u.id,
-        fullName: u.fullName,
-        username: u.username,
-        avatarUrl: u.avatarUrl,
+        fullName: displayName,
+        username: displayUsername,
+        avatarUrl: displayAvatar,
         countryCount: countries,
         cityCount: cities,
         tripCount: completedTrips,
@@ -392,8 +446,9 @@ export async function getLeaderboard(
         starDisplay: starInfo.starDisplay,
         tierTitleTr: tierInfo.currentTier.titleTr,
         tierTitleEn: tierInfo.currentTier.titleEn,
-        isSelf: u.id === currentUserId,
-        relationshipType: relationshipMap.get(u.id) || null,
+        isSelf,
+        relationshipType,
+        isMasked: shouldMask,
       };
     });
 
