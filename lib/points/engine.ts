@@ -64,6 +64,12 @@ export const POINT_RULES: Record<
     titleTr: "Kural İhlali Ceza Kesintisi (Penalty)",
     titleEn: "Rule Violation Penalty Deduction",
   },
+  welcome_bonus: {
+    base: 50,
+    multiplier: 1.0,
+    titleTr: "AllTripX Kaşif Hoşgeldin Bonusu",
+    titleEn: "AllTripX Explorer Welcome Bonus",
+  },
 };
 
 export interface AwardPointsInput {

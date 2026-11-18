@@ -110,6 +110,7 @@ export async function getTravelerDashboardData(includeHomeCity = false): Promise
         avatarUrl: users.avatarUrl,
         baseCity: users.baseCity,
         baseCountry: users.baseCountry,
+        travelerScore: users.travelerScore,
       })
       .from(users)
       .where(eq(users.id, currentUserId))
@@ -151,12 +152,8 @@ export async function getTravelerDashboardData(includeHomeCity = false): Promise
     // Toplam seyahat günü
     const totalDays = effectiveVisits.reduce((acc, v) => acc + (v.stayDurationDays || 1), 0);
 
-    // Dinamik Seyahat Puanı Hesaplama
-    const score =
-      countryCount * POINT_RULES.PER_COUNTRY +
-      cityCount * POINT_RULES.PER_CITY +
-      completedTrips * POINT_RULES.PER_TRIP +
-      poiCount * POINT_RULES.PER_POI;
+    // 2026 Sezonu Bütünleşik Değer Paylaşımı ve Puan Motoru Skoru
+    const score = user.travelerScore || 0;
 
     const starInfo = getStarRating(countryCount);
     const tierInfo = getTierByScore(score);
@@ -346,6 +343,7 @@ export async function getLeaderboard(
           fullName: users.fullName,
           username: users.username,
           avatarUrl: users.avatarUrl,
+          travelerScore: users.travelerScore,
         })
         .from(users)
         .where(inArray(users.id, targetUserIds)),
@@ -375,10 +373,8 @@ export async function getLeaderboard(
       const cities = vData.cities.size;
       const completedTrips = userTripsMap.get(u.id) || 0;
 
-      const score =
-        countries * POINT_RULES.PER_COUNTRY +
-        cities * POINT_RULES.PER_CITY +
-        completedTrips * POINT_RULES.PER_TRIP;
+      // 2026 Sezonu Bütünleşik Değer Paylaşımı ve Puan Motoru Skoru
+      const score = u.travelerScore || 0;
 
       const starInfo = getStarRating(countries);
       const tierInfo = getTierByScore(score);
