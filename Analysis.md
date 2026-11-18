@@ -4288,3 +4288,33 @@ Kullanıcının laptop/MacBook başında olmadan mobil telefon üzerinden `AllTr
 - **GitHub Durumu (Kural 2):** DevStudio yerel commit'i (`bc89732`) hazırlandı; kullanıcının açık komutuyla GitHub'a `git push` yapılacaktır.
 
 ---
+
+## 86. DevStudio: Uzun Süren Komutlarda (gcloud deploy) İstemci Polling Zaman Aşımı Onarımı & Kalıcı Arka Plan Dinleyicisi
+
+### 86.1. Kullanıcı Geri Bildirimi & Problem Tespiti
+- **Kullanıcı:** *"Şimdi git bak bakalım neler yapılmış en son dedim, döndü tam olarak yapılanlar GitHub'a atılmamış dedi. At o zaman dedim, şu an 450 saniye oldu bekliyor hala yine mi koptuk?"*
+- **Kullanıcı Ekran Görüntüsü:** `cd /Users/erhanayyildiz/Desktop/Work/DevStudio && git push origin main && gcloud run deploy devstudio ...` komutu onaylanmış ve çubuk `⚡ Mac Runner çalıştırıyor... Terminal dinleniyor %94 (329s)` durumunda donmuş görünmektedir.
+
+### 86.2. Kök Neden Analizi (Root Cause Analysis)
+1. **İşlem Mac'te ve Sunucuda %100 Başarıyla Tamamlandı:**
+   - Mac Runner komutu 21:54'te icra etmeye başlamış, hem `git push origin main` işlemini yapmış hem de Google Cloud Run derlemesini tamamlayarak 21:57:04'te `exitCode: 0` ile `devstudio-00010-t5p` revizyonunu yayınlamıştır (Toplam süre: 180 saniye / 3 dakika).
+   - Sunucu tarafındaki Gemini analiz motoru da devreye girip sonucu `approvals.analysis` kolonuna başarıyla mühürlemiştir.
+2. **Telefonun Beklemede Kalmasının Sebebi (120s Polling Timeout Tuzağı):**
+   - İstemci tarafında (`chat-view.tsx`), `handleApprove` fonksiyonu içinde yoklama zaman aşımı `setTimeout(() => clearInterval(pollTimer), 120000)` olarak tanımlanmıştı (yani 2 dakika).
+   - Dağıtım komutu 3 dakika sürdüğü için, telefon 2. dakikada sunucuya sormayı (poll) durdurdu!
+   - Poller durduğu için işlem 3. dakikada başarıyla bittiğinde telefon bundan haberdar olamadı ve arayüzdeki sayaç kendi kendine 329s, 450s diye saymaya devam etti.
+
+### 86.3. Uygulanan Kalıcı Çözüm
+1. **Polling Süresi 10 Dakikaya (600.000 ms) Çıkarıldı:** Büyük projeler, Docker imajları ve Cloud Run dağıtımları için yeterli tavan süre sağlandı.
+2. **Kalıcı Yaşam Döngüsü Dinleyicisi (`useEffect`):**
+   - Yalnızca butona tıklama anında değil; bileşenin içinde `status === "approved" || status === "running"` durumunda bir onay kartı bulunduğu müddetçe arka planda her 2 saniyede bir sunucuyu yoklayan reaktif bir dinleyici kuruldu.
+   - Sayfa yenilense, sekme değişse veya telefon ekranı kilitlenip açılsa dahi sistem işlemi kaçırmadan yakalayıp ekranı tamamlandıya çeker.
+3. **GitHub Push İşlemi:** Kullanıcının *"At o zaman"* komutuna istinaden tüm commit'ler (`bc89732`, `9584619`) GitHub uzak deposuna (`origin main`) aktarıldı.
+
+### 86.4. Dağıtım ve Canlı Doğrulama
+- **Cloud Run Sürümü:** `devstudio-00011-5cs` (`dernektebugun-492221`, `europe-west1`) %100 canlı trafiğe alındı.
+- **Canlı Adres:** `https://devstudio-51645421078.europe-west1.run.app`
+- **GitHub Durumu:** `origin/main` ile %100 senkronize (tüm commit'ler uzak depoya aktarıldı).
+- **Mac Runner Durumu:** `task-9368` kesintisiz canlı dinlemeye devam ediyor.
+
+---
