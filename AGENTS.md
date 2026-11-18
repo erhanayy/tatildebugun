@@ -6,6 +6,7 @@ Bu dosya, TatildeBugun projesinde çalışan yapay zeka asistanının ve gelişt
 
 ## 1. Analiz ve Değişiklik Takibi
 - Yapılan tüm analizler, mimari kararlar ve değişiklikler [Analysis.md](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/Analysis.md) içerisine başlıklar halinde detaylıca işlenecektir.
+- **Çoklu Proje İzolasyonu:** Hangi proje üzerinde çalışılıyorsa (TatildeBugün, DevStudio, BurstaBugün vb.) tüm analiz, mimari kararlar ve dağıtım/github kayıtları istisnasız o projenin KENDİ kök dizinindeki dokümanlarına (`Analysis.md`, `Deployment.md`, `github.md`) işlenecektir; projelerin dokümantasyonu asla birbirine karıştırılmayacaktır.
 
 ## 2. GitHub Gönderim Disiplini
 - GitHub'a veya uzak depoya kod gönderimi (push) **ASLA otomatik olarak yapılamaz**.
