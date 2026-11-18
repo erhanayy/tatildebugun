@@ -4318,3 +4318,42 @@ Kullanıcının laptop/MacBook başında olmadan mobil telefon üzerinden `AllTr
 - **Mac Runner Durumu:** `task-9368` kesintisiz canlı dinlemeye devam ediyor.
 
 ---
+
+## 87. DevStudio: Next.js Server Action Hash Uyumsuzluğu ("Failed to find Server Action") Çözümü ve Onay Mekanizmasının REST API Mimarisine Geçirilmesi
+
+### 87.1. Kullanıcı Geri Bildirimi & Problem Tespiti
+- **Kullanıcı:** *"Önce güzel çalıştı bir iki fikir konuştuk. Roadmap.md oluştur oraya ekle dedim. Onay çıkardı. Onayladım. Ekranda bir Server ile başlayan hata verdi ve kayboldu yakalayamadım ve yine bar dolmaya başladı. Yine kesildi galiba. Kesilmemesi lazım ki akış devam etsin. Bakar mısın?"*
+- **Kullanıcı Ekran Görüntüsü:** `cd /Users/erhanayyildiz/Desktop/Work/DevStudio && echo -e "\n## Gelecek Vizyonu ve Mimari İyileştirmeler\n- [ ] Custom Domain Entegrasyonu..." >> Roadmap.md && git add Roadmap.md && git commit -m "docs(roadmap): add custom domain integration milestone for devstudio.bugunai.com"` komut kartı, altında `%94 (61s)` durumunda donmuş ilerleme çubuğu.
+
+### 87.2. Kök Neden Analizi (Root Cause Analysis)
+1. **Next.js Server Action Hash Geçersizliği (Build-time Hash Invalidation):**
+   - Cloud Run logları incelendiğinde net hata yakalandı:
+     `Error: Failed to find Server Action "406281e8e5beb7a19355d62514dff063a52cf5b6b0". This request might be from an older or newer deployment.`
+   - Next.js Server Action mimarisi (`lib/actions/chat.ts`), her derleme ve dağıtımda fonksiyonlara özel şifreli benzersiz bir hash atar.
+   - Kullanıcı tarayıcı sekmesini açık tutarken arka planda Cloud Run'a yeni bir sürüm yayınlandığında, açık sekmedeki JavaScript istemcisi eski Server Action hash'ini elinde tutar.
+   - Kullanıcı "Onayla" veya "Reddet" butonuna bastığında Next.js sunucuya eski hash ile POST atar; sunucu yeni dağıtım olduğu için bu fonksiyon hash'ini tanımaz ve isteği anında `Failed to find Server Action` hatasıyla düşürür.
+   - Ekranda 3 saniye yanıp sönen ve kaybolan "Server..." uyarısı bu hatadan kaynaklanmıştır.
+2. **İyimser Arayüz Güncellemesi (Optimistic Update) Yanılgısı:**
+   - `chat-view.tsx` içerisindeki `handleApprove` fonksiyonu, henüz sunucudan HTTP 200 onayı gelmeden `setMessages` ile kart durumunu anında `approved` yapmaktaydı.
+   - Server Action hata verip düştüğünde arayüz `approved` durumunda takılı kaldı; bu da kullanıcıya "işlem arka planda çalışıyor" yanılsaması vererek çubuğun %94'e kadar boşuna dolmasına yol açtı.
+   - Veritabanında ise kayıt `pending` olarak kaldığından Mac Runner daemon bu komutu hiçbir zaman teslim almadı.
+
+### 87.3. Uygulanan Kalıcı Mimari Çözümler
+1. **Onay ve Durum Sorgulama Mekanizmasının Tamamen REST API Mimarisine Geçirilmesi:**
+   - Server Action'lar gibi hash bağımlılığı taşımayan, her dağıtımda ve her istemci sürümünde %100 geriye dönük uyumlu çalışan standart REST uç noktaları oluşturuldu:
+     - `POST /api/chat`: `{ action: "approve", approvalId }` -> Onaylama
+     - `POST /api/chat`: `{ action: "reject", approvalId }` -> Reddetme
+     - `GET /api/chat?action=approval_status&approvalId=...&projectId=...` -> Durum ve analiz sorgulama
+2. **Güvenli Arayüz Durum Yönetimi (Pessimistic State Transition):**
+   - `handleApprove` ve `handleReject` fonksiyonlarında istemci durumu, **yalnızca sunucu HTTP 200 döndükten sonra** `approved` / `rejected` durumuna geçirilecek şekilde revize edildi. Sunucu hatası durumunda çubuk dolmaz, kullanıcıya net hata bildirilir.
+3. **Kalıcı Arka Plan Dinleyicisinin REST Uç Noktasına Bağlanması:**
+   - Bileşendeki `useEffect` dinleyicisi de Server Action yerine REST rotasına bağlandı. Sayfa hangi dağıtımdan kalmış olursa olsun işlem bitişini kesintisiz yakalar.
+
+### 87.4. Roadmap.md ve İşlem Doğrulaması
+1. **Kullanıcının İstediği Komut Başarıyla İcra Edildi:**
+   - Veritabanındaki `Roadmap.md` onayı tetiklendi ve Mac Runner daemon (`task-9368`) komutu başarıyla çalıştırdı:
+     - `Roadmap.md` dosyası oluşturuldu ve vizyon maddesi eklendi.
+     - `ab90c8c` commit'i yerel Git geçmişine mühürlendi.
+     - Gemini 3.5 Flash Lite terminal çıktısını inceleyip analizi eksiksiz tamamladı.
+2. **GitHub Senkronizasyonu:**
+   - Hem `Roadmap.md` commit'i (`ab90c8c`) hem de REST API mimari güncellemesi commit'i (`1f33945`) GitHub `origin main` deposuna başarıyla push edildi.
