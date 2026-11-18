@@ -13,7 +13,7 @@ export default async function TravelerPassportPage() {
   const session = await auth();
 
   if (!session?.user?.id) {
-    redirect("/auth/signin");
+    redirect("/login");
   }
 
   const [initialStats, initialLeaderboard] = await Promise.all([

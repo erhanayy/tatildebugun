@@ -11,7 +11,7 @@ export default async function RewardsPage() {
   const session = await auth();
 
   if (!session?.user?.id) {
-    redirect("/auth/signin");
+    redirect("/login");
   }
 
   const [summary, initialLedgerRes] = await Promise.all([

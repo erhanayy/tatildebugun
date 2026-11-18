@@ -18,7 +18,9 @@ export const authConfig = {
         nextUrl.pathname.startsWith("/feed") ||
         nextUrl.pathname.startsWith("/match") ||
         nextUrl.pathname.startsWith("/messages") ||
-        nextUrl.pathname.startsWith("/profile");
+        nextUrl.pathname.startsWith("/profile") ||
+        nextUrl.pathname.startsWith("/passport") ||
+        nextUrl.pathname.startsWith("/rewards");
       const isOnChangePassword = nextUrl.pathname === "/change-password";
 
       if (isProtected) {
