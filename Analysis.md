@@ -4224,3 +4224,67 @@ Kullanıcının laptop/MacBook başında olmadan mobil telefon üzerinden `AllTr
 - **GitHub Durumu (Kural 2):** Yerel commit (`f5040c3`) tamamlandı; uzak depoya `git push` işlemi kullanıcının açık onayına tabidir.
 
 ---
+
+## 85. DevStudio: Çok Parçalı (Multi-Part) Gemini Yanıtlarının Birleştirilmesi & Ekrana Kilitli (Locked Viewport) Sohbet Arayüzü
+
+### 85.1. Kullanıcı Geri Bildirimi & Problem Tespiti
+- **Kullanıcı:** *"İlk bir mesaj verdim son versiyona bak gel dedim orada çalıştı, bar da çıktı, doğru mesaj verdi. Sonra başka bir şey istedim MAALESEF YİNE dönüşü yarım kaldı ve akış kesilmiş oldu."*
+- **Kullanıcı:** *"Bu DevStudio ekranı yazıştıkça aşağı kayıyor böyle olmamalı, chat ekranı hem webde hem mobilde ekrana tam oturmalı, yazılar bir pencere içinde olmalı en altta focus edecek, ben eskileri görmek istersem scroll ile yukarı çıkıp bakacağım, ekran tasarımını bu şekilde değiştirir misin?"*
+
+### 85.2. Kök Neden Analizi (Root Cause Analysis)
+
+#### 1. Yanıtların Yarım Kalmasının Kesin Kök Nedeni (`parts[0]` Tuzağı):
+- Google Gemini API (`v1beta/models/...:generateContent`), model yanıtlarını `candidates[0].content.parts` dizisi içinde döndürür.
+- Gemini 3.5 / 2.5 modelleri düşünce zinciri (thought signature), kod blokları veya çok paragraflı yanıtlar ürettiğinde yanıtı tek bir dizede değil, **birden fazla parça (`parts[0]`, `parts[1]`, `parts[2]`...)** halinde bölerek döner.
+- Kod tabanındaki mevcut satırlar:
+  ```ts
+  // HATALI ESKİ KOD:
+  assistantReply = json.candidates[0].content.parts[0].text;
+  ```
+- Bu kod **yalnızca ilk parçayı** (`parts[0]`) alıyor, geri kalan tüm parçaları (`parts[1]...`) sessizce çöpe atıyordu!
+- Veritabanı loglarında `Eskileri görmek istediğinde de kullanıcı` cümlesinin `parts[0]` sonu olduğu, cümlenin ve kod bloğunun devamının `parts[1]` içinde yer aldığı ve bu nedenle cevabın tam orada kesildiği kesin olarak kanıtlandı.
+
+#### 2. Ekranın Aşağı Kayması & Berbat Mobil UX Kök Nedeni:
+- `app/(dashboard)/layout.tsx` dosyasında ana kapsayıcıya `min-h-screen` verilmiş, `html` ve `body` etiketlerine ise yükseklik kısıtı konulmamıştı.
+- Mesajlar eklendikçe `main` elemanı 100vh'nin üzerine genişliyor ve **bütün sayfa / tarayıcı penceresi (window) aşağı doğru kayıyordu**.
+- Mobilde adres çubuğu zıplıyor, üst bar kayboluyor, mesaj giriş alanı ise ekranın altına doğru batıyordu.
+
+### 85.3. Uygulanan Mimari Çözümler
+
+#### 1. Evrensel Çok Parçalı Metin Birleştirici (`lib/ai/gemini-parser.ts`):
+- `extractGeminiText` fonksiyonu geliştirildi:
+  ```ts
+  export function extractGeminiText(jsonOrCandidates: any): string {
+    let candidates = jsonOrCandidates?.candidates || jsonOrCandidates;
+    if (!Array.isArray(candidates) || candidates.length === 0) return "";
+    const parts = candidates[0]?.content?.parts;
+    if (!Array.isArray(parts)) return "";
+    return parts
+      .filter((p: any) => p && typeof p.text === "string")
+      .map((p: any) => p.text)
+      .join("");
+  }
+  ```
+- Bu fonksiyon `app/api/chat/route.ts`, `app/api/runner/route.ts` ve `lib/actions/chat.ts` içindeki tüm çağrılara entegre edildi. Artık kaç parça dönerse dönsün yanıtın %100'ü eksiksiz birleştirilir.
+
+#### 2. Ekrana Kilitli (Locked Viewport) & İçten Kayan (Inner Scroll) Mobil-First Arayüz:
+- **Pencere Kilidi (`globals.css`):**
+  `html, body { height: 100%; height: 100dvh; overflow: hidden; margin: 0; }`
+- **Dashboard Kapsayıcısı (`layout.tsx`):**
+  `h-full h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col`
+- **Flexbox Min-Height Kuralı:** `main` elemanına `min-h-0 flex-1 overflow-hidden` eklendi (CSS flexbox'ın `min-height: auto` varsayılanını ezerek taşmayı engelledi).
+- **Sabit Başlık ve Giriş Alanı:**
+  - `AppHeader` ve mesaj giriş formu `shrink-0` sınıfıyla sabitlendi; asla ezilmez, boyutu küçülmez.
+- **İç Mesaj Penceresi & Otomatik Odaklanma (`chat-view.tsx`):**
+  - Mesaj alanı `flex-1 overflow-y-auto min-h-0 overscroll-contain` yapıldı.
+  - Yeni mesaj geldiğinde veya yazışırken sayfa zıplamadan doğrudan en son mesaja yumuşakça odaklanır (`scrollIntoView({ behavior: 'smooth' })`).
+  - Kullanıcı geçmiş mesajları okumak istediğinde sayfa çerçevesi oynamadan sadece iç mesaj penceresini yukarı/aşağı kaydırabilir.
+
+### 85.4. Dağıtım ve Canlı Doğrulama
+- **Cloud Run Sürümü:** `devstudio-00009-7zs` (`dernektebugun-492221`, `europe-west1`) %100 canlı trafiğe alındı.
+- **Canlı Adres:** `https://devstudio-51645421078.europe-west1.run.app`
+- **Kalite Kapısı (Kural 12):** Next.js 16 (Turbopack) derlemesi 1.7 saniyede 0 hata ile tamamlandı.
+- **Mac Runner Durumu:** `task-9368` yerel daemon'u kesintisiz canlı dinlemeye devam ediyor.
+- **GitHub Durumu (Kural 2):** DevStudio yerel commit'i (`bc89732`) hazırlandı; kullanıcının açık komutuyla GitHub'a `git push` yapılacaktır.
+
+---
