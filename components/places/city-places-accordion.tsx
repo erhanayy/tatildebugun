@@ -11,6 +11,7 @@ import {
   batchRecordPlaceVisits,
   type CityPlaceItem,
 } from "@/lib/actions/places";
+import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 import {
   Search,
   CheckCircle2,
@@ -160,6 +161,11 @@ export function CityPlacesAccordion({
       } else {
         if (res.action === "added") {
           toast.success(`${place.name} görüldü olarak kaydedildi! 🎯`);
+          triggerFloatingPoints({
+            points: 200,
+            label: `${place.name} Check-in`,
+            multiplier: "20x Bonus 🚀",
+          });
           if (res.visitId) {
             setPlaces((prev) =>
               prev.map((p) =>
@@ -294,6 +300,11 @@ export function CityPlacesAccordion({
 
       if (res.success && res.place) {
         toast.success(`${customName} eklendi ve görüldü olarak kaydedildi! 🌟`);
+        triggerFloatingPoints({
+          points: 10,
+          label: `${customName} Mekan Kaydı`,
+          multiplier: "+10 Puan 📍",
+        });
         setPlaces((prev) => [res.place, ...prev]);
         setIsAddModalOpen(false);
         setCustomName("");

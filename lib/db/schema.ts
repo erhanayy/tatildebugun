@@ -29,6 +29,8 @@ export const users = pgTable(
     isActive: boolean("is_active").default(true).notNull(),
     lastLoginAt: timestamp("last_login_at"),
     travelerScore: integer("traveler_score").default(0).notNull(),
+    referralCode: varchar("referral_code", { length: 30 }).unique(),
+    referredBy: uuid("referred_by"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -36,6 +38,8 @@ export const users = pgTable(
     emailIdx: index("users_email_idx").on(table.email),
     phoneIdx: uniqueIndex("users_phone_number_unique_idx").on(table.phoneNumber),
     usernameIdx: uniqueIndex("users_username_unique_idx").on(table.username),
+    referralCodeIdx: uniqueIndex("users_referral_code_unique_idx").on(table.referralCode),
+    referredByIdx: index("users_referred_by_idx").on(table.referredBy),
   })
 );
 
@@ -529,6 +533,61 @@ export const userBadges = pgTable(
 
 export type UserBadge = typeof userBadges.$inferSelect;
 export type NewUserBadge = typeof userBadges.$inferInsert;
+
+// --- 20. Oyunlaştırma & Değer Paylaşımı Defteri (User Points Ledger) Tablosu ---
+export const userPointsLedger = pgTable(
+  "user_points_ledger",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    actionType: varchar("action_type", { length: 50 }).notNull(), // 'daily_login', 'comment_like', 'create_pin', 'checkin_pin', 'b2b_purchase', 'referral_passive', 'carry_over', 'admin_penalty', 'admin_reward'
+    basePoints: integer("base_points").notNull(),
+    multiplier: doublePrecision("multiplier").default(1.0).notNull(),
+    finalPoints: integer("final_points").notNull(),
+    referenceId: varchar("reference_id", { length: 100 }), // örn: visit_id, comment_id, target_user_id
+    referenceType: varchar("reference_type", { length: 50 }), // 'visit', 'comment', 'user', 'b2b_order'
+    year: integer("year").default(2026).notNull(),
+    ruleVersion: varchar("rule_version", { length: 20 }).default("v1.0").notNull(),
+    description: text("description"),
+    metadata: jsonb("metadata").$type<Record<string, any>>().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("user_points_ledger_user_idx").on(table.userId),
+    yearIdx: index("user_points_ledger_year_idx").on(table.year),
+    actionTypeIdx: index("user_points_ledger_action_type_idx").on(table.actionType),
+    userYearIdx: index("user_points_ledger_user_year_idx").on(table.userId, table.year),
+    createdAtIdx: index("user_points_ledger_created_at_idx").on(table.createdAt),
+  })
+);
+
+export type UserPointsLedger = typeof userPointsLedger.$inferSelect;
+export type NewUserPointsLedger = typeof userPointsLedger.$inferInsert;
+
+// --- 21. Değer Paylaşımı Sezon Havuzları (Value Share Season Pools) ---
+export const valueSharePools = pgTable(
+  "value_share_pools",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    year: integer("year").unique().notNull(), // örn: 2026
+    seasonTitleTr: varchar("season_title_tr", { length: 100 }).notNull(),
+    seasonTitleEn: varchar("season_title_en", { length: 100 }).notNull(),
+    estimatedNetProfit: integer("estimated_net_profit").default(1000000).notNull(), // Simülasyon net kârı (TL)
+    profitCurrency: varchar("profit_currency", { length: 10 }).default("TRY").notNull(),
+    poolSharePercentage: doublePrecision("pool_share_percentage").default(20.0).notNull(), // Topluluk havuz payı (%20)
+    status: varchar("status", { length: 30 }).default("active").notNull(), // 'active', 'calculating', 'distributed', 'closed'
+    totalPoolPoints: integer("total_pool_points").default(0).notNull(),
+    ruleVersion: varchar("rule_version", { length: 20 }).default("v1.0").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }
+);
+
+export type ValueSharePool = typeof valueSharePools.$inferSelect;
+export type NewValueSharePool = typeof valueSharePools.$inferInsert;
+
 
 
 

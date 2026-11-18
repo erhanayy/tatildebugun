@@ -16,6 +16,7 @@ import { CURATED_PLACES } from "@/lib/poi-data";
 import { eq, and, sql, desc, asc, ilike, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { awardPoints } from "@/lib/points/engine";
 
 // Zod Doğrulama Şemaları (Kural 10 - Katı Tip Güvenliği)
 const togglePlaceVisitSchema = z.object({
@@ -382,6 +383,21 @@ export async function togglePlaceVisit(input: {
         })
         .returning();
 
+      // Madde 81.1: Fiziki Check-in 20x Çarpanı (200 Puan)
+      let awardedPoints = 0;
+      try {
+        const pointRes = await awardPoints({
+          userId,
+          actionType: "checkin_pin",
+          referenceId: inserted.id,
+          referenceType: "visit",
+          description: "Fiziki Mekan Ziyareti & Check-in (20x Çarpan!)",
+        });
+        awardedPoints = pointRes.finalPoints;
+      } catch (pe) {
+        console.error("awardPoints error in togglePlaceVisit:", pe);
+      }
+
       revalidatePath("/tatildeyim");
       return {
         success: true,
@@ -389,6 +405,7 @@ export async function togglePlaceVisit(input: {
         visitId: inserted.id,
         visitedAt: inserted.visitedAt,
         userRating: inserted.userRating,
+        awardedPoints,
       };
     }
   } catch (error) {
@@ -580,8 +597,23 @@ export async function setPlaceRating(input: {
       visitId = inserted.id;
     }
 
+    // Madde 81.1: Fiziki Check-in 20x Çarpanı (200 Puan)
+    let awardedPoints = 0;
+    try {
+      const pointRes = await awardPoints({
+        userId,
+        actionType: "checkin_pin",
+        referenceId: visitId,
+        referenceType: "visit",
+        description: "Fiziki Mekan Check-in & GPS Doğrulaması (20x Çarpan!)",
+      });
+      awardedPoints = pointRes.finalPoints;
+    } catch (pe) {
+      console.error("awardPoints error in checkInToPlace:", pe);
+    }
+
     revalidatePath("/tatildeyim");
-    return { success: true, visitId, userRating };
+    return { success: true, visitId, userRating, awardedPoints };
   } catch (error) {
     console.error("setPlaceRating hatası:", error);
     return { success: false, error: "Puan kaydedilemedi" };

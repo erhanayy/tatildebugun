@@ -92,3 +92,31 @@ body {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+
+/* Dopamine floating points animation */
+@keyframes float-dopamine {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.88);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1.04);
+  }
+  32% {
+    transform: translateY(-12px) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translateY(-38px) scale(0.98);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-56px) scale(0.92);
+  }
+}
+
+.animate-float-dopamine {
+  animation: float-dopamine 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

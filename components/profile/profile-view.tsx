@@ -28,6 +28,7 @@ import {
   Radar,
   Users,
   X,
+  Coins,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getMutedTravelersAction, unmuteTravelerAction } from "@/lib/actions/social";
@@ -35,6 +36,7 @@ import { POPULAR_COUNTRIES } from "@/lib/world-cities";
 import { useTranslation } from "@/lib/i18n/context";
 import { Locale } from "@/lib/i18n/types";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { PointsWalletCard } from "@/components/points/points-wallet-card";
 
 interface ProfileViewProps {
   initialData: UserProfileData;
@@ -46,7 +48,7 @@ const PRESET_AVATARS = [
 
 export function ProfileView({ initialData }: ProfileViewProps) {
   const { locale, setLanguage, t, supportedLocales } = useTranslation();
-  const [activeTab, setActiveTab] = useState<"info" | "password">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "wallet" | "password">("info");
 
   // Profil Form State
   const [fullName, setFullName] = useState(initialData.user.fullName);
@@ -343,6 +345,16 @@ export function ProfileView({ initialData }: ProfileViewProps) {
             <h2 className="text-2xl font-black text-white">{fullName}</h2>
             <p className="text-xs text-slate-400">{initialData.user.email}</p>
             {bio && <p className="text-xs text-slate-300 italic pt-1 max-w-lg">"{bio}"</p>}
+            <div className="pt-1.5">
+              <button
+                type="button"
+                onClick={() => setActiveTab("wallet")}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/15 to-amber-600/15 border border-amber-500/30 text-amber-300 text-xs font-bold hover:bg-amber-500/25 transition-all cursor-pointer"
+              >
+                <Coins className="w-3.5 h-3.5 text-amber-400" />
+                <span>{locale === "en" ? "2026 Founder Value-Share Pool Active • View Wallet →" : "2026 Kurucu Havuzu Aktif • Cüzdanı Gör →"}</span>
+              </button>
+            </div>
           </div>
 
           {/* İstatistik Rozetleri */}
@@ -375,7 +387,7 @@ export function ProfileView({ initialData }: ProfileViewProps) {
       </div>
 
       {/* 2. Sekmeler */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
         <button
           type="button"
           onClick={() => setActiveTab("info")}
@@ -387,6 +399,19 @@ export function ProfileView({ initialData }: ProfileViewProps) {
         >
           <User className="w-3.5 h-3.5" />
           <span>{t("profile.tabInfo")}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("wallet")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === "wallet"
+              ? "bg-amber-500/15 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/10"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+          }`}
+        >
+          <Coins className="w-3.5 h-3.5 text-amber-400" />
+          <span>{locale === "en" ? "💎 Value-Share & Points" : "💎 Kâr Payı & Puan Cüzdanı"}</span>
         </button>
 
         <button
@@ -947,6 +972,13 @@ export function ProfileView({ initialData }: ProfileViewProps) {
             </button>
           </div>
         </form>
+      )}
+
+      {/* 4. Value-Share & Puan Cüzdanı Sekmesi */}
+      {activeTab === "wallet" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <PointsWalletCard />
+        </div>
       )}
 
       {/* Gizlenen Gezginler Yönetim Modalı */}

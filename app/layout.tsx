@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import { LanguageProvider } from "@/lib/i18n/context";
 import { getServerLocale } from "@/lib/i18n/server";
+import { FloatingPointsContainer } from "@/components/points/floating-points-effect";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -51,6 +52,7 @@ export default async function RootLayout({
         <LanguageProvider initialLocale={initialLocale}>
           {children}
           <Toaster position="top-right" richColors />
+          <FloatingPointsContainer />
         </LanguageProvider>
       </body>
     </html>

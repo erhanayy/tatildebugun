@@ -4163,3 +4163,34 @@ Sistemin manipüle edilmesini (botları ve masabaşından yalan dolan pin ekleye
 ### 81.6. Admin Moderasyon, Şikayet ve Ceza Mekanizması (Anti-Cheat & Ban Hammer)
 * Küfürlü, rahatsız edici veya hileli (cheat) olduğu tespit edilen kullanıcı içerikleri ve hareketleri sistem tarafından işaretlenir (Auto-Flagging).
 * Admin, yönetim paneli üzerinden ilgili profili inceleyebilir; o seneki puan/para havuzu hakkını dondurabilir, silebilir veya manuel **"Eksi Puan Cezası (Penalty Points)"** uygulayabilir. Cezalar ledger tablosuna negatif işlem olarak yansır.
+
+---
+
+### 81.7. Gerçekleştirilen Geliştirmeler ve Mimari Doğrulama (2026 Sezonu Canlı Altyapı)
+
+Kullanıcı onayı doğrultusunda, sıfır ek maliyet prensibiyle (mevcut Cloud SQL PostgreSQL ve Next.js altyapısı kullanılarak) aşağıdaki 5 aşamalı geliştirme eksiksiz tamamlanmış ve canlı veritabanına uygulanmıştır:
+
+1. **Veritabanı & Ledger Şeması (Reversible Migrations - Kural 8):**
+   - `scripts/create_points_ledger.sql`: `user_points_ledger` (immutable event log), `value_share_pools` (yıllık kâr havuzları), `users.referral_code` ve `users.referred_by` kolonları oluşturuldu. 2026 Kurucu Havuzu (1.000.000 TL net kâr varsayımı, %20 topluluk havuz payı) seed edildi.
+   - `scripts/rollback_points_ledger.sql`: Kural 8 gereği eksiksiz geri alma scripti hazırlandı.
+   - `lib/db/schema.ts`: Drizzle ORM tabloları ve tipleri eklendi.
+2. **Kural ve Puanlama Motoru (`lib/points/engine.ts`):**
+   - 2026 Sezon Matrisi uygulandı: Fiziksel check-in (20x çarpan = 200 puan), günlük giriş (5 puan), pin oluşturma (10 puan), hoşgeldin bonusu (50 puan).
+   - **%20 Pasif Arkadaş Geliri Döngüsü:** Bir kullanıcı seyahat edip check-in yaptığında, onu davet eden arkadaşına otomatik olarak %20 pasif puan (`referral_passive`) hesaplanıp deftere yazılır.
+   - `awardPoints`: Ledger insert + kullanıcı puan senkronizasyonu + sezonluk havuz toplamı güncelleme işlemlerini atomik olarak yönetir.
+   - `lib/actions/places.ts`: Mekan ziyareti ve check-in işlemlerine `awardPoints` entegre edildi.
+   - `lib/actions/points.ts`: Cüzdan özet, geçmiş ve davet kodu uygulama Server Action'ları eklendi.
+3. **Profil Cüzdanı ve Hukuki Simülasyon Kartı (`components/points/points-wallet-card.tsx`):**
+   - Mobil-first, sıfır yatay kaydırma (Kural 13), dark glassmorphism arayüz.
+   - Canlı puan göstergesi, 20x check-in rozeti, %20 pasif referans göstergesi.
+   - Hukuki taahhüt içermeyen simülasyon kutusu (1.000.000 TL net kâr varsayımı ve havuz payı).
+   - Tek tıkla kopyalama, Web Share API (`navigator.share`) entegrasyonu ve davet kodu girme formu.
+   - `components/profile/profile-view.tsx` içerisine yeni sekmeli alan ve pasaport rozeti olarak entegre edildi.
+4. **"Uçan Puanlar" Dopamin Parçacık Animasyonu (`components/points/floating-points-effect.tsx`):**
+   - Harici ağır kütüphane olmaksızın Pure CSS keyframes (`app/globals.css`) ile GPU hızlandırmalı yükselme ve sönme efekti.
+   - Mobil cihazlar için dokunma titreşimi (`navigator.vibrate([40, 50, 40])`).
+   - `app/layout.tsx` kök dizinine monte edildi; mekan check-in'leri ve davet işlemlerinde otomatik tetiklenir.
+5. **Kalite Kapısı ve Derleme Doğrulaması (Kural 12):**
+   - `npx tsc --noEmit`: 0 hata.
+   - `npm run build`: Next.js 16 üretim derlemesi 12/12 sayfa ile başarıyla tamamlandı.
+
