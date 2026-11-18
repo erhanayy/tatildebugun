@@ -4371,6 +4371,81 @@ Açılan modal, 3 sekmeli ve modern dark glassmorphism mimarisinde sunulur:
 - **Kural 2 Uyarınca:** GitHub'a otomatik push yapılmadı.
 - **Kural 3 Uyarınca:** Canlı ortama otomatik deploy yapılmadı.
 
+---
+
+## 85. Pin ve Rota Ekleme/Silme Dinamik Puan Yaşam Döngüsü ve Muhasebe Geri Alma (Reversible Points Lifecycle) Analizi
+
+### 85.1. Tespit Edilen Problem ve Kök Neden
+1. **Pin Eklendiğinde Puanın Değişmemesi Sorunu:**
+   - Kullanıcı harita üzerinden Gävle ve Stockholm (Vaxholms kommun) için yeni ziyaret pinleri eklemiştir.
+   - Ancak `lib/actions/visits.ts` içerisindeki `addVisit` fonksiyonu sadece `visits` tablosuna `insert` yapmakta; yeni Sezon Puan Motoru (`awardPoints` / `user_points_ledger`) ile entegre çalışmamaktadır.
+   - Bu nedenle kullanıcının `users.travelerScore` puanı (`2,925 Pts`) değişmemiş, `user_points_ledger` defterine yeni kayıt düşmemiştir.
+2. **Pin ve Rota Silme Mekanizması ve Puan Düşümü:**
+   - Harita pop-up'ında ve çekmecelerde (`trips-drawer.tsx` ve `trip-routes-drawer.tsx`) silme (`deleteVisit`, `deleteTrip`) butonları yer almakla birlikte; silme işlemi yapıldığında kazanılmış puanların defterden ve kullanıcı skorundan düşülmesi (`reversal / rollback`) henüz kurgulanmamıştır.
+   - Kullanıcı bir pini veya rotayı sildiğinde, o eylemden kazanılan puanın da haksız yere sistemde kalmaması, muhasebe defterine negatif kayıt (`delete_pin` / `delete_trip`) olarak işlenip havuzdan ve skordan eksiltilmesi gerekmektedir.
+
+### 85.2. Mimari ve Servis Çözüm Tasarımı (Event-Sourcing Ledger Pattern)
+
+#### A. Pin Yaşam Döngüsü (Pin Lifecycle & Points):
+1. **Pin Eklendiğinde (`addVisit`):**
+   - `visits` tablosuna kayıt oluşturulduktan hemen sonra her yeni ziyaret kaydı için `awardPoints` çağrılır:
+     - `actionType: "create_pin"`
+     - `basePoints: 10`, `finalPoints: 10`
+     - `referenceId: visit.id`, `referenceType: "visit"`
+     - `description: "Gezi Pini: {cityName}, {countryName}"`
+   - `users.travelerScore` (+10 Pts) ve `valueSharePools.totalPoolPoints` (+10 Pts) anında güncellenir.
+   - Revalidate yollarına `/dashboard`, `/passport`, `/rewards` eklenir.
+2. **Pin Silindiğinde (`deleteVisit`):**
+   - Ziyaret kaydı silinmeden önce, bu `visitId` referansıyla `user_points_ledger`'da kazanılmış puanlar sorgulanır.
+   - Eğer daha önce puan kazanılmışsa (Örn: +10 Pts):
+     - `user_points_ledger` tablosuna ters işlem (reversal entry) eklenir:
+       - `actionType: "delete_pin"`
+       - `basePoints: -10`, `finalPoints: -10`
+       - `referenceId: visitId`, `referenceType: "visit"`
+       - `description: "Silinen Gezi Pini Puan İadesi: {cityName}, {countryName}"`
+     - `users.travelerScore = GREATEST(0, travelerScore - 10)`
+     - `valueSharePools.totalPoolPoints = GREATEST(0, totalPoolPoints - 10)`
+   - Böylece geçmiş defter kayıtları silinmez, muhasebe disiplinine uygun çift taraflı (double-entry audit log) kayıt tutulur.
+
+#### B. Rota Yaşam Döngüsü (Route Lifecycle & Points):
+1. **Rota Oluşturulduğunda veya Tamamlandığında (`createTrip` / `updateTripStatus`):**
+   - `status === "completed"` olan her rota için `complete_trip` (+50 Pts) puanı tahsis edilir.
+2. **Rota Silindiğinde (`deleteTrip`):**
+   - Rota silinirken, o rotaya ait kazanılmış puanlar tespit edilir ve negatif ters kayıt (`delete_trip`, -50 Pts) ile düşülür.
+
+#### C. Geriye Dönük Eşitleme (Backfill & Sync):
+- Kullanıcının az önce eklediği Gävle ve Vaxholms kommun (Stockholm) pinleri tespit edilerek hanesine hak ettiği +10'ar puan (+20 Pts) defter kaydıyla aktarılacak, puanı `2,925`'ten `2,945 Pts` seviyesine çekilecektir.
+
+#### D. Arayüz (UI/UX) Erişilebilirliği:
+- Haritada pin tıklandığında açılan pop-up penceresinde "🗑️ Sil" butonu kırmızı renkle daha belirgin hale getirilecek.
+- Sağ üstteki "Seyahatlerim (X)" ve "Rotalarım (Y)" çekmecelerindeki silme onay pencereleri görsel olarak güçlendirilecektir.
+
+### 85.3. Geliştirme Durumu ve Kalite Kapısı Sonuçları
+- **Durum:** Başarıyla Tamamlandı (Kullanıcı Onayı: *"sen bunları da yap sabah test ederiz."*).
+- **Gerçekleştirilen Geliştirmeler:**
+  1. `lib/points/engine.ts`: `POINT_RULES` kural matrisine `delete_pin` (-10 Pts), `complete_trip` (+50 Pts) ve `delete_trip` (-50 Pts) kuralları eklendi.
+  2. `lib/actions/visits.ts`:
+     - `addVisit`: Eklenen her pin için anında `awardPoints` (`create_pin`, +10 Pts) tetiklendi.
+     - `deleteVisit`: Silinen pin için kazanılmış puanlar tespit edilerek negatif ters işlem kaydı (`delete_pin`, -10 Pts) ile kullanıcı skorundan ve sezon havuzundan düşüldü.
+  3. `lib/actions/trips.ts`:
+     - `createTrip`: Durumu `completed` olan rotalar için +50 Pts (`complete_trip`) verildi.
+     - `updateTripStatus`: `planned` -> `completed` geçişinde +50 Pts, `completed` -> `planned` geçişinde -50 Pts deftere işlendi.
+     - `deleteTrip`: Silinen rota için kazanılmış puanlar tespit edilerek negatif ters kayıt (`delete_trip`, -50 Pts) ile düşüldü.
+  4. **Geriye Dönük Telafi & Eşitleme (Backfill):**
+     - Kullanıcının eklediği Gävle ve Vaxholms kommun (Stockholm) pinleri tespit edilerek +10'ar puan (+40 Pts) geriye dönük işlendi ve skor `2,965 Pts` olarak kesinleştirildi.
+- **Otomatik Birim Testler (`scripts/test_pin_trip_lifecycle.ts`):**
+  - Pin ekleme (+10 Pts) ve Sezon Havuz artışı: ✅ PASS
+  - Pin silme ve ters defter kaydı (-10 Pts): ✅ PASS
+  - Rota tamamlama (+50 Pts): ✅ PASS
+  - Rota durum değişimi puan döngüsü (planned <-> completed): ✅ PASS
+  - Rota silme ve ters defter kaydı (-50 Pts): ✅ PASS
+  - Cascade silme temizliği (`trips` & `tripStops`): ✅ PASS
+  - `GREATEST(0, ...)` sıfırın altına düşmeme güvenlik sınırı: ✅ PASS
+  - Toplam: **27/27 Test Başarılı (%100)**.
+- **TypeScript Kalite Kapısı (`npx tsc --noEmit`):** 0 Hata.
+- **Kural 2 Uyarınca:** GitHub'a otomatik push yapılmadı.
+- **Kural 3 Uyarınca:** Canlı ortama otomatik deploy yapılmadı.
+
 
 
 

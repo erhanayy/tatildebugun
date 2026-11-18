@@ -64,6 +64,24 @@ export const POINT_RULES: Record<
     titleTr: "Kural İhlali Ceza Kesintisi (Penalty)",
     titleEn: "Rule Violation Penalty Deduction",
   },
+  delete_pin: {
+    base: -10,
+    multiplier: 1.0,
+    titleTr: "Silinen Gezi Pini İadesi (Geri Alma)",
+    titleEn: "Deleted Travel Pin Reversal",
+  },
+  complete_trip: {
+    base: 50,
+    multiplier: 1.0,
+    titleTr: "Tamamlanan Seyahat Rotası Bonusu",
+    titleEn: "Completed Travel Route Bonus",
+  },
+  delete_trip: {
+    base: -50,
+    multiplier: 1.0,
+    titleTr: "Silinen Seyahat Rotası İadesi (Geri Alma)",
+    titleEn: "Deleted Travel Route Reversal",
+  },
   welcome_bonus: {
     base: 50,
     multiplier: 1.0,

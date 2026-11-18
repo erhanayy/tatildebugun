@@ -2,9 +2,10 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { trips, tripStops, visits, users, type Trip, type TripStop } from "@/lib/db/schema";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { trips, tripStops, visits, users, type Trip, type TripStop, userPointsLedger } from "@/lib/db/schema";
+import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { awardPoints } from "@/lib/points/engine";
 import { z } from "zod";
 
 // Zod Doğrulama Şeması (Kural 10 - Katı Tip & Runtime Kontrolü)
@@ -153,8 +154,27 @@ export async function createTrip(input: CreateTripInput): Promise<{
 
     const insertedStops = await db.insert(tripStops).values(stopsToInsert).returning();
 
+    // 2026 Sezonu Bütünleşik Değer Paylaşımı ve Puan Motoru:
+    // Eğer rota tamamlanmış (completed) olarak oluşturulduysa 50 Puan ver ve deftere yaz
+    if (status === "completed") {
+      try {
+        await awardPoints({
+          userId: session.user.id,
+          actionType: "complete_trip",
+          referenceId: createdTrip.id,
+          referenceType: "trip",
+          description: `Tamamlanan Seyahat Rotası: ${createdTrip.title}`,
+          metadata: { stopCount: insertedStops.length, transportType },
+        });
+      } catch (ptsErr) {
+        console.error("Rota puanı ekleme hatası:", ptsErr);
+      }
+    }
+
     revalidatePath("/dashboard");
     revalidatePath("/feed");
+    revalidatePath("/passport");
+    revalidatePath("/rewards");
 
     return {
       success: true,
@@ -171,6 +191,7 @@ export async function createTrip(input: CreateTripInput): Promise<{
 
 /**
  * Rota (Trip) ve bağlı duraklarını siler.
+ * Rota silindiğinde daha önce kazanılmış puanlar defterden tespit edilerek ters işlemle (reversal) düşülür.
  */
 export async function deleteTrip(tripId: string): Promise<{ success: boolean; message?: string }> {
   try {
@@ -179,6 +200,51 @@ export async function deleteTrip(tripId: string): Promise<{ success: boolean; me
       return { success: false, message: "Yetkisiz işlem." };
     }
 
+    // 1. Rotayı ve detaylarını çek
+    const existing = await db
+      .select()
+      .from(trips)
+      .where(and(eq(trips.id, tripId), eq(trips.userId, session.user.id)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return { success: false, message: "Rota bulunamadı." };
+    }
+
+    const trip = existing[0];
+
+    // 2. Bu rota için kazanılmış puan varsa defterden tespit et ve ters işlemle düş
+    const awardedEntries = await db
+      .select({ finalPoints: userPointsLedger.finalPoints })
+      .from(userPointsLedger)
+      .where(
+        and(
+          eq(userPointsLedger.userId, session.user.id),
+          eq(userPointsLedger.referenceId, tripId),
+          sql`${userPointsLedger.finalPoints} > 0`
+        )
+      );
+
+    const totalAwarded = awardedEntries.reduce((sum, e) => sum + e.finalPoints, 0);
+
+    if (totalAwarded > 0) {
+      try {
+        await awardPoints({
+          userId: session.user.id,
+          actionType: "delete_trip",
+          basePoints: -totalAwarded,
+          multiplier: 1.0,
+          referenceId: tripId,
+          referenceType: "trip",
+          description: `Silinen Seyahat Rotası İadesi: ${trip.title}`,
+          metadata: { tripTitle: trip.title },
+        });
+      } catch (ptsErr) {
+        console.error("Rota silme puan iade hatası:", ptsErr);
+      }
+    }
+
+    // 3. Rotayı veritabanından sil
     await db
       .delete(trips)
       .where(and(eq(trips.id, tripId), eq(trips.userId, session.user.id)));
@@ -186,6 +252,8 @@ export async function deleteTrip(tripId: string): Promise<{ success: boolean; me
     revalidatePath("/dashboard");
     revalidatePath("/feed");
     revalidatePath("/match");
+    revalidatePath("/passport");
+    revalidatePath("/rewards");
 
     return { success: true };
   } catch (error) {
@@ -218,6 +286,55 @@ export async function updateTripStatus(
       return { success: false, message: "Rota bulunamadı veya yetkiniz yok." };
     }
 
+    const oldStatus = existing[0].status;
+
+    // Puan durum geçişi kontrolü
+    if (oldStatus !== status) {
+      if (status === "completed") {
+        // Planlanandan tamamlanmışa geçiş -> +50 Puan
+        try {
+          await awardPoints({
+            userId: session.user.id,
+            actionType: "complete_trip",
+            referenceId: tripId,
+            referenceType: "trip",
+            description: `Tamamlanan Seyahat Rotası: ${existing[0].title}`,
+            metadata: { previousStatus: oldStatus },
+          });
+        } catch (ptsErr) {
+          console.error("Rota tamamlama puanı hatası:", ptsErr);
+        }
+      } else if (oldStatus === "completed" && status === "planned") {
+        // Tamamlanmıştan planlanana geri çekilme -> Puan iadesi
+        const awardedEntries = await db
+          .select({ finalPoints: userPointsLedger.finalPoints })
+          .from(userPointsLedger)
+          .where(
+            and(
+              eq(userPointsLedger.userId, session.user.id),
+              eq(userPointsLedger.referenceId, tripId),
+              sql`${userPointsLedger.finalPoints} > 0`
+            )
+          );
+        const totalAwarded = awardedEntries.reduce((sum, e) => sum + e.finalPoints, 0);
+        if (totalAwarded > 0) {
+          try {
+            await awardPoints({
+              userId: session.user.id,
+              actionType: "delete_trip",
+              basePoints: -totalAwarded,
+              multiplier: 1.0,
+              referenceId: tripId,
+              referenceType: "trip",
+              description: `Durumu Planlanana Çekilen Rota Puan İadesi: ${existing[0].title}`,
+            });
+          } catch (ptsErr) {
+            console.error("Rota durum puan iade hatası:", ptsErr);
+          }
+        }
+      }
+    }
+
     const updated = await db
       .update(trips)
       .set({
@@ -236,6 +353,8 @@ export async function updateTripStatus(
     revalidatePath("/dashboard");
     revalidatePath("/feed");
     revalidatePath("/match");
+    revalidatePath("/passport");
+    revalidatePath("/rewards");
 
     return {
       success: true,

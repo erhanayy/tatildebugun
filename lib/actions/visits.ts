@@ -2,9 +2,10 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { visits, type Visit } from "@/lib/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { visits, type Visit, userPointsLedger } from "@/lib/db/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { awardPoints } from "@/lib/points/engine";
 import { z } from "zod";
 
 // Zod Doğrulama Şeması (Kural 10 - Katı Tip ve Runtime Doğrulama)
@@ -137,8 +138,27 @@ export async function createVisit(input: CreateVisitInput): Promise<{
 
     const inserted = await db.insert(visits).values(recordsToInsert).returning();
 
+    // 2026 Sezonu Bütünleşik Değer Paylaşımı ve Puan Motoru:
+    // Her yeni pin için kullanıcıya 10 Pts ekle ve deftere yaz
+    for (const v of inserted) {
+      try {
+        await awardPoints({
+          userId: session.user.id,
+          actionType: "create_pin",
+          referenceId: v.id,
+          referenceType: "visit",
+          description: `Gezi Pini: ${v.cityName}, ${v.countryName}`,
+          metadata: { countryCode: v.countryCode, cityName: v.cityName },
+        });
+      } catch (ptsErr) {
+        console.error("Ziyaret puanı ekleme hatası:", ptsErr);
+      }
+    }
+
     revalidatePath("/dashboard");
     revalidatePath("/tatildeyim");
+    revalidatePath("/passport");
+    revalidatePath("/rewards");
     return {
       success: true,
       visit: inserted[0],
@@ -245,12 +265,60 @@ export async function deleteVisit(visitId: string): Promise<{ success: boolean; 
       return { success: false, message: "Yetkisiz işlem." };
     }
 
+    // 1. Ziyaret kaydının kullanıcıya ait olup olmadığını ve detaylarını çek
+    const existing = await db
+      .select()
+      .from(visits)
+      .where(and(eq(visits.id, visitId), eq(visits.userId, session.user.id)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return { success: false, message: "Ziyaret kaydı bulunamadı." };
+    }
+
+    const visit = existing[0];
+
+    // 2. Bu ziyaret için daha önce verilmiş aktif puanları defterden tespit et
+    const awardedEntries = await db
+      .select({ finalPoints: userPointsLedger.finalPoints })
+      .from(userPointsLedger)
+      .where(
+        and(
+          eq(userPointsLedger.userId, session.user.id),
+          eq(userPointsLedger.referenceId, visitId),
+          sql`${userPointsLedger.finalPoints} > 0`
+        )
+      );
+
+    const totalAwarded = awardedEntries.reduce((sum, e) => sum + e.finalPoints, 0);
+
+    // 3. Eğer puan kazanılmışsa ters işlemle (reversal ledger entry) puanı geri al
+    if (totalAwarded > 0) {
+      try {
+        await awardPoints({
+          userId: session.user.id,
+          actionType: "delete_pin",
+          basePoints: -totalAwarded,
+          multiplier: 1.0,
+          referenceId: visitId,
+          referenceType: "visit",
+          description: `Silinen Gezi Pini İadesi: ${visit.cityName}, ${visit.countryName}`,
+          metadata: { countryCode: visit.countryCode, cityName: visit.cityName },
+        });
+      } catch (ptsErr) {
+        console.error("Ziyaret silme puan iade hatası:", ptsErr);
+      }
+    }
+
+    // 4. Ziyareti veritabanından sil
     await db
       .delete(visits)
       .where(and(eq(visits.id, visitId), eq(visits.userId, session.user.id)));
 
     revalidatePath("/dashboard");
     revalidatePath("/tatildeyim");
+    revalidatePath("/passport");
+    revalidatePath("/rewards");
     return { success: true };
   } catch (error) {
     console.error("Ziyaret silme hatası:", error);
