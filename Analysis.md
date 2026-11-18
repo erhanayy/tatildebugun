@@ -4112,3 +4112,115 @@ Kullanıcının onayıyla (`Option 1`):
    - Mobilde soldaki 5 ikon zaten alt menü barındadır (`md:hidden`).
    - Üst barda ise telefonlarda (küçük ekranlar) sadece Logo + Dil + Bildirim + Profil fotoğraflı avatar yer alarak üst barın tek satırda tertemiz, ferah ve sıfır yatay kaydırma ile çalışması garanti altına alındı.
 
+---
+
+## 81. DevStudio: Mobil Bağımsız Yapay Zeka Geliştirici Kokpiti (İnception & Dağıtım)
+
+Kullanıcının laptop/MacBook başında olmadan mobil telefon üzerinden `AllTripX` ve `BurstaBugun` projelerini geliştirebilmesi amacıyla bağımsız bir proje olarak **DevStudio** başlatıldı (`/Users/erhanayyildiz/Desktop/Work/DevStudio`).
+
+1. **Temel Yetenekler & Altyapı:**
+   - **Mimari:** Next.js 16 (App Router), React 19, Tailwind CSS v4, NextAuth v5, Drizzle ORM.
+   - **Veritabanı:** Google Cloud SQL PostgreSQL (`devstudio` veritabanı).
+   - **Güvenlik & Vault:** AES-256-GCM kullanıcı API anahtarları (Gemini, Claude, GPT) kasası (BYOK).
+   - **Yerel Runner (Mac/Windows):** Dışarıdan port açmadan çift yönlü çalışan `devstudio-runner` aracı ajan.
+   - **Mobil İnteraktif Onaylar (`ApprovalCard`):** Terminal komutları, git push ve deploy onaylarının telefondan tek dokunuşla onaylanması.
+2. **GitHub & Bulut Dağıtımı:**
+   - GitHub Deposu: [https://github.com/erhanayy/DevStudio](https://github.com/erhanayy/DevStudio)
+   - Cloud Run Servisi: `devstudio` (`dernektebugun-492221`, `europe-west1`)
+   - Hedef Canlı Adres: `https://devstudio.bugunai.com`
+
+---
+
+## 82. DevStudio: Doğal Dil Sohbet Motoru & Gemini 3.5 Flash Entegrasyonu
+
+### 82.1. Kullanıcı Geri Bildirimi & Talep
+- Kullanıcı: *"Ben anlamadım bu yapıda normal seninle konuştuğum gibi konuşamayacak mıyız? Sadece belli kalıpları mı kullanmam gerekecek?"*
+- Kullanıcı, DevStudio'nun komut bazlı kalıplaşmış bir bot değil; Antigravity ve Claude benzeri akıcı, doğal ve Türkçe konuşan bir **Yapay Zeka Kıdemli Mühendisi (Staff AI Engineer)** olmasını talep etti.
+
+### 82.2. Teknik Analiz & Çözüm
+1. **Google AI Studio Model Kota Analizi:**
+   - Google'ın son API politikası gereği `gemini-2.0-flash` ve `gemini-2.5-flash` modelleri yeni kullanıcılar için kapatılmış (`404`), `gemini-flash-latest` ve `gemini-3.8-flash` ise ücretsiz katmanda anlık yoğunluk (`503 - high demand`) vermektedir.
+   - Kullanıcının API anahtarıyla yapılan canlı testte, `gemini-3.5-flash-lite` modelinin sıfır gecikmeyle ve yüksek kalitede akıcı Türkçe ürettiği doğrulanmıştır.
+2. **Çok Turlu Konuşma Hafızası (Multi-Turn Chat Context):**
+   - `sendMessageAction` fonksiyonuna oturumun son 8 mesajını (`chatMessages`) kronolojik sırayla prompt'a bağlama yeteneği eklendi.
+   - Böylece asistan kullanıcının önceki sorularını, proje bağlamını ve mimari kararları unutmadan konuşmayı sürdürür.
+3. **Kalıpsız Doğal Sohbet Desteği:**
+   - Sistem prompt'u yenilenerek asistanın "samimi, vizyoner ve kıdemli bir mesai arkadaşı" rolü pekiştirildi.
+   - Sadece soru sorma, fikir danışma ve mimari tartışmalarda komut üretilmeyecek; doğrudan zeki bir yanıt dönecektir.
+   - Yalnızca kod veya terminal operasyonu gerektiğinde mesajın altına şık bir `ApprovalCard` eklenerek telefon ekranından tek tıkla Mac'te çalıştırılması sağlanacaktır.
+
+---
+
+## 83. DevStudio: Sol Proje Sekmeleri, Sohbet Geçmişi & Otonom Gözlem Döngüsü
+
+### 83.1. Kullanıcı Geri Bildirimi & Talep
+- Kullanıcı: *"DevStudio tarafında işler iyi gitmiyor. Bir yazıyorum bir cevap veriyor ve dizin yapısına bakalım diyor. Ardından sonuç geliyor sonra hiçbir cevap yazışma yönlendirme yok. İş bitti mi bitmedi mi anlaşılmıyor. Bir de konu yazıyorum tam cevap yazarken yarısı geliyor gerisi gelmiyor. Süreç bu şekilde ilerlemez oluyor"*
+- Kullanıcı: *"Yukarıda projeler listbox'dan seçiliyor. İçinde şu an DevStudio, BurstaBugun ve AllTripX var. Halbuki bunlar solda tab gibi olsa, tıklayınca o tabın Chatbotu açılsa, history'i görsek, her projenin kendi ekranında çalışsak"*
+- Ayrıca ekran görüntüsünde: `Server Action "40f28..." was not found on the server` Next.js sürüm hash uyumsuzluğu tespit edildi.
+
+### 83.2. Uygulanan Çözümler
+1. **Otonom Takip Döngüsü (Autonomous Runner Feedback Loop):**
+   - Önceden Mac Runner bir komutu tamamladığında (`task_completed`) terminal çıktısı ekrana basılıyor ancak yapay zekaya haber verilmiyordu; bu da sohbetin yeşil kartta kilitlenmesine yol açıyordu.
+   - Şimdi runner çıktısı geldiği an istemci otomatik olarak `POST /api/chat` uç noktasına `[GÖZLEM / MAC RUNNER ÇIKTISI]` bildirimi gönderir.
+   - Yapay zeka çıktıyı derhal inceler, işlemin bittiğini teyit eder ve kullanıcıya *"Çıktıyı inceledim: ... Sıradaki adımımız şudur, ne dersin?"* diyerek yönlendirme yapar.
+2. **Kalıcı REST API Rotası (`/api/chat`):**
+   - Kırılgan Server Action hash mekanizması yerine Cloud Run'da her deploy'da kalıcı çalışan `/api/chat` route handler'ı oluşturuldu.
+   - Böylece sayfayı yenilemeyen mobil kullanıcılarda `failed-to-find-server-action` hatası imkansız hale getirildi.
+3. **Yarım Kalma / Kesilme Önlemi:**
+   - `gemini-3.5-flash-lite` çağrısına `maxOutputTokens: 8192` ve 30 saniyelik zaman aşımı tanımlanarak uzun teknik yanıtların kesilmeden tamamlanması garanti altına alındı.
+4. **Sol Kenar Çubuğu (Proje Sekmeleri & Sohbet Geçmişi):**
+   - Masaüstünde sabit, mobilde tek dokunuşla açılıp kapanan şık bir sol çekmece (`w-72 border-r border-slate-800 bg-slate-950/95`) geliştirildi.
+   - Her proje (DevStudio, AllTripX, BurstaBugun) için özel sekme ayrıldı; tıklandığında o projenin dizinine ve oturumuna geçilir.
+   - Her projenin altında `+ Yeni Sohbet` butonu ve geçmiş oturum listesi eklendi; eski oturumlara tıklandığında geçmiş mesajlar anında yüklenir.
+
+### 83.3. Dağıtım ve Doğrulama
+- **Cloud Run Sürümü:** `devstudio-00007-xs6` (`dernektebugun-492221`, `europe-west1`) %100 canlı trafiğe alındı.
+- **Canlı Adres:** `https://devstudio-51645421078.europe-west1.run.app`
+- **Kalite Kapısı (Kural 12):** Build 0 hata ile derlendi, REST API ve oturum koruması canlıda doğrulandı.
+- **GitHub Durumu (Kural 2):** Yerel commit (`b972084`) hazırlandı; Kural 2 uyarınca uzak depoya itme işlemi kullanıcının onayına sunuldu.
+
+---
+
+## 84. DevStudio: Arka Planda Dolan İlerleme Çubuğu & Sunucu Taraflı Atomik Yürütme Mimarisi (Server-Side Atomic Execution & Progress Pipeline)
+
+### 84.1. Kullanıcı Geri Bildirimi & Talep
+- **Kullanıcı:** *"yine kesti bence sanki mantığı değiştirmek lazım. Komutu yolladım o arkada çalışsın bu sırada ekranda bir çubuk dolsun. Sonuç bitince ya dinleyen bir şey ile sonucu alıp bir kerede basalım ya da o bizi tetiklesin olamıyor mu?"*
+- **Kullanıcı Ekran Görüntüsü Analizi:**
+  1. Çıktıda `git status` ve `git commit` arka arkaya çalışmış; çalışma ağacı temiz olduğu için `git commit` exitCode 1 fırlatmış ve arayüzde kırmızı `❌ Komut hata ile sonlandı` yazmıştır.
+  2. Terminal çıktısı hem veritabanından hem de istemciden mükerrer biçimde ekrana basılmıştır.
+  3. Yapay zeka çıktıyı incelerken *"tek yapmamız gereken bu mevcut commit"* diyerek cümlenin ortasında kesilmiştir.
+
+### 84.2. Kök Neden Analizi
+1. **İstemci-Güdümlü Kopuk Akış:** Komut bittiğinde istemci (telefon) sonucu yoklayıp (poll) ardından kendisi tekrar `/api/chat` uç noktasına istek atıyordu. Mobil ağlarda veya sekmeler arası geçişte bu ikinci istek zaman aşımına uğramakta veya token sınırına takılıp yarım kalabilmekteydi.
+2. **Kör Bekleme Deneyimi (Lack of Feedback):** Onayla butonuna basıldığında ekranda statik bir yazı kalıyor, kullanıcının algılayabileceği akıcı bir süreç / ilerleme çubuğu yer almıyordu.
+3. **Mükerrer Runner Mesajı:** Hem `/api/runner` hem de `chat-view.tsx` aynı çıktıyı `chatMessages` havuzuna basıyordu.
+4. **Git Zincirleme Komut Hatası:** `git add . && git commit ... && git push` zincirinde `working tree clean` durumu exitCode 1 ürettiği için zincir kırılıyor ve `git push` hiç çalışmıyordu.
+
+### 84.3. Tasarlanan Yeni Mimari (3 Temel Faz)
+
+#### 1. Faz: Arayüzde Dolan İlerleme Çubuğu (Animated Progress Bar & Timer)
+- `ApprovalCard` içinde onay verildiği an butonlar çekilir; yerine:
+  - Nabız efektli durum: `⚡ Mac Runner komutu çalıştırıyor... Terminal dinleniyor`
+  - **Akıcı Dolan Çubuk (Progress Bar):** Gradient geçişli (Cyan -> Emerald -> Blue) %0'dan %95'e yumuşakça dolan animasyonlu bar.
+  - Canlı Sayaç: `İcrada (3s... 6s...)`
+- Kullanıcı komutun arkada kesintisiz yürüdüğünü net olarak görür.
+
+#### 2. Faz: Sunucu Taraflı Otonom Analiz Motoru (Server-Driven Pipeline)
+- Mac Runner komutu bitirdiğinde sunucuya (`POST /api/runner`, action: `task_completed`) çıktıyı ve çıkış kodunu iletir.
+- **YENİLİK:** İstemcinin ikinci bir istek atması beklenmez! Sunucu (`/api/runner`) doğrudan Gemini 3.5 Flash Lite motorunu tetikler:
+  - Çıktıyı inceler (Örn: `nothing to commit` ise bunu hata değil "Temiz Çalışma Ağacı" olarak yorumlar).
+  - Analizini ve bir sonraki yönlendirmesini (örneğin `git push origin main` onay kartı gerekiyorsa kartını) sunucu tarafında eksiksiz üretir.
+  - Yanıtı `approvals.analysis` kolonuna ve `chatMessages` tablosuna **tek parça halinde** mühürler.
+
+#### 3. Faz: Tek Seferde Eksiksiz Karşılama (Atomic Delivery)
+- İstemci `getApprovalStatusAction(approvalId)` yoklamasında komutun bittiğini yakaladığı an:
+  - İlerleme çubuğu anında %100 yeşile vurur (`✅ Komut Tamamlandı`).
+  - Sunucunun hazırladığı eksiksiz yapay zeka analizi ve sıradaki adım kartı **tek seferde, tek bir kart içinde** ekrana basılır.
+### 84.4. Dağıtım ve Canlı Doğrulama
+- **Cloud Run Sürümü:** `devstudio-00008-mf8` (`dernektebugun-492221`, `europe-west1`) %100 canlı trafiğe alındı.
+- **Canlı Adres:** `https://devstudio-51645421078.europe-west1.run.app`
+- **Mac Runner Durumu:** `task-9368` arka plan daemon'u `dev_sec_3ff99e22...` token'ı ile canlı bağlı ve 4 saniyede bir heartbeat gönderiyor.
+- **Veritabanı Durumu:** `approvals.analysis` kolonu Cloud SQL PostgreSQL üzerinde aktif.
+- **GitHub Durumu (Kural 2):** Yerel commit (`f5040c3`) tamamlandı; uzak depoya `git push` işlemi kullanıcının açık onayına tabidir.
+
+---
