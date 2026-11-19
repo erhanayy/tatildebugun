@@ -4488,3 +4488,39 @@ Kullanıcının *"Gövleyi sildim puan -994bin oldu"* bildirimi ve paylaştığ�
 3. **Kural Disiplini:**
    - Kural 2 uyarınca GitHub'a otomatik push yapılmadı.
    - Kural 3 uyarınca otomatik canlı dağıtım (deploy) yapılmadı.
+
+---
+
+## 87. Harita Popup ve Çekmece Silme Butonu Olay Yayılımı (Event Bubbling) Çözümü ve Özel Onay Modalı (Custom Delete Modal) Mimarisi
+
+Kullanıcının *"Şimdide Vexholm u silmeye çalışınca emin misiniz butonu çıkıp hemen kayboluyor silemiyorum"* geri bildirimi üzerine gerçekleştirilen kök neden analizi ve kalıcı arayüz çözümü:
+
+### 87.1. Kök Neden Analizi (Root Cause Analysis)
+1. **Leaflet Olay Yayılımı (Event Bubbling & closePopupOnClick):**
+   - Harita üzerindeki bir şehir pinine (örn. Vaxholms kommun, İsveç) tıklandığında Leaflet harita katmanı üzerinde bir `popupContent` penceresi açılmaktadır.
+   - Popup içerisindeki `🗑️ Sil` butonuna tıklandığında, tıklama olayı (`click`) harita DOM konteynerine doğru yukarı doğru kabarmaktaydı (`bubble`).
+   - Leaflet varsayılan olarak haritaya tıklama algıladığında açık olan tüm pop-up'ları anında kapatmakta (`closePopupOnClick: true`), aynı anda `world-map.tsx` içerisindeki `map.on("click")` dinleyicisi tetiklenerek "Yeni Ziyaret Ekle" modalını (`isModalOpen = true`) açmaktaydı.
+2. **`window.confirm()` Tarayıcı İptali:**
+   - Tıklama anında tarayıcının yerel `confirm("Bu seyahat kaydını silmek istediğinize emin misiniz?")` fonksiyonu çağrıldığı anda; arkaplanda Leaflet'in pop-up'ı kapatması ve React'in modalı açarak odak noktasını değiştirmesi nedeniyle Chrome tarayıcısı yerel onay kutusunu anında `false` (İptal) sayarak 0.1 saniye içinde kapatmaktaydı. Kullanıcı onay butonunun anlık yanıp söndüğünü ve kaybolduğunu görmekteydi.
+
+### 87.2. Uygulanan Kalıcı Çözümler ve Modern Arayüz
+1. **İlkel `window.confirm()` Kaldırıldı, Modern Özel Onay Modalı Eklendi:**
+   - Harita (`world-map.tsx`) üzerine `visitToDelete` ve `tripToDelete` state'leri eklendi.
+   - Sil butonuna tıklandığında Leaflet popup'ı düzgünce kapanır ve ekranın tam ortasında modern, koyu cam arka planlı, `z-[3000]` katmanında güvenli bir silme onay penceresi açılır:
+     - Silinecek şehir ve ülke bilgisi: **"Vaxholms kommun, İsveç"**
+     - Puan uyarısı: *"⚠️ Bu seyahat için kazanılan 10 Puan hesabınızdan düşülecektir."*
+     - Min 44px dokunma hedefli, net `[Vazgeç]` ve `[Evet, Sil]` aksiyon butonları.
+2. **Leaflet Tıklama İzolasyonu (`disableClickPropagation`):**
+   - Popup içeriğine `L.DomEvent.disableClickPropagation(popupContent)` ve `L.DomEvent.disableScrollPropagation(popupContent)` eklendi.
+   - Popup içi buton tıklamalarında `e.stopPropagation()` ve `e.preventDefault()` çağrılarak harita tıklama dinleyicisinin yanlışlıkla tetiklenmesi ve pop-up'ın erkenden kapanması %100 engellendi.
+3. **Çekmecelerdeki (Drawers) Buton Tıklama İzolasyonu:**
+   - Hem `trips-drawer.tsx` (Seyahatlerim) hem de `trip-routes-drawer.tsx` (Rotalarım) bileşenlerindeki silme onay butonlarına (`setConfirmDeleteId`, `Vazgeç`, `Evet, Sil`) `e.stopPropagation()` uygulandı; dış tıklama veya kart kapanma aksaklıkları giderildi.
+
+### 87.3. Kalite Kapısı ve Doğrulama
+1. **TypeScript Kalite Kapısı (`npx tsc --noEmit`):**
+   - 0 Hata ile derlendi.
+2. **Otomatik Birim Testler (`npx tsx scripts/test_pin_trip_lifecycle.ts`):**
+   - 25 / 25 test (%100) başarıyla tamamlandı.
+3. **Kural 2 & 3 Disiplini:**
+   - GitHub push veya deploy otomatik yapılmadı.
+

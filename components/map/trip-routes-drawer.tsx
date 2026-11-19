@@ -236,15 +236,21 @@ export function TripRoutesDrawer({
                       <div className="flex items-center justify-end gap-2 pt-1">
                         <button
                           type="button"
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(null);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold cursor-pointer"
                         >
                           Vazgeç
                         </button>
                         <button
                           type="button"
                           disabled={deletingId === trip.id}
-                          onClick={() => handleDelete(trip.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(trip.id);
+                          }}
                           className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-sm disabled:opacity-60 cursor-pointer"
                         >
                           {deletingId === trip.id ? "Siliniyor..." : "Evet, Sil"}
@@ -308,7 +314,10 @@ export function TripRoutesDrawer({
 
                         <button
                           type="button"
-                          onClick={() => setConfirmDeleteId(trip.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(trip.id);
+                          }}
                           title="Rotayı Sil"
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-950/60 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 text-[11px] font-medium transition-colors cursor-pointer"
                         >

@@ -25,6 +25,7 @@ import {
   ListFilter,
   Navigation,
   Route,
+  AlertCircle,
 } from "lucide-react";
 import { deleteVisit } from "@/lib/actions/visits";
 import { toast } from "sonner";
@@ -77,6 +78,12 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
 
   // Seyahat Listesi Çekmecesi (Drawer)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Silme Onay Modal State'leri (Güvenilir UI - window.confirm yerine)
+  const [visitToDelete, setVisitToDelete] = useState<Visit | null>(null);
+  const [isDeletingVisit, setIsDeletingVisit] = useState(false);
+  const [tripToDelete, setTripToDelete] = useState<TripWithStops | null>(null);
+  const [isDeletingTrip, setIsDeletingTrip] = useState(false);
 
   // İstatistikler
   const stats = useMemo(() => {
@@ -638,8 +645,11 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
 
           // Popup içi Düzenle ve Sil Olay Dinleyicileri
           popupContent.addEventListener("click", (e) => {
+            e.stopPropagation();
+
             const target = (e.target as HTMLElement).closest("[data-edit-id]") as HTMLElement;
             if (target) {
+              e.preventDefault();
               const vId = target.getAttribute("data-edit-id");
               const found = city.visits.find((x) => x.id === vId);
               if (found) {
@@ -652,20 +662,19 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
 
             const delTarget = (e.target as HTMLElement).closest("[data-delete-id]") as HTMLElement;
             if (delTarget) {
+              e.preventDefault();
               const vId = delTarget.getAttribute("data-delete-id");
-              if (vId && confirm("Bu seyahat kaydını silmek istediğinize emin misiniz?")) {
+              const found = city.visits.find((x) => x.id === vId);
+              if (found) {
                 marker.closePopup();
-                deleteVisit(vId).then((res) => {
-                  if (res.success) {
-                    toast.success("Seyahat kaydı başarıyla silindi. 🗑️");
-                    handleDeleteVisit(vId);
-                  } else {
-                    toast.error(res.message || "Silme başarısız.");
-                  }
-                });
+                setVisitToDelete(found);
               }
             }
           });
+
+          // Leaflet'in popup tıklamalarını haritaya iletip popup'ı anında kapatmasını engelle
+          L.DomEvent.disableClickPropagation(popupContent);
+          L.DomEvent.disableScrollPropagation(popupContent);
 
           marker.bindPopup(popupContent, { offset: [0, -15] });
         });
@@ -983,19 +992,54 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
     }
   };
 
-  // Haritadan veya Popup'tan Rota Sil
-  const handleDeleteTripFromMap = async (tripId: string) => {
-    if (window.confirm("Bu seyahat rotasını silmek istediğinize emin misiniz?")) {
-      const res = await deleteTrip(tripId);
+  // Haritadan veya Popup'tan Rota Silme Onayı (Modal Tetikleyici)
+  const handleDeleteTripFromMap = (tripId: string) => {
+    const target = tripsList.find((t) => t.id === tripId);
+    if (target) {
+      setTripToDelete(target);
+    }
+  };
+
+  // Ziyaret Silme Kesin Onaylandı
+  const handleConfirmDeleteVisit = async () => {
+    if (!visitToDelete) return;
+    setIsDeletingVisit(true);
+    try {
+      const res = await deleteVisit(visitToDelete.id);
+      if (res.success) {
+        toast.success("Seyahat kaydı başarıyla silindi. 🗑️");
+        handleDeleteVisit(visitToDelete.id);
+        setVisitToDelete(null);
+      } else {
+        toast.error(res.message || "Silme başarısız.");
+      }
+    } catch (e) {
+      toast.error("Silme işlemi sırasında hata oluştu.");
+    } finally {
+      setIsDeletingVisit(false);
+    }
+  };
+
+  // Rota Silme Kesin Onaylandı
+  const handleConfirmDeleteTrip = async () => {
+    if (!tripToDelete) return;
+    setIsDeletingTrip(true);
+    try {
+      const res = await deleteTrip(tripToDelete.id);
       if (res.success) {
         toast.success("Rota başarıyla silindi. 🗑️");
-        setTripsList((prev) => prev.filter((t) => t.id !== tripId));
-        if (selectedTripId === tripId) {
+        setTripsList((prev) => prev.filter((t) => t.id !== tripToDelete.id));
+        if (selectedTripId === tripToDelete.id) {
           setSelectedTripId(null);
         }
+        setTripToDelete(null);
       } else {
         toast.error(res.message || "Rota silinemedi.");
       }
+    } catch (e) {
+      toast.error("Rota silme işlemi sırasında hata oluştu.");
+    } finally {
+      setIsDeletingTrip(false);
     }
   };
 
@@ -1208,6 +1252,94 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
         }}
         onTripUpdated={handleTripUpdated}
       />
+
+      {/* 9. Ziyaret (Pin) Silme Onay Modalı */}
+      {visitToDelete && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center">
+              <Trash2 className="w-7 h-7" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                Seyahat Kaydını Sil
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <strong className="text-slate-800 dark:text-slate-200">{visitToDelete.cityName}, {visitToDelete.countryName}</strong> kaydını silmek istediğinize emin misiniz?
+              </p>
+              <div className="pt-1">
+                <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-50 dark:bg-amber-950/50 py-1 px-2.5 rounded-lg border border-amber-200 dark:border-amber-900/50 inline-block">
+                  ⚠️ Bu seyahat için kazanılan 10 Puan hesabınızdan düşülecektir.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setVisitToDelete(null)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-colors cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingVisit}
+                onClick={handleConfirmDeleteVisit}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-500/20 transition-all disabled:opacity-60 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isDeletingVisit ? "Siliniyor..." : "Evet, Sil"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Rota Silme Onay Modalı */}
+      {tripToDelete && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center">
+              <Trash2 className="w-7 h-7" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                Seyahat Rotasını Sil
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <strong className="text-slate-800 dark:text-slate-200">"{tripToDelete.title}"</strong> rotasını silmek istediğinize emin misiniz?
+              </p>
+              {tripToDelete.status === "completed" && (
+                <div className="pt-1">
+                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold bg-amber-50 dark:bg-amber-950/50 py-1 px-2.5 rounded-lg border border-amber-200 dark:border-amber-900/50 inline-block">
+                    ⚠️ Bu rota için kazanılan 50 Puan hesabınızdan düşülecektir.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setTripToDelete(null)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-700/80 transition-colors cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingTrip}
+                onClick={handleConfirmDeleteTrip}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-500/20 transition-all disabled:opacity-60 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {isDeletingTrip ? "Siliniyor..." : "Evet, Sil"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
