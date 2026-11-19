@@ -25,6 +25,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
+import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 
 interface TripRoutesDrawerProps {
   isOpen: boolean;
@@ -61,6 +62,13 @@ export function TripRoutesDrawer({
           ? "Tebrikler! Rota 'Tamamlandı' olarak işaretlendi! 🏆🎉"
           : "Rota 'Planlanan' olarak güncellendi. ⏳"
       );
+      triggerFloatingPoints({
+        points: newStatus === "completed" ? 50 : -50,
+        label: `${res.trip.title} ${newStatus === "completed" ? "Tamamlandı" : "Planlandı"}`,
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("refresh-points"));
+      }
       if (onTripUpdated) {
         onTripUpdated(res.trip);
       }
@@ -73,6 +81,7 @@ export function TripRoutesDrawer({
   if (!isOpen) return null;
 
   async function handleDelete(tripId: string) {
+    const target = trips.find((t) => t.id === tripId);
     setDeletingId(tripId);
     const res = await deleteTrip(tripId);
     if (res.success) {
@@ -80,6 +89,15 @@ export function TripRoutesDrawer({
       onDeleteTrip(tripId);
       if (selectedTripId === tripId) {
         onSelectTrip(null);
+      }
+      if (target?.status === "completed") {
+        triggerFloatingPoints({
+          points: -50,
+          label: `${target.title} Rotası İadesi`,
+        });
+      }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("refresh-points"));
       }
       setConfirmDeleteId(null);
     } else {

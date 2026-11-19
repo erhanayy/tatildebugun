@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import type { Visit } from "@/lib/db/schema";
 import { getCountryFlagHtml, COUNTRY_CENTERS } from "@/lib/country-flags";
 import { MapThemeSwitcher, MAP_THEMES, type MapThemeId } from "./map-theme-switcher";
@@ -10,6 +11,7 @@ import { CreateTripModal } from "./create-trip-modal";
 import { TripRoutesDrawer } from "./trip-routes-drawer";
 import { deleteTrip, updateTripStatus, type TripWithStops } from "@/lib/actions/trips";
 import { useTranslation } from "@/lib/i18n";
+import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 import {
   Globe2,
   MapPin,
@@ -37,6 +39,7 @@ interface WorldMapProps {
 }
 
 export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
+  const router = useRouter();
   const { t, locale } = useTranslation();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -987,6 +990,14 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
     if (res.success && res.trip) {
       toast.success("Tebrikler! Rota 'Tamamlandı' olarak işaretlendi! 🏆🎉");
       setTripsList((prev) => prev.map((t) => (t.id === tripId ? res.trip! : t)));
+      triggerFloatingPoints({
+        points: 50,
+        label: `${res.trip.title} Tamamlandı!`,
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("refresh-points"));
+      }
+      router.refresh();
     } else {
       toast.error(res.message || "Rota durumu güncellenemedi.");
     }
@@ -1009,6 +1020,14 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
       if (res.success) {
         toast.success("Seyahat kaydı başarıyla silindi. 🗑️");
         handleDeleteVisit(visitToDelete.id);
+        triggerFloatingPoints({
+          points: -10,
+          label: `${visitToDelete.cityName} Pini İadesi`,
+        });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("refresh-points"));
+        }
+        router.refresh();
         setVisitToDelete(null);
       } else {
         toast.error(res.message || "Silme başarısız.");
@@ -1032,6 +1051,16 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
         if (selectedTripId === tripToDelete.id) {
           setSelectedTripId(null);
         }
+        if (tripToDelete.status === "completed") {
+          triggerFloatingPoints({
+            points: -50,
+            label: `${tripToDelete.title} Rotası İadesi`,
+          });
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("refresh-points"));
+        }
+        router.refresh();
         setTripToDelete(null);
       } else {
         toast.error(res.message || "Rota silinemedi.");

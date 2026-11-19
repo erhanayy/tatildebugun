@@ -33,6 +33,7 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
+import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 
 interface AddVisitModalProps {
   isOpen: boolean;
@@ -304,9 +305,22 @@ export function AddVisitModal({
         toast.success(`${finalCity} seyahati başarıyla güncellendi! ✏️`);
       } else if (dateType === "timeless" && visitCount > 1) {
         toast.success(`${finalCity} için ${visitCount} bayrak haritaya başarıyla eklendi! 🚩`);
+        triggerFloatingPoints({
+          points: 10 * visitCount,
+          label: `${finalCity} (${visitCount} Gezi Pini)`,
+        });
       } else {
         toast.success(`${finalCity} ziyareti haritaya bayrak olarak eklendi! 🚩`);
+        triggerFloatingPoints({
+          points: 10,
+          label: `${finalCity} Gezi Pini`,
+        });
       }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("refresh-points"));
+      }
+
       if (returnedVisits.length > 0) {
         onSuccess(returnedVisits);
       }

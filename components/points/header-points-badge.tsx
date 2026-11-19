@@ -28,16 +28,25 @@ export function HeaderPointsBadge({ initialScore = 0, className = "" }: HeaderPo
       }
     }
     loadLivePoints();
+
+    // Sayfa odağa geldiğinde veya refresh-points olayı tetiklendiğinde senkronize et
+    window.addEventListener("refresh-points", loadLivePoints);
+    window.addEventListener("focus", loadLivePoints);
+
+    return () => {
+      window.removeEventListener("refresh-points", loadLivePoints);
+      window.removeEventListener("focus", loadLivePoints);
+    };
   }, []);
 
-  // Canlı Puan Kazanma Dopamin Senkronizasyonu
+  // Canlı Puan Kazanma / İade Dopamin Senkronizasyonu
   useEffect(() => {
     function handleAwardPoints(e: Event) {
       const customEvent = e as CustomEvent<FloatingPointEventDetail>;
       if (!customEvent.detail || typeof customEvent.detail.points !== "number") return;
 
       const added = customEvent.detail.points;
-      setPoints((prev) => prev + added);
+      setPoints((prev) => Math.max(0, prev + added));
       setIsGlowing(true);
 
       const timer = setTimeout(() => {

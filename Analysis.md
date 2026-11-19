@@ -4524,3 +4524,40 @@ Kullanıcının *"Şimdide Vexholm u silmeye çalışınca emin misiniz butonu �
 3. **Kural 2 & 3 Disiplini:**
    - GitHub push veya deploy otomatik yapılmadı.
 
+---
+
+## 88. İstemci Tarafı Gerçek Zamanlı Puan Senkronizasyonu (Live Event & Cache Invalidation Bus) Mimarisi
+
+Kullanıcının *"Şimdi de seyahat başarı ile silindi dedi ve pin gitti puan azalmadı maalesef"* geri bildirimi üzerine yapılan analiz ve kalıcı mimari entegrasyon:
+
+### 88.1. Kök Neden Analizi (Root Cause Analysis)
+1. **Veritabanında Puan Başarıyla Düştü:**
+   - `user_points_ledger` ve `users` tabloları incelendiğinde; kullanıcının Vaxholm pinini silmesiyle birlikte veritabanı tarafında `delete_pin` (-10 Pts) kaydının anında ve kusursuzca yazıldığı ve kullanıcının `travelerScore` değerinin **2,955 Pts'den 2,925 Pts'ye** düştüğü tespit edildi.
+2. **İstemci (Client-Side Header) Senkronizasyon Eksikliği:**
+   - Üst bardaki altın madalya rozeti ([HeaderPointsBadge](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/points/header-points-badge.tsx)), puanı yalnızca sayfanın ilk açılışında (`useEffect(..., [])`) sunucudan çekmekteydi.
+   - Haritada veya çekmecede bir pin/rota silindiğinde veya yeni bir pin eklendiğinde; arayüz yerel liste state'ini güncellese dahi, üst bardaki puan rozetini tetikleyen bir olay (`refresh-points`) veya sayfa tazeleyicisi (`router.refresh()`) çağrılmamaktaydı.
+   - Bu nedenle kullanıcı sayfayı F5 ile yenileyene kadar üst barda eski puan (2,955) donuk kalıyordu.
+
+### 88.2. Uygulanan Kalıcı Çözümler ve Çift Taraflı Senkronizasyon (Bus Pattern)
+1. **`HeaderPointsBadge` Canlı Olay ve Odak Dinleyicileri:**
+   - Üst barda yer alan bileşene `refresh-points` özel tarayıcı olayı dinleyicisi eklendi.
+   - Ayrıca tarayıcı sekmesi odağa geldiğinde (`window.addEventListener("focus")`) otomatik olarak sunucuyla arka planda el sıkışarak güncel puanı eşitleme yeteneği kazandırıldı.
+   - `setPoints((prev) => Math.max(0, prev + added))` ile negatif düşüşler anlık olarak rozete yansıtıldı.
+2. **Yüzen Puan Baloncukları (`FloatingPointsContainer`) Negatif Destek:**
+   - [floating-points-effect.tsx](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/components/points/floating-points-effect.tsx) bileşeni negatif puanları destekleyecek şekilde güncellendi.
+   - Pin veya rota silindiğinde ekranın üstünden zarif kırmızı/gül rengi (`border-rose-500`, `text-rose-400`) bir baloncukla **"-10 Hesabınızdan Düşüldü"** animasyonu gösterilir.
+3. **Tüm CRUD Eylemlerine Puan Senkronizasyonu Entegre Edildi:**
+   - **Pin Silindiğinde (`world-map.tsx` & `trips-drawer.tsx`):** `triggerFloatingPoints({ points: -10 })` + `window.dispatchEvent("refresh-points")` + `router.refresh()`.
+   - **Pin Eklendiğinde (`add-visit-modal.tsx`):** `triggerFloatingPoints({ points: +10 })` + `window.dispatchEvent("refresh-points")`.
+   - **Rota Silindiğinde (`world-map.tsx` & `trip-routes-drawer.tsx`):** `triggerFloatingPoints({ points: -50 })` + `window.dispatchEvent("refresh-points")` + `router.refresh()`.
+   - **Rota Tamamlandığında (`world-map.tsx` & `trip-routes-drawer.tsx`):** `triggerFloatingPoints({ points: +50 })` + `window.dispatchEvent("refresh-points")` + `router.refresh()`.
+   - **Yeni Rota Oluşturulduğunda (`create-trip-modal.tsx`):** `triggerFloatingPoints({ points: +50 })` + `window.dispatchEvent("refresh-points")`.
+
+### 88.3. Kalite Kapısı ve Doğrulama
+1. **TypeScript Kalite Kapısı (`npx tsc --noEmit`):**
+   - 0 Hata ile tamamlandı.
+2. **Otomatik Birim Testler (`npx tsx scripts/test_pin_trip_lifecycle.ts`):**
+   - 25 / 25 test (%100) başarıyla tamamlandı.
+3. **Kural Disiplini:**
+   - Kural 2 uyarınca GitHub push yapılmadı.
+   - Kural 3 uyarınca deploy yapılmadı.

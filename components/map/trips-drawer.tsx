@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { deleteVisit } from "@/lib/actions/visits";
 import { toast } from "sonner";
+import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 
 interface TripsDrawerProps {
   isOpen: boolean;
@@ -61,6 +62,10 @@ export function TripsDrawer({
       toast.success("Seyahat kaydı başarıyla silindi. 🗑️");
       onDeleteVisit(visitId);
       setConfirmDeleteId(null);
+      triggerFloatingPoints({ points: -10, label: "Gezi Pini İadesi" });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("refresh-points"));
+      }
     } else {
       toast.error(res.message || "Silme işlemi sırasında hata oluştu.");
     }

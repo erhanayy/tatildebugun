@@ -8,6 +8,7 @@ import {
   resolveLocationCoordinates,
   findCountryByNameOrCode,
 } from "@/lib/world-cities";
+import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 import { CountryAutocomplete, CityAutocomplete } from "./location-autocomplete";
 import {
   X,
@@ -468,6 +469,9 @@ export function CreateTripModal({
         const res = await updateTrip(initialTrip.id, input);
         if (res.success && res.trip) {
           toast.success("Rota başarıyla güncellendi! 🚀");
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("refresh-points"));
+          }
           if (onTripUpdated) onTripUpdated(res.trip);
           onClose();
         } else {
@@ -477,6 +481,15 @@ export function CreateTripModal({
         const res = await createTrip(input);
         if (res.success && res.trip) {
           toast.success("Rota başarıyla oluşturuldu! 🚀");
+          if (input.status === "completed") {
+            triggerFloatingPoints({
+              points: 50,
+              label: `${res.trip.title} Rotası`,
+            });
+          }
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("refresh-points"));
+          }
           onTripCreated(res.trip);
           onClose();
         } else {
