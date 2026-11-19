@@ -1,90 +1,153 @@
 import { db } from "@/lib/db";
-import { userPointsLedger, valueSharePools, users, UserPointsLedger } from "@/lib/db/schema";
+import {
+  userPointsLedger,
+  valueSharePools,
+  users,
+  visits,
+  trips,
+  userConnections,
+  UserPointsLedger,
+} from "@/lib/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 
 export const CURRENT_SEASON_YEAR = 2026;
 export const CURRENT_RULE_VERSION = "v1.0";
+export const SEASON_START_RATE = 0.2; // Yıla Başlangıç Puanı oranı (%20)
+export const REFERRAL_PASSIVE_RATE = 0.2; // Arkadaş daveti pasif puan oranı (%20)
 
-// 2026 Sezonu Temel Kural Matrisi (Madde 81.1)
+/**
+ * Tüm puan ve oran hesaplamalarında ondalıklı değerleri en yakın tam sayıya yuvarlar.
+ * Platformda puanlar istisnasız her zaman TAM SAYI (integer) olarak işlenir.
+ */
+export function roundPoints(raw: number): number {
+  if (!Number.isFinite(raw)) return 0;
+  return Math.round(raw);
+}
+
+/**
+ * Arkadaş daveti %20 pasif puan payını tam sayı olarak hesaplar.
+ */
+export function calculateReferralPassivePoints(
+  sourcePoints: number,
+  rate: number = REFERRAL_PASSIVE_RATE
+): number {
+  if (!Number.isFinite(sourcePoints) || sourcePoints <= 0) return 0;
+  return roundPoints(sourcePoints * rate);
+}
+
+// 2026 Sezonu Temel Kural Matrisi (Madde 81.1 & Madde 92)
 export const POINT_RULES: Record<
   string,
-  { base: number; multiplier: number; titleTr: string; titleEn: string }
+  {
+    base: number;
+    multiplier: number;
+    includedInSeasonStart: boolean;
+    titleTr: string;
+    titleEn: string;
+  }
 > = {
   daily_login: {
     base: 5,
     multiplier: 1.0,
+    includedInSeasonStart: false,
     titleTr: "Günlük Giriş Rozeti",
     titleEn: "Daily Login Badge",
   },
   comment_like: {
     base: 5,
     multiplier: 1.0,
+    includedInSeasonStart: false,
     titleTr: "Topluluk Yorum & Beğeni Etkileşimi",
     titleEn: "Community Comment & Like Interaction",
   },
   create_pin: {
     base: 10,
     multiplier: 1.0,
-    titleTr: "Rota / Mekan Pin Oluşturma (Masabaşı)",
-    titleEn: "Route / Place Pin Creation (Desk)",
+    includedInSeasonStart: true,
+    titleTr: "Gezi / Mekan Pini Ekleme",
+    titleEn: "Travel / Place Pin Creation",
   },
   checkin_pin: {
     base: 10,
     multiplier: 20.0, // 20x Fiziki Check-in Çarpanı (Madde 81.1) = 200 Puan
+    includedInSeasonStart: false,
     titleTr: "Fiziki Mekan Check-in & GPS Doğrulaması (20x Çarpan!)",
     titleEn: "Physical Place Check-in & GPS Verification (20x Boost!)",
   },
   b2b_purchase: {
     base: 100,
     multiplier: 1.0,
+    includedInSeasonStart: false,
     titleTr: "Partner İşletme Rezervasyon / Satın Alma",
     titleEn: "Partner Booking / Purchase",
   },
   referral_passive: {
     base: 0,
     multiplier: 0.2, // %20 Pasif Arkadaş Payı (Madde 81.2)
+    includedInSeasonStart: false,
     titleTr: "Arkadaş Seyahat Katkı Payı (%20 Pasif Gelir)",
     titleEn: "Friend Travel Contribution (%20 Passive Share)",
   },
   carry_over: {
     base: 0,
     multiplier: 1.0,
-    titleTr: "Geçmiş Sezon Kıdem Devir Puanı (Carry-Over)",
-    titleEn: "Past Season Seniority Carry-Over",
+    includedInSeasonStart: false,
+    titleTr: "Yıla Başlangıç Puanı",
+    titleEn: "Season Starting Score",
   },
   admin_reward: {
     base: 0,
     multiplier: 1.0,
+    includedInSeasonStart: false,
     titleTr: "Yönetici Özel Başarım Bonusu",
     titleEn: "Admin Special Achievement Reward",
   },
   admin_penalty: {
     base: 0,
     multiplier: 1.0,
+    includedInSeasonStart: false,
     titleTr: "Kural İhlali Ceza Kesintisi (Penalty)",
     titleEn: "Rule Violation Penalty Deduction",
   },
   delete_pin: {
     base: -10,
     multiplier: 1.0,
+    includedInSeasonStart: false,
     titleTr: "Silinen Gezi Pini İadesi (Geri Alma)",
     titleEn: "Deleted Travel Pin Reversal",
   },
   complete_trip: {
     base: 50,
     multiplier: 1.0,
+    includedInSeasonStart: true,
     titleTr: "Tamamlanan Seyahat Rotası Bonusu",
     titleEn: "Completed Travel Route Bonus",
   },
   delete_trip: {
     base: -50,
     multiplier: 1.0,
+    includedInSeasonStart: false,
     titleTr: "Silinen Seyahat Rotası İadesi (Geri Alma)",
     titleEn: "Deleted Travel Route Reversal",
+  },
+  connect_friend: {
+    base: 20,
+    multiplier: 1.0,
+    includedInSeasonStart: true,
+    titleTr: "Onaylı Arkadaş / Aile İlişkisi",
+    titleEn: "Confirmed Friend / Family Connection",
+  },
+  remove_friend: {
+    base: -20,
+    multiplier: 1.0,
+    includedInSeasonStart: false,
+    titleTr: "Kaldırılan İlişki Puan İadesi",
+    titleEn: "Removed Connection Point Reversal",
   },
   welcome_bonus: {
     base: 50,
     multiplier: 1.0,
+    includedInSeasonStart: false,
     titleTr: "AllTripX Kaşif Hoşgeldin Bonusu",
     titleEn: "AllTripX Explorer Welcome Bonus",
   },
@@ -103,15 +166,122 @@ export interface AwardPointsInput {
 }
 
 /**
+ * İki kullanıcı arasındaki sosyal bağlantı için sıradan bağımsız (kanonik) tekil anahtar üretir.
+ * Örn: getConnectionPairKey(u1, u2) === getConnectionPairKey(u2, u1)
+ */
+export function getConnectionPairKey(userA: string, userB: string): string {
+  return `pair:${[userA, userB].sort().join(":")}`;
+}
+
+/**
+ * Bir kullanıcının belirli bir referans (rota, pin, sosyal bağlantı çifti vb.) için
+ * tüm sezonlar boyunca defterdeki NET puan bakiyesini hesaplar.
+ * Çifte ödül, ekle-sil farming ve çifte kesintiyi kesin olarak engeller.
+ */
+export async function getReferenceNetPoints(
+  userId: string,
+  referenceId: string
+): Promise<number> {
+  const rows = await db
+    .select({ finalPoints: userPointsLedger.finalPoints })
+    .from(userPointsLedger)
+    .where(
+      and(
+        eq(userPointsLedger.userId, userId),
+        eq(userPointsLedger.referenceId, referenceId)
+      )
+    );
+  return rows.reduce((sum, r) => sum + r.finalPoints, 0);
+}
+
+export interface SeasonStartingPointsBreakdown {
+  pinCount: number;
+  completedTripCount: number;
+  activeConnectionCount: number;
+  pinPoints: number;
+  tripPoints: number;
+  connectionPoints: number;
+  totalStartingPoints: number;
+}
+
+/**
+ * Yıla Başlangıç Puanı (Saf Hesaplama):
+ * - Toplam Pin Sayısı × 10 × %20
+ * - Toplam Tamamlanan Rota Sayısı × 50 × %20
+ * - Toplam Sosyal İlişki Sayısı × 20 × %20
+ * Tüm ara ve toplam değerler tam sayıya yuvarlanır. Diğer puan kalemleri dahil edilmez.
+ */
+export function computeSeasonStartingPointsFromCounts(counts: {
+  pinCount: number;
+  completedTripCount: number;
+  activeConnectionCount: number;
+}): SeasonStartingPointsBreakdown {
+  const safePins = Math.max(0, Math.floor(counts.pinCount || 0));
+  const safeTrips = Math.max(0, Math.floor(counts.completedTripCount || 0));
+  const safeConnections = Math.max(0, Math.floor(counts.activeConnectionCount || 0));
+
+  const pinPoints = roundPoints(safePins * POINT_RULES.create_pin.base * SEASON_START_RATE);
+  const tripPoints = roundPoints(safeTrips * POINT_RULES.complete_trip.base * SEASON_START_RATE);
+  const connectionPoints = roundPoints(
+    safeConnections * POINT_RULES.connect_friend.base * SEASON_START_RATE
+  );
+
+  return {
+    pinCount: safePins,
+    completedTripCount: safeTrips,
+    activeConnectionCount: safeConnections,
+    pinPoints,
+    tripPoints,
+    connectionPoints,
+    totalStartingPoints: roundPoints(pinPoints + tripPoints + connectionPoints),
+  };
+}
+
+/**
+ * Bir kullanıcının veritabanındaki o güne kadarki aktif varlıklarına göre
+ * Yıla Başlangıç Puanını (Pin + Tamamlanan Rota + Onaylı İlişki) hesaplar.
+ */
+export async function calculateSeasonStartingPoints(
+  userId: string
+): Promise<SeasonStartingPointsBreakdown> {
+  const [pinRows, tripRows, connRows] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(visits)
+      .where(eq(visits.userId, userId)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(trips)
+      .where(and(eq(trips.userId, userId), eq(trips.status, "completed"))),
+    db
+      .select({ targetUserId: userConnections.targetUserId })
+      .from(userConnections)
+      .where(
+        and(eq(userConnections.userId, userId), eq(userConnections.status, "accepted"))
+      ),
+  ]);
+
+  const pinCount = Number(pinRows[0]?.count || 0);
+  const completedTripCount = Number(tripRows[0]?.count || 0);
+  const activeConnectionCount = new Set(connRows.map((c) => c.targetUserId)).size;
+
+  return computeSeasonStartingPointsFromCounts({
+    pinCount,
+    completedTripCount,
+    activeConnectionCount,
+  });
+}
+
+/**
  * Puan Dağıtım ve Ledger İşleme Motoru (Event-Sourcing Ledger Pattern)
  */
 export async function awardPoints(input: AwardPointsInput): Promise<UserPointsLedger> {
   const year = input.year || CURRENT_SEASON_YEAR;
   const rule = POINT_RULES[input.actionType];
 
-  const basePoints = input.basePoints ?? (rule ? rule.base : 0);
+  const basePoints = roundPoints(input.basePoints ?? (rule ? rule.base : 0));
   const multiplier = input.multiplier ?? (rule ? rule.multiplier : 1.0);
-  const finalPoints = Math.round(basePoints * multiplier);
+  const finalPoints = roundPoints(basePoints * multiplier);
 
   const descText =
     input.description ||
@@ -183,12 +353,13 @@ export async function awardPoints(input: AwardPointsInput): Promise<UserPointsLe
     })
     .where(eq(valueSharePools.year, year));
 
-  // 5. Madde 81.2: Referral Pasif Gelir Kontrolü (%20 Arkadaş Geliri)
-  // Eğer bu eylem doğrudan bir seyahat katkısıysa (check-in, pin, b2b) ve kullanıcı bir davet koduyla gelmişse
+  // 5. Madde 81.2 & Madde 92: Referral Pasif Gelir Kontrolü (%20 Arkadaş Geliri - Kesin Tam Sayı)
+  // Eğer bu eylem doğrudan bir seyahat katkısıysa (check-in, pin, tamamlanan rota, b2b) ve kullanıcı davet koduyla gelmişse
   if (
     finalPoints > 0 &&
     (input.actionType === "checkin_pin" ||
       input.actionType === "create_pin" ||
+      input.actionType === "complete_trip" ||
       input.actionType === "b2b_purchase")
   ) {
     try {
@@ -199,20 +370,20 @@ export async function awardPoints(input: AwardPointsInput): Promise<UserPointsLe
         .limit(1);
 
       const referrerId = userRecord[0]?.referredBy;
-      if (referrerId && referrerId !== input.userId) {
-        // Arkadaşın kazandığı puanın %20'si davet edenin hanesine pasif gelir olarak uçar!
-        const passiveSharePoints = Math.max(1, Math.round(finalPoints * 0.2));
+      const passiveSharePoints = calculateReferralPassivePoints(finalPoints);
+      if (referrerId && referrerId !== input.userId && passiveSharePoints > 0) {
+        // Arkadaşın kazandığı puanın %20'si (tam sayıya yuvarlanmış) davet edenin hanesine pasif gelir olarak uçar!
         await db.insert(userPointsLedger).values({
           userId: referrerId,
           actionType: "referral_passive",
           basePoints: finalPoints,
-          multiplier: 0.2,
+          multiplier: REFERRAL_PASSIVE_RATE,
           finalPoints: passiveSharePoints,
           referenceId: input.userId,
           referenceType: "user",
           year,
           ruleVersion: CURRENT_RULE_VERSION,
-          description: `Arkadaşın (${userRecord[0]?.fullName || "Gezgin"}) seyahat etti, hanene pasif puan uçtu! 🚀`,
+          description: `Arkadaşın (${userRecord[0]?.fullName || "Gezgin"}) seyahat etti, hanene +${passiveSharePoints} pasif puan uçtu! 🚀`,
           metadata: { referredUserId: input.userId, triggerAction: input.actionType },
         });
 

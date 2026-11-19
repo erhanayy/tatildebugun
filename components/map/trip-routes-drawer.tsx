@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
+import { useTranslation } from "@/lib/i18n";
 
 interface TripRoutesDrawerProps {
   isOpen: boolean;
@@ -48,6 +49,7 @@ export function TripRoutesDrawer({
   onEditTrip,
   onTripUpdated,
 }: TripRoutesDrawerProps) {
+  const { t, locale } = useTranslation();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
@@ -59,13 +61,17 @@ export function TripRoutesDrawer({
     if (res.success && res.trip) {
       toast.success(
         newStatus === "completed"
-          ? "Tebrikler! Rota 'Tamamlandı' olarak işaretlendi! 🏆🎉"
-          : "Rota 'Planlanan' olarak güncellendi. ⏳"
+          ? t("routesDrawer.toastCompleted")
+          : t("routesDrawer.toastPlanned")
       );
-      triggerFloatingPoints({
-        points: newStatus === "completed" ? 50 : -50,
-        label: `${res.trip.title} ${newStatus === "completed" ? "Tamamlandı" : "Planlandı"}`,
-      });
+      if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
+        triggerFloatingPoints({
+          points: res.pointsDelta,
+          label: `${res.trip.title} ${
+            res.pointsDelta > 0 ? t("routesDrawer.statusCompleted") : t("routesDrawer.statusPlanned")
+          }`,
+        });
+      }
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("refresh-points"));
       }
@@ -73,7 +79,7 @@ export function TripRoutesDrawer({
         onTripUpdated(res.trip);
       }
     } else {
-      toast.error(res.message || "Rota durumu güncellenemedi.");
+      toast.error(res.message || t("routesDrawer.toastStatusError"));
     }
     setUpdatingStatusId(null);
   }
@@ -85,15 +91,15 @@ export function TripRoutesDrawer({
     setDeletingId(tripId);
     const res = await deleteTrip(tripId);
     if (res.success) {
-      toast.success("Rota başarıyla silindi. 🗑️");
+      toast.success(t("routesDrawer.toastDeleted"));
       onDeleteTrip(tripId);
       if (selectedTripId === tripId) {
         onSelectTrip(null);
       }
-      if (target?.status === "completed") {
+      if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
         triggerFloatingPoints({
-          points: -50,
-          label: `${target.title} Rotası İadesi`,
+          points: res.pointsDelta,
+          label: `${target?.title || t("common.trips")} ${t("routesDrawer.floatingReversal")}`,
         });
       }
       if (typeof window !== "undefined") {
@@ -101,7 +107,7 @@ export function TripRoutesDrawer({
       }
       setConfirmDeleteId(null);
     } else {
-      toast.error(res.message || "Rota silinirken bir hata oluştu.");
+      toast.error(res.message || t("routesDrawer.toastDeleteError"));
     }
     setDeletingId(null);
   }
@@ -135,9 +141,11 @@ export function TripRoutesDrawer({
               <Navigation className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-white">Rotalarım</h3>
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                {t("routesDrawer.title")}
+              </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Toplam <b>{trips.length}</b> kayıtlı seyahat rotası
+                {t("routesDrawer.totalSubtitle", { count: String(trips.length) })}
               </p>
             </div>
           </div>
@@ -156,9 +164,9 @@ export function TripRoutesDrawer({
           {trips.length === 0 ? (
             <div className="py-16 text-center text-slate-400">
               <Navigation className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-              <p className="text-xs">Henüz oluşturulmuş bir rota yok.</p>
+              <p className="text-xs">{t("routesDrawer.emptyTitle")}</p>
               <p className="text-[11px] text-slate-500 mt-1">
-                "Yeni Rota" butonuna tıklayarak durakları birleştiren rotalar oluşturabilirsiniz.
+                {t("routesDrawer.emptyDesc")}
               </p>
             </div>
           ) : (
@@ -166,13 +174,14 @@ export function TripRoutesDrawer({
               const isSelected = selectedTripId === trip.id;
               const isConfirming = confirmDeleteId === trip.id;
               const isPlanned = trip.status === "planned";
+              const dateLocale = locale === "en" ? "en-US" : "tr-TR";
 
               const dateStr =
                 trip.startDate && trip.endDate
-                  ? `${new Date(trip.startDate).toLocaleDateString("tr-TR")} - ${new Date(
+                  ? `${new Date(trip.startDate).toLocaleDateString(dateLocale)} - ${new Date(
                       trip.endDate
-                    ).toLocaleDateString("tr-TR")}`
-                  : "Tarihsiz Seyahat";
+                    ).toLocaleDateString(dateLocale)}`
+                  : t("routesDrawer.timelessTrip");
 
               return (
                 <div
@@ -199,12 +208,12 @@ export function TripRoutesDrawer({
                     {isPlanned ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        <span>Planlanan</span>
+                        <span>{t("routesDrawer.statusPlanned")}</span>
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800 flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" />
-                        <span>Tamamlandı</span>
+                        <span>{t("routesDrawer.statusCompleted")}</span>
                       </span>
                     )}
                   </div>
@@ -225,8 +234,8 @@ export function TripRoutesDrawer({
                   {/* Duraklar Sıralaması */}
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
                     <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                      <span>Duraklar ({trip.stops?.length || 0})</span>
-                      <span className="text-[9px] font-normal text-slate-400">Rota Akışı</span>
+                      <span>{t("routesDrawer.stopsCount", { count: String(trip.stops?.length || 0) })}</span>
+                      <span className="text-[9px] font-normal text-slate-400">{t("routesDrawer.routeFlow")}</span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
@@ -249,7 +258,7 @@ export function TripRoutesDrawer({
                     <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 space-y-2 animate-in fade-in">
                       <div className="flex items-center gap-1.5 font-bold">
                         <AlertCircle className="w-4 h-4 text-red-500" />
-                        <span>Bu rotayı silmek istediğinize emin misiniz?</span>
+                        <span>{t("routesDrawer.deleteConfirm")}</span>
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-1">
                         <button
@@ -260,7 +269,7 @@ export function TripRoutesDrawer({
                           }}
                           className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold cursor-pointer"
                         >
-                          Vazgeç
+                          {t("routesDrawer.cancelBtn")}
                         </button>
                         <button
                           type="button"
@@ -271,7 +280,9 @@ export function TripRoutesDrawer({
                           }}
                           className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-sm disabled:opacity-60 cursor-pointer"
                         >
-                          {deletingId === trip.id ? "Siliniyor..." : "Evet, Sil"}
+                          {deletingId === trip.id
+                            ? t("routesDrawer.deletingBtn")
+                            : t("routesDrawer.confirmDeleteBtn")}
                         </button>
                       </div>
                     </div>
@@ -287,7 +298,9 @@ export function TripRoutesDrawer({
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       <span>
-                        {updatingStatusId === trip.id ? "Güncelleniyor..." : "Evet, Gerçekleştirdim! 🏆"}
+                        {updatingStatusId === trip.id
+                          ? t("routesDrawer.updatingBtn")
+                          : t("routesDrawer.markCompletedBtn")}
                       </span>
                     </button>
                   )}
@@ -307,12 +320,12 @@ export function TripRoutesDrawer({
                         {isSelected ? (
                           <>
                             <EyeOff className="w-3.5 h-3.5" />
-                            <span>Vurguyu Kaldır</span>
+                            <span>{t("routesDrawer.removeHighlight")}</span>
                           </>
                         ) : (
                           <>
                             <Eye className="w-3.5 h-3.5" />
-                            <span>Haritada Vurgula</span>
+                            <span>{t("routesDrawer.highlightOnMap")}</span>
                           </>
                         )}
                       </button>
@@ -322,11 +335,11 @@ export function TripRoutesDrawer({
                           <button
                             type="button"
                             onClick={() => onEditTrip(trip)}
-                            title="Rotayı Düzenle"
+                            title={t("routesDrawer.editTooltip")}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-cyan-50 dark:hover:bg-cyan-950/60 text-slate-700 dark:text-slate-200 hover:text-cyan-600 dark:hover:text-cyan-400 text-[11px] font-medium transition-colors cursor-pointer"
                           >
                             <Pencil className="w-3 h-3" />
-                            <span>Düzenle</span>
+                            <span>{t("routesDrawer.editBtn")}</span>
                           </button>
                         )}
 
@@ -336,11 +349,11 @@ export function TripRoutesDrawer({
                             e.stopPropagation();
                             setConfirmDeleteId(trip.id);
                           }}
-                          title="Rotayı Sil"
+                          title={t("routesDrawer.deleteTooltip")}
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-950/60 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 text-[11px] font-medium transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-3 h-3" />
-                          <span>Sil</span>
+                          <span>{t("routesDrawer.deleteBtn")}</span>
                         </button>
                       </div>
                     </div>

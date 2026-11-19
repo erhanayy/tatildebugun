@@ -13,6 +13,7 @@ import {
 import { sendTravelerConnectionRequest } from "@/lib/actions/search-travelers";
 import { CountryFlag } from "@/components/ui/country-flag";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 import {
   Heart,
   Plane,
@@ -239,6 +240,15 @@ export function FeedView({ initialFeed, currentUserId }: FeedViewProps) {
     const res = await disconnectTravelerAction(targetUserId);
     if (res.success) {
       toast.success(t("feed.disconnectSuccess"));
+      if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
+        triggerFloatingPoints({
+          points: res.pointsDelta,
+          label: locale === "en" ? "Connection Removed (Reversal)" : "Kaldırılan İlişki İadesi",
+        });
+      }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("refresh-points"));
+      }
       // İlgili kartları bağlantısız yap
       setFeedItems((prev) =>
         prev.map((it) =>

@@ -15,6 +15,7 @@ import { eq, and, ne, desc, sql, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createNotification } from "@/lib/actions/notifications";
+import { awardPoints, getConnectionPairKey, getReferenceNetPoints } from "@/lib/points/engine";
 
 // Zod Doğrulama Şeması (Kural 10)
 const sendMatchRequestSchema = z.object({
@@ -428,11 +429,12 @@ export async function getMyMatchRequests() {
 
 /**
  * Gelen tanışma teklifini kabul eder veya reddeder.
+ * Karşılıklı onaylanan her yeni ilişki (arkadaş/akraba/aile) için her iki tarafa +20 Puan tahsis edilir.
  */
 export async function respondMatchRequest(
   matchId: string,
   action: "accepted" | "declined"
-): Promise<{ success: boolean; message?: string }> {
+): Promise<{ success: boolean; message?: string; pointsDelta?: number }> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -452,6 +454,8 @@ export async function respondMatchRequest(
       .where(
         and(eq(travelMatches.id, matchId), eq(travelMatches.receiverId, session.user.id))
       );
+
+    let pointsDelta = 0;
 
     if (m[0] && action === "accepted") {
       // Çift taraflı userConnections tablosunu senkronize et
@@ -484,6 +488,40 @@ export async function respondMatchRequest(
         console.error("userConnections senkronizasyon hatası:", connErr);
       }
 
+      // 2026 Sezonu Puan Motoru: Karşılıklı onaylı ilişki için her iki tarafa +20 Puan
+      // Kanonik çift anahtarı (pair:u1:u2) sayesinde aynı çift asla çifte puan kazanamaz.
+      if (m[0].senderId !== m[0].receiverId) {
+        const pairKey = getConnectionPairKey(m[0].senderId, m[0].receiverId);
+        const relLabel =
+          rel === "family" ? "Aile" : rel === "relative" ? "Akraba" : "Arkadaş";
+
+        for (const participantId of [m[0].senderId, m[0].receiverId]) {
+          try {
+            const netPoints = await getReferenceNetPoints(participantId, pairKey);
+            if (netPoints <= 0) {
+              const ledger = await awardPoints({
+                userId: participantId,
+                actionType: "connect_friend",
+                referenceId: pairKey,
+                referenceType: "connection",
+                description: `Onaylı ${relLabel} İlişkisi (+20 Puan)`,
+                metadata: {
+                  matchId,
+                  relationshipType: rel,
+                  partnerId:
+                    participantId === m[0].senderId ? m[0].receiverId : m[0].senderId,
+                },
+              });
+              if (participantId === session.user.id) {
+                pointsDelta = ledger.finalPoints;
+              }
+            }
+          } catch (ptsErr) {
+            console.error("İlişki puanı ekleme hatası:", ptsErr);
+          }
+        }
+      }
+
       createNotification({
         userId: m[0].senderId,
         actorId: session.user.id,
@@ -496,9 +534,13 @@ export async function respondMatchRequest(
 
     revalidatePath("/match");
     revalidatePath("/feed");
+    revalidatePath("/rewards");
+    revalidatePath("/points");
+    revalidatePath("/dashboard");
 
     return {
       success: true,
+      pointsDelta,
       message: action === "accepted" ? "Teklif kabul edildi!" : "Teklif reddedildi.",
     };
   } catch (error) {

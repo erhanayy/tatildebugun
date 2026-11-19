@@ -10,7 +10,17 @@
 
 import { db } from "../lib/db";
 import { users, visits, trips, tripStops, userPointsLedger, valueSharePools } from "../lib/db/schema";
-import { awardPoints, getUserPointsSummary, CURRENT_SEASON_YEAR } from "../lib/points/engine";
+import {
+  awardPoints,
+  getUserPointsSummary,
+  getConnectionPairKey,
+  getReferenceNetPoints,
+  roundPoints,
+  calculateReferralPassivePoints,
+  computeSeasonStartingPointsFromCounts,
+  calculateSeasonStartingPoints,
+  CURRENT_SEASON_YEAR,
+} from "../lib/points/engine";
 import { eq, and, sql } from "drizzle-orm";
 
 async function runTests() {
@@ -276,9 +286,85 @@ async function runTests() {
     );
 
     // ==============================================================
-    // TEST 6: SIFIRIN ALTINA DÜŞMEME GÜVENLİK SINIRI VE NEGATİF KORUMASI
+    // TEST 6: ONAYLI İLİŞKİ KURMA (+20 Pts), ÇİFTE ÖDÜL KORUMASI VE KALDIRMA İADESİ (-20 Pts)
     // ==============================================================
-    console.log("\n--- 6. Sıfırın Altına Düşmeme Güvenlik Sınırı Testi ---");
+    console.log("\n--- 6. Onaylı İlişki Kurma (+20 Pts) & İlişki Kaldırma (-20 Pts) Testi ---");
+    const [partnerUser] = await db
+      .insert(users)
+      .values({
+        email: `test_partner_${Date.now()}@internal.test`,
+        password: "test_password_hash_12345",
+        fullName: "İzole Test Arkadaşı",
+        username: `partner_${Date.now()}`,
+        travelerScore: 50,
+        role: "guest",
+        isActive: true,
+      })
+      .returning();
+
+    try {
+      const pairKeyA = getConnectionPairKey(userId, partnerUser.id);
+      const pairKeyB = getConnectionPairKey(partnerUser.id, userId);
+      assert(pairKeyA === pairKeyB, "Kanonik çift anahtarı sıradan bağımsız olarak özdeştir");
+
+      // Her iki tarafa +20 Puan ver
+      for (const uid of [userId, partnerUser.id]) {
+        const netBefore = await getReferenceNetPoints(uid, pairKeyA);
+        if (netBefore <= 0) {
+          await awardPoints({
+            userId: uid,
+            actionType: "connect_friend",
+            referenceId: pairKeyA,
+            referenceType: "connection",
+            description: "Test Onaylı Arkadaş İlişkisi (+20 Puan)",
+          });
+        }
+      }
+
+      const netUserAfterConnect = await getReferenceNetPoints(userId, pairKeyA);
+      const netPartnerAfterConnect = await getReferenceNetPoints(partnerUser.id, pairKeyA);
+      assert(netUserAfterConnect === 20, "1. kullanıcı onaylı ilişki için +20 Puan aldı");
+      assert(netPartnerAfterConnect === 20, "2. kullanıcı onaylı ilişki için +20 Puan aldı");
+
+      // Çifte onay / farming girişimi kontrolü: net > 0 olduğu için tekrar puan verilmemeli
+      const netCheckDuplicate = await getReferenceNetPoints(userId, pairKeyA);
+      assert(netCheckDuplicate > 0, "Aynı çift için aktif bakiye > 0 olduğundan çifte +20 puan engellenir");
+
+      // Bağlantı kaldırıldığında her iki taraftan -20 Puan iade
+      for (const uid of [userId, partnerUser.id]) {
+        const netActive = await getReferenceNetPoints(uid, pairKeyA);
+        if (netActive > 0) {
+          await awardPoints({
+            userId: uid,
+            actionType: "remove_friend",
+            basePoints: -netActive,
+            multiplier: 1.0,
+            referenceId: pairKeyA,
+            referenceType: "connection",
+            description: "Test Kaldırılan İlişki Puan İadesi",
+          });
+        }
+      }
+
+      const netUserAfterRemove = await getReferenceNetPoints(userId, pairKeyA);
+      const netPartnerAfterRemove = await getReferenceNetPoints(partnerUser.id, pairKeyA);
+      assert(netUserAfterRemove === 0, "İlişki kaldırıldığında 1. kullanıcının çift bakiyesi 0 oldu");
+      assert(netPartnerAfterRemove === 0, "İlişki kaldırıldığında 2. kullanıcının çift bakiyesi 0 oldu");
+
+      const afterConnPool = (await db.select().from(valueSharePools).where(eq(valueSharePools.year, CURRENT_SEASON_YEAR)))[0];
+      assert(
+        afterConnPool.totalPoolPoints === startPoolPoints,
+        `İlişki ekle+sil sonrası sezon havuzu başlangıç seviyesine döndü (${afterConnPool.totalPoolPoints} == ${startPoolPoints})`
+      );
+    } finally {
+      await db.delete(userPointsLedger).where(eq(userPointsLedger.userId, partnerUser.id));
+      await db.delete(users).where(eq(users.id, partnerUser.id));
+    }
+
+    // ==============================================================
+    // TEST 7: SIFIRIN ALTINA DÜŞMEME GÜVENLİK SINIRI VE NEGATİF KORUMASI
+    // ==============================================================
+    console.log("\n--- 7. Sıfırın Altına Düşmeme Güvenlik Sınırı Testi ---");
     await awardPoints({
       userId,
       actionType: "admin_penalty",
@@ -293,6 +379,31 @@ async function runTests() {
     // getUserPointsSummary üzerinden negatif koruma testi
     const summary = await getUserPointsSummary(userId);
     assert(summary.totalPoints >= 0, `getUserPointsSummary totalPoints sıfırın altına düşmez (${summary.totalPoints} >= 0)`);
+
+    // ==============================================================
+    // TEST 8: YILA BAŞLANGIÇ PUANI FORMÜLÜ & KESİN TAM SAYI YUVARLAMA TESTİ
+    // ==============================================================
+    console.log("\n--- 8. Yıla Başlangıç Puanı & Kesin Tam Sayı Yuvarlama Testi ---");
+    assert(roundPoints(3.4) === 3, "roundPoints(3.4) aşağı yuvarlanır (3)");
+    assert(roundPoints(3.5) === 4, "roundPoints(3.5) yukarı yuvarlanır (4)");
+    assert(calculateReferralPassivePoints(7) === 1, "7 puanın %20 pasif payı tam sayıya yuvarlanır (1.4 -> 1)");
+    assert(calculateReferralPassivePoints(8) === 2, "8 puanın %20 pasif payı tam sayıya yuvarlanır (1.6 -> 2)");
+    assert(calculateReferralPassivePoints(50) === 10, "50 puanlık tamamlanan rotanın %20 pasif payı tam 10'dur");
+
+    const sampleStart = computeSeasonStartingPointsFromCounts({
+      pinCount: 7, // 7 * 10 * 0.2 = 14
+      completedTripCount: 3, // 3 * 50 * 0.2 = 30
+      activeConnectionCount: 4, // 4 * 20 * 0.2 = 16
+    });
+    assert(sampleStart.pinPoints === 14, "7 Pin × 10 × %20 = 14 Puan");
+    assert(sampleStart.tripPoints === 30, "3 Tamamlanan Rota × 50 × %20 = 30 Puan");
+    assert(sampleStart.connectionPoints === 16, "4 Sosyal İlişki × 20 × %20 = 16 Puan");
+    assert(sampleStart.totalStartingPoints === 60, "Toplam Yıla Başlangıç Puanı = 60 (Tam Sayı)");
+    assert(Number.isInteger(sampleStart.totalStartingPoints), "Yıla Başlangıç Puanı kesin tam sayıdır");
+
+    // Veritabanı üzerinden canlı hesaplama (şu an test kullanıcısının 0 aktif pini/rotası/ilişkisi var)
+    const dbStart = await calculateSeasonStartingPoints(userId);
+    assert(dbStart.totalStartingPoints === 0, "Aktif kaydı olmayan kullanıcı için Yıla Başlangıç Puanı 0'dır");
 
   } finally {
     // ==============================================================

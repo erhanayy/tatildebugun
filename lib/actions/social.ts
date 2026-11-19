@@ -13,12 +13,14 @@ import {
   type Trip,
   type TripStop,
   travelMatches,
+  userConnections,
   feedMutes,
 } from "@/lib/db/schema";
 import { eq, and, or, desc, inArray, notInArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "@/lib/actions/notifications";
 import { getStarRating } from "@/lib/constants/gamification";
+import { awardPoints, getConnectionPairKey, getReferenceNetPoints } from "@/lib/points/engine";
 
 export type ReactionType = "heart" | "plane" | "palm" | "clap";
 
@@ -650,9 +652,15 @@ export async function getMutedTravelersAction() {
 }
 
 /**
- * Gezginle Olan Bağlantıyı / Arkadaşlığı Kaldırır (Disconnect)
+ * Gezginle Olan Bağlantıyı / Arkadaşlığı Kaldırır (Disconnect).
+ * Hem travelMatches hem userConnections kayıtları temizlenir;
+ * bu ilişkiden kazanılmış aktif NET puan varsa her iki taraftan geri alınır (-20 Puan).
  */
-export async function disconnectTravelerAction(targetUserId: string) {
+export async function disconnectTravelerAction(targetUserId: string): Promise<{
+  success: boolean;
+  message: string;
+  pointsDelta?: number;
+}> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -661,6 +669,7 @@ export async function disconnectTravelerAction(targetUserId: string) {
 
     const currentUserId = session.user.id;
 
+    // 1. İlişki kayıtlarını her iki tablodan da temizle
     await db
       .delete(travelMatches)
       .where(
@@ -670,11 +679,54 @@ export async function disconnectTravelerAction(targetUserId: string) {
         )
       );
 
+    await db
+      .delete(userConnections)
+      .where(
+        or(
+          and(eq(userConnections.userId, currentUserId), eq(userConnections.targetUserId, targetUserId)),
+          and(eq(userConnections.userId, targetUserId), eq(userConnections.targetUserId, currentUserId))
+        )
+      );
+
+    // 2. Defterde bu çift için aktif NET puan varsa her iki taraftan geri al
+    let pointsDelta = 0;
+    if (currentUserId !== targetUserId) {
+      const pairKey = getConnectionPairKey(currentUserId, targetUserId);
+      for (const participantId of [currentUserId, targetUserId]) {
+        try {
+          const netPoints = await getReferenceNetPoints(participantId, pairKey);
+          if (netPoints > 0) {
+            const ledger = await awardPoints({
+              userId: participantId,
+              actionType: "remove_friend",
+              basePoints: -netPoints,
+              multiplier: 1.0,
+              referenceId: pairKey,
+              referenceType: "connection",
+              description: "Kaldırılan İlişki Puan İadesi",
+              metadata: {
+                removedBy: currentUserId,
+                partnerId: participantId === currentUserId ? targetUserId : currentUserId,
+              },
+            });
+            if (participantId === currentUserId) {
+              pointsDelta = ledger.finalPoints;
+            }
+          }
+        } catch (ptsErr) {
+          console.error("İlişki kaldırma puan iade hatası:", ptsErr);
+        }
+      }
+    }
+
     revalidatePath("/feed");
     revalidatePath("/match");
     revalidatePath("/messages");
+    revalidatePath("/rewards");
+    revalidatePath("/points");
+    revalidatePath("/dashboard");
 
-    return { success: true, message: "Bağlantı başarıyla kaldırıldı." };
+    return { success: true, pointsDelta, message: "Bağlantı başarıyla kaldırıldı." };
   } catch (error) {
     console.error("Bağlantı kaldırma hatası:", error);
     return { success: false, message: "Bağlantı kaldırılırken bir hata oluştu." };

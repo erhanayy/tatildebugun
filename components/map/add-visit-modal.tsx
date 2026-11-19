@@ -9,6 +9,9 @@ import {
 } from "@/lib/actions/visits";
 import type { Visit } from "@/lib/db/schema";
 import { CountryFlag } from "@/components/ui/country-flag";
+import { CountryAutocomplete, CityAutocomplete } from "./location-autocomplete";
+import { COUNTRY_CENTERS } from "@/lib/country-flags";
+import { findCountryByNameOrCode } from "@/lib/world-cities";
 import {
   TURKEY_PROVINCES,
   TURKEY_DISTRICT_TO_PROVINCE,
@@ -34,6 +37,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
+import { useTranslation } from "@/lib/i18n";
 
 interface AddVisitModalProps {
   isOpen: boolean;
@@ -43,7 +47,7 @@ interface AddVisitModalProps {
   onSuccess: (visits: Visit[]) => void;
 }
 
-const MONTHS = [
+const MONTHS_TR = [
   { value: 1, label: "Ocak" },
   { value: 2, label: "Şubat" },
   { value: 3, label: "Mart" },
@@ -56,6 +60,21 @@ const MONTHS = [
   { value: 10, label: "Ekim" },
   { value: 11, label: "Kasım" },
   { value: 12, label: "Aralık" },
+];
+
+const MONTHS_EN = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
 ];
 
 function formatDateForInput(date: Date | string | null | undefined): string {
@@ -72,6 +91,8 @@ export function AddVisitModal({
   editingVisit,
   onSuccess,
 }: AddVisitModalProps) {
+  const { t, locale } = useTranslation();
+  const monthsList = locale === "en" ? MONTHS_EN : MONTHS_TR;
   const isEditing = !!editingVisit;
 
   const [loadingGeocode, setLoadingGeocode] = useState(false);
@@ -302,18 +323,20 @@ export function AddVisitModal({
     if (res.success) {
       const returnedVisits = res.visits && res.visits.length > 0 ? res.visits : res.visit ? [res.visit] : [];
       if (isEditing) {
-        toast.success(`${finalCity} seyahati başarıyla güncellendi! ✏️`);
+        toast.success(t("visitModal.toastUpdated", { city: finalCity }));
       } else if (dateType === "timeless" && visitCount > 1) {
-        toast.success(`${finalCity} için ${visitCount} bayrak haritaya başarıyla eklendi! 🚩`);
+        toast.success(
+          t("visitModal.toastAddedMultiple", { city: finalCity, count: String(visitCount) })
+        );
         triggerFloatingPoints({
           points: 10 * visitCount,
-          label: `${finalCity} (${visitCount} Gezi Pini)`,
+          label: t("visitModal.floatingPinMultiple", { city: finalCity, count: String(visitCount) }),
         });
       } else {
-        toast.success(`${finalCity} ziyareti haritaya bayrak olarak eklendi! 🚩`);
+        toast.success(t("visitModal.toastAddedSingle", { city: finalCity }));
         triggerFloatingPoints({
           points: 10,
-          label: `${finalCity} Gezi Pini`,
+          label: t("visitModal.floatingPinSingle", { city: finalCity }),
         });
       }
 
@@ -326,7 +349,7 @@ export function AddVisitModal({
       }
       onClose();
     } else {
-      setErrorMessage(res.message || "Bir hata oluştu. Bilgileri kontrol ediniz.");
+      setErrorMessage(res.message || t("visitModal.errorGeneric"));
     }
     setSubmitting(false);
   }
@@ -343,13 +366,11 @@ export function AddVisitModal({
             <CountryFlag countryCode={countryCode} width={28} height={20} className="shadow-xs shrink-0" />
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>{isEditing ? "Seyahati Düzenle" : "Haritaya Bayrak Ekle"}</span>
+                <span>{isEditing ? t("visitModal.titleEdit") : t("visitModal.titleAdd")}</span>
                 {loadingGeocode && <Loader2 className="w-4 h-4 text-cyan-500 animate-spin" />}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isEditing
-                  ? "Seyahat detaylarınızı ve anılarınızı güncelleyin"
-                  : "Gittiğiniz şehri ve seyahat detaylarını kaydedin"}
+                {isEditing ? t("visitModal.subtitleEdit") : t("visitModal.subtitleAdd")}
               </p>
             </div>
           </div>
@@ -373,113 +394,139 @@ export function AddVisitModal({
 
           {/* Konum: Ülke, Şehir ve İlçe (3'lü Yapı) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Ülke Alanı */}
+            {/* Ülke Alanı (210+ Ülke & Özerk Destinasyon Arama) */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Ülke
+                {t("visitModal.countryLabel")}
               </label>
-              <input
-                type="text"
-                required
-                value={countryName}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setCountryName(val);
-                  if (val.toLowerCase().includes("türk") || val.toLowerCase() === "tr") {
-                    setCountryCode("TR");
+              <CountryAutocomplete
+                countryCode={countryCode}
+                countryName={countryName}
+                placeholder={t("visitModal.countryPlaceholder")}
+                onChange={(c) => {
+                  const nextCode = c.code;
+                  setCountryName(c.name);
+                  if (nextCode) {
+                    setCountryCode(nextCode);
+                    if (nextCode !== countryCode) {
+                      const center = COUNTRY_CENTERS[nextCode.toUpperCase()];
+                      if (center) {
+                        setLatitude(center.lat);
+                        setLongitude(center.lng);
+                      }
+                    }
                   }
                 }}
-                placeholder="Örn: Türkiye..."
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
               />
             </div>
 
-            {/* Şehir Alanı (Arama Destekli Akıllı Combobox) */}
+            {/* Şehir Alanı (TR için 81 İl & İlçe, Dünya için 148.000+ Offline Şehir) */}
             <div className="relative" ref={cityDropdownRef}>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                <span>Şehir (İl)</span>
+                <span>{t("visitModal.cityLabel")}</span>
                 {countryCode === "TR" && (
                   <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-normal">
-                    81 İl & İlçeler
+                    {t("visitModal.turkeyCitiesBadge")}
                   </span>
                 )}
               </label>
 
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  value={cityName}
-                  onFocus={() => setIsCityDropdownOpen(true)}
-                  onChange={(e) => {
-                    setCityName(e.target.value);
-                    setIsCityDropdownOpen(true);
-                  }}
-                  onBlur={handleCityBlur}
-                  placeholder={countryCode === "TR" ? "Şehir ara (Örn: Muğla)..." : "Şehir adı"}
-                  className="w-full px-3 py-2.5 pr-8 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsCityDropdownOpen((prev) => !prev)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                >
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Açılır Arama Listesi (Dropdown) */}
-              {isCityDropdownOpen && countryCode === "TR" && turkeyFilteredItems.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700/60 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900/60 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider sticky top-0">
-                    Önerilen Şehirler & İlçeler
-                  </div>
-                  {turkeyFilteredItems.map((item, idx) => (
-                    <button
-                      key={`${item.cityName}-${item.districtName || ""}-${idx}`}
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleSelectCityItem(item);
+              {countryCode === "TR" ? (
+                <>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={cityName}
+                      onFocus={() => setIsCityDropdownOpen(true)}
+                      onChange={(e) => {
+                        setCityName(e.target.value);
+                        setIsCityDropdownOpen(true);
                       }}
-                      className="w-full px-3 py-2 text-left hover:bg-cyan-50 dark:hover:bg-cyan-950/50 flex items-center justify-between group transition-colors cursor-pointer"
+                      onBlur={handleCityBlur}
+                      placeholder={t("visitModal.cityPlaceholderTr")}
+                      className="w-full min-h-[38px] px-3 py-1.5 pr-8 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsCityDropdownOpen((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                     >
-                      <div className="flex items-center gap-2">
-                        {item.type === "province" ? (
-                          <Building2 className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-                        ) : (
-                          <MapPin className="w-3.5 h-3.5 text-amber-500" />
-                        )}
-                        <div>
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            {item.type === "district" ? item.districtName : item.cityName}
-                          </span>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
-                            ({item.badge})
-                          </span>
-                        </div>
-                      </div>
-
-                      {item.cityName === cityName && !item.districtName && (
-                        <Check className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-                      )}
+                      <ChevronDown className="w-4 h-4" />
                     </button>
-                  ))}
-                </div>
+                  </div>
+
+                  {/* Türkiye İl & İlçe Açılır Arama Listesi */}
+                  {isCityDropdownOpen && turkeyFilteredItems.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 max-h-56 overflow-y-auto overflow-x-hidden divide-y divide-slate-100 dark:divide-slate-700/60 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900/60 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider sticky top-0">
+                        {t("visitModal.suggestedCitiesTr")}
+                      </div>
+                      {turkeyFilteredItems.map((item, idx) => (
+                        <button
+                          key={`${item.cityName}-${item.districtName || ""}-${idx}`}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectCityItem(item);
+                          }}
+                          className="w-full min-h-[44px] px-3 py-2 text-left hover:bg-cyan-50 dark:hover:bg-cyan-950/50 flex items-center justify-between group transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {item.type === "province" ? (
+                              <Building2 className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+                            ) : (
+                              <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            )}
+                            <div className="truncate">
+                              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                {item.type === "district" ? item.districtName : item.cityName}
+                              </span>
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
+                                ({item.badge})
+                              </span>
+                            </div>
+                          </div>
+
+                          {item.cityName === cityName && !item.districtName && (
+                            <Check className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <CityAutocomplete
+                  countryCode={countryCode}
+                  cityName={cityName}
+                  placeholder={t("visitModal.cityPlaceholderWorld")}
+                  onChange={(val) => setCityName(val)}
+                  onSelectCity={(city) => {
+                    setCityName(city.name);
+                    setLatitude(city.lat);
+                    setLongitude(city.lng);
+                    if (!countryCode && city.countryCode) {
+                      setCountryCode(city.countryCode);
+                      const matched = findCountryByNameOrCode(city.countryCode);
+                      if (matched) setCountryName(matched.name);
+                    }
+                  }}
+                />
               )}
             </div>
 
             {/* İlçe Alanı (Opsiyonel / Boş Geçilebilir) */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                <span>İlçe</span>
-                <span className="text-[10px] text-slate-400 font-normal">İsteğe Bağlı</span>
+                <span>{t("visitModal.districtLabel")}</span>
+                <span className="text-[10px] text-slate-400 font-normal">{t("visitModal.optionalLabel")}</span>
               </label>
               <input
                 type="text"
                 value={districtName}
                 onChange={(e) => setDistrictName(e.target.value)}
-                placeholder="Örn: Bodrum, Kadıköy..."
+                placeholder={t("visitModal.districtPlaceholder")}
                 className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
               />
             </div>
@@ -491,7 +538,7 @@ export function AddVisitModal({
               <div className="flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-cyan-500 shrink-0" />
                 <span>
-                  Tespit edilen ilçe: <strong>{detectedDistrict}</strong> → Bağlı Şehir:{" "}
+                  {t("visitModal.detectedDistrict")} <strong>{detectedDistrict}</strong> → {t("visitModal.linkedCity")}{" "}
                   <strong>{cityName}</strong>
                 </span>
               </div>
@@ -499,12 +546,12 @@ export function AddVisitModal({
                 <button
                   type="button"
                   onClick={() => {
-                    const addStr = `${detectedDistrict} seyahati`;
+                    const addStr = `${detectedDistrict} ${t("visitModal.districtTripSuffix")}`;
                     setNotes((prev) => (prev ? `${prev} (${addStr})` : addStr));
                   }}
                   className="ml-2 px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[10px] transition-colors cursor-pointer shrink-0 shadow-sm"
                 >
-                  + Notlara Ekle
+                  {t("visitModal.addToNotesBtn")}
                 </button>
               )}
             </div>
@@ -512,9 +559,9 @@ export function AddVisitModal({
 
           {/* Tarih Seçim Modu: Kesin Tarih vs Yıl/Ay vs Zamansız */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Ziyaret Zamanı <span className="text-cyan-600 dark:text-cyan-400">*</span>
+                {t("visitModal.visitTimeLabel")} <span className="text-cyan-600 dark:text-cyan-400">*</span>
               </label>
               <div className="flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
                 <button
@@ -526,7 +573,7 @@ export function AddVisitModal({
                       : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  Kesin Tarih
+                  {t("visitModal.dateExact")}
                 </button>
                 <button
                   type="button"
@@ -537,7 +584,7 @@ export function AddVisitModal({
                       : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  Yıl ve Ay
+                  {t("visitModal.dateMonthYear")}
                 </button>
                 <button
                   type="button"
@@ -548,7 +595,7 @@ export function AddVisitModal({
                       : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  Zamansız
+                  {t("visitModal.dateTimeless")}
                 </button>
               </div>
             </div>
@@ -556,7 +603,7 @@ export function AddVisitModal({
             {dateType === "exact" && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="block text-[11px] text-slate-400 mb-1">Giriş / Başlangıç</span>
+                  <span className="block text-[11px] text-slate-400 mb-1">{t("visitModal.startDateLabel")}</span>
                   <input
                     type="date"
                     required={dateType === "exact"}
@@ -566,7 +613,7 @@ export function AddVisitModal({
                   />
                 </div>
                 <div>
-                  <span className="block text-[11px] text-slate-400 mb-1">Çıkış / Bitiş</span>
+                  <span className="block text-[11px] text-slate-400 mb-1">{t("visitModal.endDateLabel")}</span>
                   <input
                     type="date"
                     required={dateType === "exact"}
@@ -581,7 +628,7 @@ export function AddVisitModal({
             {dateType === "month_year" && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="block text-[11px] text-slate-400 mb-1">Yıl</span>
+                  <span className="block text-[11px] text-slate-400 mb-1">{t("visitModal.yearLabel")}</span>
                   <select
                     value={visitYear}
                     onChange={(e) => setVisitYear(Number(e.target.value))}
@@ -595,13 +642,13 @@ export function AddVisitModal({
                   </select>
                 </div>
                 <div>
-                  <span className="block text-[11px] text-slate-400 mb-1">Ay</span>
+                  <span className="block text-[11px] text-slate-400 mb-1">{t("visitModal.monthLabel")}</span>
                   <select
                     value={visitMonth}
                     onChange={(e) => setVisitMonth(Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
                   >
-                    {MONTHS.map((m) => (
+                    {monthsList.map((m) => (
                       <option key={m.value} value={m.value}>
                         {m.label}
                       </option>
@@ -616,10 +663,10 @@ export function AddVisitModal({
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                      Ziyaret Adedi (Kaç Defa Gittiniz?)
+                      {t("visitModal.visitCountTitle")}
                     </span>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Tarih ve süre gerekmeden haritaya rozet olarak işlenir
+                      {t("visitModal.visitCountDesc")}
                     </span>
                   </div>
 
@@ -648,9 +695,9 @@ export function AddVisitModal({
                 </div>
 
                 {/* Hızlı Seçim Butonları */}
-                <div className="flex items-center gap-1.5 pt-1">
+                <div className="flex items-center flex-wrap gap-1.5 pt-1">
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mr-1">
-                    Hızlı Seç:
+                    {t("visitModal.quickSelect")}
                   </span>
                   {[1, 2, 3, 5, 10, 20].map((num) => (
                     <button
@@ -677,7 +724,7 @@ export function AddVisitModal({
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-cyan-500" />
-                  <span>Kalış Süresi (Gün)</span>
+                  <span>{t("visitModal.stayDurationLabel")}</span>
                 </label>
                 <input
                   type="number"
@@ -693,15 +740,15 @@ export function AddVisitModal({
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5 text-blue-500" />
-                <span>Ziyaret Türü</span>
+                <span>{t("visitModal.visitTypeLabel")}</span>
               </label>
               <select
                 value={visitType}
                 onChange={(e) => setVisitType(e.target.value as any)}
                 className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
               >
-                <option value="touristic">🏖️ Turistik Gezi</option>
-                <option value="business">💼 İş Ziyareti</option>
+                <option value="touristic">{t("visitModal.typeTouristic")}</option>
+                <option value="business">{t("visitModal.typeBusiness")}</option>
               </select>
             </div>
           </div>
@@ -710,16 +757,16 @@ export function AddVisitModal({
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-teal-500" />
-              <span>Görünürlük & Paylaşım</span>
+              <span>{t("visitModal.visibilityLabel")}</span>
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
               {(
                 [
-                  { id: "public", label: "Herkes", icon: "🌐" },
-                  { id: "friend", label: "Arkadaşım", icon: "👥" },
-                  { id: "relative", label: "Akrabam", icon: "🤝" },
-                  { id: "family", label: "Ailem", icon: "🏡" },
-                  { id: "private", label: "Gizli", icon: "🔒" },
+                  { id: "public", label: t("tripModal.visPublic"), icon: "🌐" },
+                  { id: "friend", label: t("tripModal.visFriend"), icon: "👥" },
+                  { id: "relative", label: t("tripModal.visRelative"), icon: "🤝" },
+                  { id: "family", label: t("tripModal.visFamily"), icon: "🏡" },
+                  { id: "private", label: t("tripModal.visPrivate"), icon: "🔒" },
                 ] as const
               ).map((item) => (
                 <button
@@ -743,13 +790,13 @@ export function AddVisitModal({
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-slate-400" />
-              <span>Geziden Hatıralar & Notlar (Opsiyonel)</span>
+              <span>{t("visitModal.notesLabel")}</span>
             </label>
             <textarea
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Örn: Sagrada Familia ziyareti, harika tapas lezzetleri..."
+              placeholder={t("visitModal.notesPlaceholder")}
               className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 outline-none resize-none"
             />
           </div>
@@ -761,7 +808,7 @@ export function AddVisitModal({
               onClick={onClose}
               className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Vazgeç
+              {t("visitModal.cancelBtn")}
             </button>
             <button
               type="submit"
@@ -771,17 +818,17 @@ export function AddVisitModal({
               {submitting ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>{isEditing ? "Güncelleniyor..." : "Kaydediliyor..."}</span>
+                  <span>{isEditing ? t("visitModal.updatingBtn") : t("visitModal.savingBtn")}</span>
                 </>
               ) : (
                 <>
                   {isEditing ? <Pencil className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                   <span>
                     {isEditing
-                      ? "Değişiklikleri Kaydet"
+                      ? t("visitModal.saveChangesBtn")
                       : dateType === "timeless" && visitCount > 1
-                      ? `📍 ${visitCount} Bayrağı Haritaya Ekle`
-                      : "Bayrağı Haritaya Ekle"}
+                      ? `📍 ${t("visitModal.saveMultiplePinsBtn", { count: String(visitCount) })}`
+                      : t("visitModal.savePinBtn")}
                   </span>
                 </>
               )}

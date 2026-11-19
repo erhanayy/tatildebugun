@@ -340,49 +340,61 @@ export function PointsModal({ isOpen, onClose, initialSummary }: PointsModalProp
                     <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[11px] uppercase">
                       <tr>
                         <th className="py-2.5 px-3">Eylem / Katkı</th>
-                        <th className="py-2.5 px-3">Çarpan</th>
+                        <th className="py-2.5 px-3">Yıl Geçişi</th>
                         <th className="py-2.5 px-3 text-right">Puan Değeri</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 bg-slate-900/60">
                       <tr>
-                        <td className="py-2.5 px-3 font-semibold text-white flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>Fiziki Mekan Check-In</span>
+                        <td className="py-2.5 px-3 font-semibold text-white">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>Fiziki Mekan Check-In</span>
+                          </div>
+                          <span className="text-[10px] text-emerald-300 font-semibold">20x Sahada Ziyaret</span>
                         </td>
-                        <td className="py-2.5 px-3">
-                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black">
-                            20x Sahada Ziyaret
-                          </span>
-                        </td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-400">Sonraki yıla taşınmaz</td>
                         <td className="py-2.5 px-3 text-right font-black text-amber-400">+200 Puan</td>
                       </tr>
                       <tr>
-                        <td className="py-2.5 px-3 font-semibold text-white flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Arkadaş Daveti (Referral)</span>
+                        <td className="py-2.5 px-3 font-semibold text-white">
+                          <div className="flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>Arkadaş Daveti (Referral)</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-normal">Tam sayıya yuvarlanır</span>
                         </td>
-                        <td className="py-2.5 px-3 text-slate-400">Arkadaşın yıl boyu seyahatleri</td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-400">Sonraki yıla taşınmaz</td>
                         <td className="py-2.5 px-3 text-right font-black text-emerald-400">%20 Pasif Gelir</td>
                       </tr>
                       <tr>
-                        <td className="py-2.5 px-3 font-semibold text-white">Davet Kodu ile Katılım</td>
-                        <td className="py-2.5 px-3 text-slate-400">Tek seferlik hoşgeldin</td>
+                        <td className="py-2.5 px-3 font-semibold text-white">Tamamlanan Seyahat Rotası</td>
+                        <td className="py-2.5 px-3 text-[11px] text-amber-300 font-semibold">Başlangıç: Rota × 50 × %20</td>
                         <td className="py-2.5 px-3 text-right font-black text-amber-400">+50 Puan</td>
                       </tr>
                       <tr>
+                        <td className="py-2.5 px-3 font-semibold text-white">Davet Kodu ile Katılım</td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-400">Sonraki yıla taşınmaz</td>
+                        <td className="py-2.5 px-3 text-right font-black text-amber-400">+50 Puan</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3 font-semibold text-white">Arkadaş / Aile İlişkisi Kurma</td>
+                        <td className="py-2.5 px-3 text-[11px] text-amber-300 font-semibold">Başlangıç: İlişki × 20 × %20</td>
+                        <td className="py-2.5 px-3 text-right font-black text-amber-400">+20 Puan</td>
+                      </tr>
+                      <tr>
                         <td className="py-2.5 px-3 font-semibold text-white">Yeni Mekan / Pin Ekleme</td>
-                        <td className="py-2.5 px-3 text-slate-400">Haritayı zenginleştirme</td>
+                        <td className="py-2.5 px-3 text-[11px] text-amber-300 font-semibold">Başlangıç: Pin × 10 × %20</td>
                         <td className="py-2.5 px-3 text-right font-black text-amber-400">+10 Puan</td>
                       </tr>
                       <tr>
                         <td className="py-2.5 px-3 font-semibold text-white">Günlük Giriş (Sadakat)</td>
-                        <td className="py-2.5 px-3 text-slate-400">Günde 1 kez</td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-400">Sonraki yıla taşınmaz</td>
                         <td className="py-2.5 px-3 text-right font-black text-amber-400">+5 Puan</td>
                       </tr>
                       <tr>
                         <td className="py-2.5 px-3 font-semibold text-white">Yorum ve Beğeni</td>
-                        <td className="py-2.5 px-3 text-slate-400">Topluluk etkileşimi</td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-400">Sonraki yıla taşınmaz</td>
                         <td className="py-2.5 px-3 text-right font-black text-amber-400">+5 Puan</td>
                       </tr>
                     </tbody>
@@ -433,9 +445,9 @@ export function PointsModal({ isOpen, onClose, initialSummary }: PointsModalProp
                   <div className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-start gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                     <div className="text-xs text-slate-300 space-y-0.5">
-                      <strong className="text-white block font-bold">4. Yıl Geçişi ve Kıdem Devri (Carry-Over):</strong>
+                      <strong className="text-white block font-bold">4. Yıla Başlangıç Puanı & Tam Sayı Kuralı:</strong>
                       <p className="text-[11px] text-slate-400">
-                        Puanlar yıl sonunda çöpe gitmez! Birikmiş pin ve seyahatleriniz yeni sezona kıdem/taban puanı olarak aktarılır.
+                        Yeni yıla başlarken o güne kadarki aktif kayıtların üzerinden hesaplanır: (Toplam Pin × 10 × %20) + (Tamamlanan Rota × 50 × %20) + (Sosyal İlişki × 20 × %20). Diğer puanlar sonraki yıla taşınmaz ve tüm oran hesaplamaları tam sayıya yuvarlanır.
                       </p>
                     </div>
                   </div>

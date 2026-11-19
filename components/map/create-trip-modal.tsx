@@ -7,9 +7,11 @@ import { getUserBaseLocation } from "@/lib/actions/user";
 import {
   resolveLocationCoordinates,
   findCountryByNameOrCode,
+  getLocalizedCountryName,
 } from "@/lib/world-cities";
 import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 import { CountryAutocomplete, CityAutocomplete } from "./location-autocomplete";
+import { useTranslation } from "@/lib/i18n";
 import {
   X,
   Plus,
@@ -46,17 +48,19 @@ interface IntermediateStop {
   countryCode: string;
   countryName: string;
   cityName: string;
+  latitude?: number;
+  longitude?: number;
   transportType: TransportTypeId;
   nights: number;
 }
 
 const TRANSPORT_OPTIONS = [
-  { id: "flight", label: "Uçak", icon: Plane },
-  { id: "car", label: "Araba", icon: Car },
-  { id: "train", label: "Tren", icon: Train },
-  { id: "bus", label: "Otobüs", icon: Bus },
-  { id: "motorbike", label: "Motosiklet", icon: Motorbike },
-  { id: "bicycle", label: "Bisiklet", icon: Bike },
+  { id: "flight", labelKey: "tripModal.transportFlight", icon: Plane },
+  { id: "car", labelKey: "tripModal.transportCar", icon: Car },
+  { id: "train", labelKey: "tripModal.transportTrain", icon: Train },
+  { id: "bus", labelKey: "tripModal.transportBus", icon: Bus },
+  { id: "motorbike", labelKey: "tripModal.transportMotorbike", icon: Motorbike },
+  { id: "bicycle", labelKey: "tripModal.transportBicycle", icon: Bike },
 ] as const;
 
 export function CreateTripModal({
@@ -66,6 +70,8 @@ export function CreateTripModal({
   initialTrip,
   onTripUpdated,
 }: CreateTripModalProps) {
+  const { t, locale } = useTranslation();
+  const dateLocale = locale === "en" ? "en-US" : "tr-TR";
   // Rota Temel Bilgileri
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -82,7 +88,13 @@ export function CreateTripModal({
   const [startDate, setStartDate] = useState(defaultStartDate);
 
   // 1. Satır: Başlangıç Noktası (Profilde varsa beslenir, yoksa veya istenirse serbestçe değiştirilebilir)
-  const [origin, setOrigin] = useState({
+  const [origin, setOrigin] = useState<{
+    countryCode: string;
+    countryName: string;
+    cityName: string;
+    latitude?: number;
+    longitude?: number;
+  }>({
     countryCode: "TR",
     countryName: "Türkiye",
     cityName: "",
@@ -121,6 +133,8 @@ export function CreateTripModal({
     countryCode: string;
     countryName: string;
     cityName: string;
+    latitude?: number;
+    longitude?: number;
     transportType: TransportTypeId;
   }>({
     countryCode: "TR",
@@ -153,15 +167,19 @@ export function CreateTripModal({
         const originC = findCountryByNameOrCode(first.countryCode);
         setOrigin({
           countryCode: first.countryCode,
-          countryName: originC ? originC.name : first.countryCode,
+          countryName: originC ? getLocalizedCountryName(originC, locale) : first.countryCode,
           cityName: first.cityName,
+          latitude: first.latitude,
+          longitude: first.longitude,
         });
 
         const destC = findCountryByNameOrCode(last.countryCode);
         setDestination({
           countryCode: last.countryCode,
-          countryName: destC ? destC.name : last.countryCode,
+          countryName: destC ? getLocalizedCountryName(destC, locale) : last.countryCode,
           cityName: last.cityName,
+          latitude: last.latitude,
+          longitude: last.longitude,
           transportType: (last.transportType as TransportTypeId) || "flight",
         });
 
@@ -180,8 +198,10 @@ export function CreateTripModal({
               return {
                 id: s.id || `stop-${idx}`,
                 countryCode: s.countryCode,
-                countryName: sCountry ? sCountry.name : s.countryCode,
+                countryName: sCountry ? getLocalizedCountryName(sCountry, locale) : s.countryCode,
                 cityName: s.cityName,
+                latitude: s.latitude,
+                longitude: s.longitude,
                 transportType: (s.transportType as TransportTypeId) || "flight",
                 nights,
               };
@@ -234,7 +254,13 @@ export function CreateTripModal({
         if (loc && loc.baseCity) {
           const cCode = loc.baseCountry || "TR";
           const matchedCountry = findCountryByNameOrCode(cCode);
-          const cName = matchedCountry ? matchedCountry.name : (cCode === "TR" ? "Türkiye" : cCode);
+          const cName = matchedCountry
+            ? getLocalizedCountryName(matchedCountry, locale)
+            : cCode === "TR"
+            ? locale === "en"
+              ? "Turkey"
+              : "Türkiye"
+            : cCode;
           setOrigin({
             countryCode: cCode,
             countryName: cName,
@@ -247,21 +273,22 @@ export function CreateTripModal({
             cityName: loc.baseCity,
           }));
         } else {
+          const defaultCountry = locale === "en" ? "Turkey" : "Türkiye";
           setOrigin({
             countryCode: "TR",
-            countryName: "Türkiye",
+            countryName: defaultCountry,
             cityName: "",
           });
           setDestination((prev) => ({
             ...prev,
             countryCode: "TR",
-            countryName: "Türkiye",
+            countryName: defaultCountry,
             cityName: "",
           }));
         }
       });
     }
-  }, [isOpen, initialTrip, defaultStartDate]);
+  }, [isOpen, initialTrip, defaultStartDate, locale]);
 
   // Toplam Gece Sayısı ve Bitiş Tarihi Otomatik Hesaplama (Canlı Dinamik Toplam)
   const totalNights = useMemo(() => {
@@ -282,8 +309,8 @@ export function CreateTripModal({
       return {
         arrivalDateIso: arrival.toISOString(),
         departureDateIso: departure.toISOString(),
-        arrivalFormatted: arrival.toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
-        departureFormatted: departure.toLocaleDateString("tr-TR", { day: "numeric", month: "short" }),
+        arrivalFormatted: arrival.toLocaleDateString(dateLocale, { day: "numeric", month: "short" }),
+        departureFormatted: departure.toLocaleDateString(dateLocale, { day: "numeric", month: "short" }),
       };
     });
 
@@ -292,18 +319,18 @@ export function CreateTripModal({
     return {
       stopRanges,
       endDateIso: finalReturnDate.toISOString(),
-      endDateFormatted: finalReturnDate.toLocaleDateString("tr-TR", {
+      endDateFormatted: finalReturnDate.toLocaleDateString(dateLocale, {
         day: "numeric",
         month: "long",
         year: "numeric",
       }),
-      startDateFormatted: baseDate.toLocaleDateString("tr-TR", {
+      startDateFormatted: baseDate.toLocaleDateString(dateLocale, {
         day: "numeric",
         month: "long",
         year: "numeric",
       }),
     };
-  }, [startDate, stops]);
+  }, [startDate, stops, dateLocale]);
 
   if (!isOpen) return null;
 
@@ -323,7 +350,7 @@ export function CreateTripModal({
   // Durak Sil (En az 1 ara durak kalmalıdır)
   function removeStop(id: string) {
     if (stops.length <= 1) {
-      toast.error("Rotada en az 1 ara durak bulunmalıdır.");
+      toast.error(t("tripModal.errMinStop"));
       return;
     }
     setStops((prev) => prev.filter((s) => s.id !== id));
@@ -354,10 +381,18 @@ export function CreateTripModal({
   }
 
   // Durak Bilgisini Güncelle
-  function updateStop(index: number, field: keyof IntermediateStop, val: any) {
+  function updateStop(index: number, field: keyof IntermediateStop, val: IntermediateStop[keyof IntermediateStop]) {
     setStops((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: val };
+      return next;
+    });
+  }
+
+  function updateStopPatch(index: number, patch: Partial<IntermediateStop>) {
+    setStops((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], ...patch };
       return next;
     });
   }
@@ -367,24 +402,24 @@ export function CreateTripModal({
     e.preventDefault();
 
     if (!title.trim()) {
-      toast.error("Lütfen bir rota adı giriniz.");
+      toast.error(t("tripModal.errTitleRequired"));
       return;
     }
 
     if (!origin.cityName.trim()) {
-      toast.error("Lütfen seyahat başlangıç noktasının şehrini giriniz.");
+      toast.error(t("tripModal.errOriginCityRequired"));
       return;
     }
 
     if (!destination.cityName.trim()) {
-      toast.error("Lütfen seyahat dönüş noktasının şehrini giriniz.");
+      toast.error(t("tripModal.errReturnCityRequired"));
       return;
     }
 
     // Boş ara durak kontrolü
     for (let i = 0; i < stops.length; i++) {
       if (!stops[i].cityName.trim()) {
-        toast.error(`Lütfen ${i + 1}. durak için bir şehir giriniz.`);
+        toast.error(t("tripModal.errStopCityRequired", { index: String(i + 1) }));
         return;
       }
     }
@@ -395,10 +430,17 @@ export function CreateTripModal({
       const originCountry = origin.countryCode || findCountryByNameOrCode(origin.countryName)?.code || "TR";
       const destCountry = destination.countryCode || findCountryByNameOrCode(destination.countryName)?.code || "TR";
 
-      const resolvedOrigin = resolveLocationCoordinates(originCountry, origin.cityName);
+      const resolvedOrigin = resolveLocationCoordinates(originCountry, origin.cityName, {
+        lat: origin.latitude,
+        lng: origin.longitude,
+      });
       const resolvedDestination = resolveLocationCoordinates(
         destCountry,
-        destination.cityName
+        destination.cityName,
+        {
+          lat: destination.latitude,
+          lng: destination.longitude,
+        }
       );
 
       const payloadStops: any[] = [];
@@ -415,13 +457,16 @@ export function CreateTripModal({
         arrivalDate: new Date(startDate).toISOString(),
         departureDate: new Date(startDate).toISOString(),
         nights: 0,
-        notes: "Başlangıç Noktası",
+        notes: t("tripModal.noteOrigin"),
       });
 
       // 2. Ara Duraklar
       stops.forEach((s, idx) => {
         const cCode = s.countryCode || findCountryByNameOrCode(s.countryName)?.code || "TR";
-        const resolved = resolveLocationCoordinates(cCode, s.cityName);
+        const resolved = resolveLocationCoordinates(cCode, s.cityName, {
+          lat: s.latitude,
+          lng: s.longitude,
+        });
         const timeline = calculatedTimeline.stopRanges[idx];
 
         payloadStops.push({
@@ -435,7 +480,7 @@ export function CreateTripModal({
           arrivalDate: timeline.arrivalDateIso,
           departureDate: timeline.departureDateIso,
           nights: s.nights,
-          notes: `${idx + 1}. Durak (${s.nights} Gece)`,
+          notes: t("tripModal.noteStop", { index: String(idx + 1), nights: String(s.nights) }),
         });
       });
 
@@ -451,7 +496,7 @@ export function CreateTripModal({
         arrivalDate: calculatedTimeline.endDateIso,
         departureDate: calculatedTimeline.endDateIso,
         nights: 0,
-        notes: "Dönüş Noktası",
+        notes: t("tripModal.noteReturn"),
       });
 
       const input: CreateTripInput = {
@@ -468,23 +513,32 @@ export function CreateTripModal({
       if (initialTrip) {
         const res = await updateTrip(initialTrip.id, input);
         if (res.success && res.trip) {
-          toast.success("Rota başarıyla güncellendi! 🚀");
+          toast.success(t("tripModal.toastUpdated"));
+          if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
+            triggerFloatingPoints({
+              points: res.pointsDelta,
+              label:
+                res.pointsDelta > 0
+                  ? `${res.trip.title} ${t("tripModal.floatingCompleted")}`
+                  : `${res.trip.title} ${t("tripModal.floatingPlannedReversal")}`,
+            });
+          }
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("refresh-points"));
           }
           if (onTripUpdated) onTripUpdated(res.trip);
           onClose();
         } else {
-          toast.error(res.message || "Rota güncellenemedi.");
+          toast.error(res.message || t("tripModal.toastUpdateError"));
         }
       } else {
         const res = await createTrip(input);
         if (res.success && res.trip) {
-          toast.success("Rota başarıyla oluşturuldu! 🚀");
-          if (input.status === "completed") {
+          toast.success(t("tripModal.toastCreated"));
+          if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
             triggerFloatingPoints({
-              points: 50,
-              label: `${res.trip.title} Rotası`,
+              points: res.pointsDelta,
+              label: `${res.trip.title} ${t("tripModal.floatingRouteSuffix")}`,
             });
           }
           if (typeof window !== "undefined") {
@@ -493,12 +547,12 @@ export function CreateTripModal({
           onTripCreated(res.trip);
           onClose();
         } else {
-          toast.error(res.message || "Rota oluşturulamadı.");
+          toast.error(res.message || t("tripModal.toastCreateError"));
         }
       }
     } catch (error) {
       console.error("Rota kaydedilirken hata:", error);
-      toast.error("Bir hata oluştu. Lütfen tekrar deneyin.");
+      toast.error(t("tripModal.toastUnexpectedError"));
     } finally {
       setIsSubmitting(false);
     }
@@ -515,13 +569,15 @@ export function CreateTripModal({
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                <span>{initialTrip ? "Rotayı Düzenle" : "Yeni Rota Oluştur"}</span>
+                <span>
+                  {initialTrip ? t("tripModal.titleEdit") : t("tripModal.titleCreate")}
+                </span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-semibold border border-cyan-500/20">
-                  {stops.length + 2} Nokta
+                  {t("tripModal.pointsCount", { count: String(stops.length + 2) })}
                 </span>
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Şehirleri ve durakları birbirine bağlayan seyahat rotası
+                {t("tripModal.subtitle")}
               </p>
             </div>
           </div>
@@ -541,21 +597,21 @@ export function CreateTripModal({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                Rota Adı *
+                {t("tripModal.routeNameLabel")}
               </label>
               <input
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Örn: Klasik Avrupa Turu, Ege Kıyıları Kaçamağı"
+                placeholder={t("tripModal.routeNamePlaceholder")}
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 outline-none"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                Seyahat Durumu
+                {t("tripModal.statusLabel")}
               </label>
               <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
                 <button
@@ -568,7 +624,7 @@ export function CreateTripModal({
                   }`}
                 >
                   <Clock className="w-3.5 h-3.5" />
-                  <span>Planlanan</span>
+                  <span>{t("tripModal.statusPlanned")}</span>
                 </button>
                 <button
                   type="button"
@@ -580,9 +636,14 @@ export function CreateTripModal({
                   }`}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Geçmiş</span>
+                  <span>{t("tripModal.statusCompleted")}</span>
                 </button>
               </div>
+              <p className="mt-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                {status === "completed"
+                  ? t("tripModal.statusCompletedHint")
+                  : t("tripModal.statusPlannedHint")}
+              </p>
             </div>
           </div>
 
@@ -592,7 +653,7 @@ export function CreateTripModal({
               <div className="flex items-center gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-cyan-900 dark:text-cyan-300 uppercase tracking-wider mb-1">
-                    Seyahat Başlangıç Tarihi *
+                    {t("tripModal.startDateLabel")}
                   </label>
                   <input
                     type="date"
@@ -603,7 +664,7 @@ export function CreateTripModal({
                   />
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 self-end mb-1">
-                  (Çıkış Günü)
+                  {t("tripModal.departureDayHint")}
                 </div>
               </div>
 
@@ -612,11 +673,14 @@ export function CreateTripModal({
                 <Moon className="w-4 h-4 text-indigo-500 animate-pulse shrink-0" />
                 <div className="leading-tight">
                   <span className="font-extrabold text-slate-900 dark:text-white">
-                    Toplam {totalNights} Gece
+                    {t("tripModal.totalNights", { count: String(totalNights) })}
                   </span>
                   <span className="text-slate-300 dark:text-slate-600 mx-1.5">•</span>
                   <span className="text-slate-600 dark:text-slate-300 text-[11px]">
-                    Dönüş: <strong className="text-cyan-600 dark:text-cyan-400">{calculatedTimeline.endDateFormatted}</strong>
+                    {t("tripModal.returnPrefix")}{" "}
+                    <strong className="text-cyan-600 dark:text-cyan-400">
+                      {calculatedTimeline.endDateFormatted}
+                    </strong>
                   </span>
                 </div>
               </div>
@@ -627,16 +691,16 @@ export function CreateTripModal({
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-cyan-500" />
-              <span>Rotayı Kimler Görebilir? (Görünürlük)</span>
+              <span>{t("tripModal.visibilityLabel")}</span>
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
               {(
                 [
-                  { id: "public", label: "Herkes", icon: "🌐" },
-                  { id: "friend", label: "Arkadaşım", icon: "👥" },
-                  { id: "relative", label: "Akrabam", icon: "🤝" },
-                  { id: "family", label: "Ailem", icon: "🏡" },
-                  { id: "private", label: "Gizli", icon: "🔒" },
+                  { id: "public", label: t("tripModal.visPublic"), icon: "🌐" },
+                  { id: "friend", label: t("tripModal.visFriend"), icon: "👥" },
+                  { id: "relative", label: t("tripModal.visRelative"), icon: "🤝" },
+                  { id: "family", label: t("tripModal.visFamily"), icon: "🏡" },
+                  { id: "private", label: t("tripModal.visPrivate"), icon: "🔒" },
                 ] as const
               ).map((item) => (
                 <button
@@ -658,13 +722,13 @@ export function CreateTripModal({
 
           {/* 3. YAPILANDIRILMIŞ ROTA IZGARASI (BAŞLANGIÇ - ARA DURAKLAR - DÖNÜŞ) */}
           <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                  Seyahat Güzergahı ve Duraklar ({stops.length + 2} Nokta)
+                  {t("tripModal.itineraryTitle", { count: String(stops.length + 2) })}
                 </label>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Başlangıç, ara duraklar ve dönüş noktalarını belirleyiniz. Ara durakları taşıyabilir veya gece sayılarını ayarlayabilirsiniz.
+                  {t("tripModal.itineraryDesc")}
                 </p>
               </div>
 
@@ -674,7 +738,7 @@ export function CreateTripModal({
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Yeni Durak Ekle</span>
+                <span>{t("tripModal.addStopBtn")}</span>
               </button>
             </div>
 
@@ -688,10 +752,10 @@ export function CreateTripModal({
                   </div>
                   <div>
                     <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                      Başlangıç Noktası
+                      {t("tripModal.originTitle")}
                     </div>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Tarih: {calculatedTimeline.startDateFormatted}
+                      {t("tripModal.datePrefix")} {calculatedTimeline.startDateFormatted}
                     </div>
                   </div>
                 </div>
@@ -701,19 +765,45 @@ export function CreateTripModal({
                   <CountryAutocomplete
                     countryCode={origin.countryCode}
                     countryName={origin.countryName}
-                    placeholder="Çıkış Ülkesi..."
+                    placeholder={t("tripModal.originCountryPlaceholder")}
                     onChange={(c) =>
-                      setOrigin((prev) => ({ ...prev, countryCode: c.code, countryName: c.name }))
+                      setOrigin((prev) => ({
+                        ...prev,
+                        countryCode: c.code,
+                        countryName: c.name,
+                        latitude: c.code !== prev.countryCode ? undefined : prev.latitude,
+                        longitude: c.code !== prev.countryCode ? undefined : prev.longitude,
+                      }))
                     }
                   />
 
                   <CityAutocomplete
                     countryCode={origin.countryCode}
                     cityName={origin.cityName}
-                    placeholder="Çıkış Şehri..."
+                    placeholder={t("tripModal.originCityPlaceholder")}
                     onChange={(cityName) =>
-                      setOrigin((prev) => ({ ...prev, cityName }))
+                      setOrigin((prev) => ({
+                        ...prev,
+                        cityName,
+                        latitude: undefined,
+                        longitude: undefined,
+                      }))
                     }
+                    onSelectCity={(city) => {
+                      const matched = !origin.countryCode
+                        ? findCountryByNameOrCode(city.countryCode)
+                        : null;
+                      setOrigin((prev) => ({
+                        ...prev,
+                        cityName: city.name,
+                        latitude: city.lat,
+                        longitude: city.lng,
+                        countryCode: prev.countryCode || city.countryCode,
+                        countryName:
+                          prev.countryName ||
+                          (matched ? getLocalizedCountryName(matched, locale) : city.countryName || city.countryCode),
+                      }));
+                    }}
                   />
                 </div>
               </div>
@@ -734,7 +824,7 @@ export function CreateTripModal({
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                            {index + 1}. Durak
+                            {t("tripModal.stopLabel", { index: String(index + 1) })}
                           </div>
                           {timeline && (
                             <div className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400 truncate">
@@ -747,15 +837,15 @@ export function CreateTripModal({
                       {/* Ulaşım Aracı Seçici (Orta Kolon - Tam Ortalanmış, İkon-Only) */}
                       <div className="flex-1 flex justify-center">
                         <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                          {TRANSPORT_OPTIONS.map((t) => {
-                            const Icon = t.icon;
-                            const isSelected = stop.transportType === t.id;
+                          {TRANSPORT_OPTIONS.map((opt) => {
+                            const Icon = opt.icon;
+                            const isSelected = stop.transportType === opt.id;
                             return (
                               <button
-                                key={t.id}
+                                key={opt.id}
                                 type="button"
-                                onClick={() => updateStop(index, "transportType", t.id)}
-                                title={t.label}
+                                onClick={() => updateStop(index, "transportType", opt.id)}
+                                title={t(opt.labelKey)}
                                 className={`w-7 h-7 rounded-lg text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
                                   isSelected
                                     ? "bg-cyan-500 text-white shadow-sm"
@@ -782,7 +872,7 @@ export function CreateTripModal({
                             -
                           </button>
                           <span className="text-xs font-bold text-slate-900 dark:text-white min-w-12 text-center">
-                            {stop.nights} Gece
+                            {t("tripModal.nightsUnit", { count: String(stop.nights) })}
                           </span>
                           <button
                             type="button"
@@ -799,7 +889,7 @@ export function CreateTripModal({
                             type="button"
                             disabled={index === 0}
                             onClick={() => moveStop(index, "up")}
-                            title="Yukarı Taşı"
+                            title={t("tripModal.moveUp")}
                             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 disabled:opacity-20 cursor-pointer transition-colors"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
@@ -808,7 +898,7 @@ export function CreateTripModal({
                             type="button"
                             disabled={index === stops.length - 1}
                             onClick={() => moveStop(index, "down")}
-                            title="Aşağı Taşı"
+                            title={t("tripModal.moveDown")}
                             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 disabled:opacity-20 cursor-pointer transition-colors"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
@@ -817,7 +907,7 @@ export function CreateTripModal({
                             type="button"
                             onClick={() => removeStop(stop.id)}
                             disabled={stops.length <= 1}
-                            title="Durağı Sil"
+                            title={t("tripModal.removeStop")}
                             className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-20 cursor-pointer transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -831,18 +921,47 @@ export function CreateTripModal({
                       <CountryAutocomplete
                         countryCode={stop.countryCode}
                         countryName={stop.countryName}
-                        placeholder="Durak Ülkesi yazınız..."
+                        placeholder={t("tripModal.stopCountryPlaceholder")}
                         onChange={(c) => {
-                          updateStop(index, "countryCode", c.code);
-                          updateStop(index, "countryName", c.name);
+                          updateStopPatch(index, {
+                            countryCode: c.code,
+                            countryName: c.name,
+                            ...(c.code !== stop.countryCode
+                              ? { latitude: undefined, longitude: undefined }
+                              : {}),
+                          });
                         }}
                       />
 
                       <CityAutocomplete
                         countryCode={stop.countryCode}
                         cityName={stop.cityName}
-                        placeholder="Durak Şehri yazınız veya seçiniz..."
-                        onChange={(city) => updateStop(index, "cityName", city)}
+                        placeholder={t("tripModal.stopCityPlaceholder")}
+                        onChange={(city) =>
+                          updateStopPatch(index, {
+                            cityName: city,
+                            latitude: undefined,
+                            longitude: undefined,
+                          })
+                        }
+                        onSelectCity={(city) => {
+                          const matched = !stop.countryCode
+                            ? findCountryByNameOrCode(city.countryCode)
+                            : null;
+                          updateStopPatch(index, {
+                            cityName: city.name,
+                            latitude: city.lat,
+                            longitude: city.lng,
+                            ...(!stop.countryCode
+                              ? {
+                                  countryCode: city.countryCode,
+                                  countryName: matched
+                                    ? getLocalizedCountryName(matched, locale)
+                                    : city.countryName || city.countryCode,
+                                }
+                              : {}),
+                          });
+                        }}
                       />
                     </div>
                   </div>
@@ -859,10 +978,10 @@ export function CreateTripModal({
                     </div>
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-indigo-900 dark:text-indigo-300 truncate">
-                        Dönüş Noktası
+                        {t("tripModal.returnTitle")}
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                        Varış: {calculatedTimeline.endDateFormatted}
+                        {t("tripModal.arrivalPrefix")} {calculatedTimeline.endDateFormatted}
                       </div>
                     </div>
                   </div>
@@ -870,17 +989,17 @@ export function CreateTripModal({
                   {/* Dönüş Ulaşım Aracı Seçici (Orta Kolon - Tam Ortalanmış, Üsttekilerle Birebir Aynı Hizada) */}
                   <div className="flex-1 flex justify-center">
                     <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 shadow-sm">
-                      {TRANSPORT_OPTIONS.map((t) => {
-                        const Icon = t.icon;
-                        const isSelected = destination.transportType === t.id;
+                      {TRANSPORT_OPTIONS.map((opt) => {
+                        const Icon = opt.icon;
+                        const isSelected = destination.transportType === opt.id;
                         return (
                           <button
-                            key={t.id}
+                            key={opt.id}
                             type="button"
                             onClick={() =>
-                              setDestination((prev) => ({ ...prev, transportType: t.id }))
+                              setDestination((prev) => ({ ...prev, transportType: opt.id }))
                             }
-                            title={`Dönüş Aracı: ${t.label}`}
+                            title={t("tripModal.returnTransportTooltip", { label: t(opt.labelKey) })}
                             className={`w-7 h-7 rounded-lg text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
                               isSelected
                                 ? "bg-indigo-600 text-white shadow-sm"
@@ -898,7 +1017,7 @@ export function CreateTripModal({
                   <div className="hidden sm:flex sm:w-[190px] shrink-0 items-center justify-end">
                     <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100/70 dark:bg-indigo-900/50 px-2.5 py-1 rounded-xl border border-indigo-200/60 dark:border-indigo-800/40 flex items-center gap-1.5 shadow-xs">
                       <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>Varış Noktası</span>
+                      <span>{t("tripModal.arrivalBadge")}</span>
                     </span>
                   </div>
                 </div>
@@ -908,19 +1027,45 @@ export function CreateTripModal({
                   <CountryAutocomplete
                     countryCode={destination.countryCode}
                     countryName={destination.countryName}
-                    placeholder="Dönüş Ülkesi..."
+                    placeholder={t("tripModal.returnCountryPlaceholder")}
                     onChange={(c) =>
-                      setDestination((prev) => ({ ...prev, countryCode: c.code, countryName: c.name }))
+                      setDestination((prev) => ({
+                        ...prev,
+                        countryCode: c.code,
+                        countryName: c.name,
+                        latitude: c.code !== prev.countryCode ? undefined : prev.latitude,
+                        longitude: c.code !== prev.countryCode ? undefined : prev.longitude,
+                      }))
                     }
                   />
 
                   <CityAutocomplete
                     countryCode={destination.countryCode}
                     cityName={destination.cityName}
-                    placeholder="Dönüş Şehri..."
+                    placeholder={t("tripModal.returnCityPlaceholder")}
                     onChange={(cityName) =>
-                      setDestination((prev) => ({ ...prev, cityName }))
+                      setDestination((prev) => ({
+                        ...prev,
+                        cityName,
+                        latitude: undefined,
+                        longitude: undefined,
+                      }))
                     }
+                    onSelectCity={(city) => {
+                      const matched = !destination.countryCode
+                        ? findCountryByNameOrCode(city.countryCode)
+                        : null;
+                      setDestination((prev) => ({
+                        ...prev,
+                        cityName: city.name,
+                        latitude: city.lat,
+                        longitude: city.lng,
+                        countryCode: prev.countryCode || city.countryCode,
+                        countryName:
+                          prev.countryName ||
+                          (matched ? getLocalizedCountryName(matched, locale) : city.countryName || city.countryCode),
+                      }));
+                    }}
                   />
                 </div>
               </div>
@@ -930,13 +1075,13 @@ export function CreateTripModal({
           {/* Açıklama (Opsiyonel) */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-              Rota Açıklaması veya Gezgin Notları (Opsiyonel)
+              {t("tripModal.descriptionLabel")}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              placeholder="Gezilecek yerler, tren saatleri veya hatırlatıcı notlarınız..."
+              placeholder={t("tripModal.descriptionPlaceholder")}
               className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 outline-none"
             />
           </div>
@@ -948,7 +1093,7 @@ export function CreateTripModal({
               onClick={onClose}
               className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Vazgeç
+              {t("tripModal.cancelBtn")}
             </button>
             <button
               type="submit"
@@ -956,10 +1101,10 @@ export function CreateTripModal({
               className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
             >
               {isSubmitting
-                ? "Kaydediliyor..."
+                ? t("tripModal.savingBtn")
                 : initialTrip
-                ? "Değişiklikleri Kaydet 🚀"
-                : "Rotayı Kaydet 🚀"}
+                ? t("tripModal.saveChangesBtn")
+                : t("tripModal.saveRouteBtn")}
             </button>
           </div>
         </form>

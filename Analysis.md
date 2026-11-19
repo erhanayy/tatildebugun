@@ -4561,3 +4561,272 @@ Kullanıcının *"Şimdi de seyahat başarı ile silindi dedi ve pin gitti puan 
 3. **Kural Disiplini:**
    - Kural 2 uyarınca GitHub push yapılmadı.
    - Kural 3 uyarınca deploy yapılmadı.
+
+---
+
+## 89. Kapsamlı Dünya Ülkeleri & Tüm Dünya Şehirleri (İskoçya / Özerk Bölgeler Dahil) Offline Arama Mimarisi
+
+Kullanıcının *"Scotland, iskoçya gelmiyor. en son bunu sylediğimde sanki flash ile başlayan bir siteden eksikleri almaya çalıştın ve saatlerce döndü durdu, cancel da yapamadım en son açıp kapatmak zorunda kaldım. Tekrar bak ama takılma, tüm ülkelerin arandı mı bulunabilmesi lazım tabi şehirlerinde"* geri bildirimi üzerine gerçekleştirilen kök neden analizi ve mimari tasarım:
+
+### 89.1. Kök Neden Analizi (Root Cause Analysis)
+1. **Eksik Ülke Veritabanı (`lib/world-cities.ts`):**
+   - Mevcut `WORLD_COUNTRIES` listesinde yalnızca ~85 ülke yer almakta; dünyadaki 195 egemen BM ülkesinin ~110'u hiç bulunmamaktadır.
+   - Seyahat destinasyonu olarak aranan kurucu/özerk ülkeler (**İskoçya / Scotland**, Galler / Wales, İngiltere / England, Kuzey İrlanda / Northern Ireland, Grönland, Faroe Adaları, Porto Riko, Aruba, Curaçao, Makao, Filistin vb.) listede yoktur.
+   - Birleşik Krallık (`GB`) alias listesinde dahi `İskoçya` veya `Scotland` yer almamaktadır.
+2. **Kısıtlı Dropdown Davranışı (`components/map/location-autocomplete.tsx`):**
+   - Arama boşken `searchCountries("")` yalnızca `WORLD_COUNTRIES.slice(0, 16)` döndürmektedir; kullanıcı listede aşağı kaydırsa bile diğer ülkeleri görememektedir.
+3. **Eksik Şehir Veritabanı & Koordinat Fallback Hatası (`lib/world-cities.ts` & `lib/country-flags.ts`):**
+   - `POPULAR_WORLD_CITIES` içinde yalnızca ~48 ülke için 2–7 arası şehir tanımlıdır; 150+ ülke için hiç şehir önerisi çıkmamaktadır.
+   - `COUNTRY_CENTERS` içinde yalnızca 24 ülkenin merkez koordinatı vardır. Listede olmayan bir ülke/şehir kaydedildiğinde `resolveLocationCoordinates` varsayılan olarak `{ lat: 39.0, lng: 35.2 }` (Türkiye'nin ortası) koordinatına düşmektedir.
+4. **Harici Web Sitesine Bağımlılık ve Takılma Riski:**
+   - Harici bir siteden (örn. FlagCDN veya harici API) canlı veri kazımaya/çekmeye çalışmak ağ gecikmesi, rate-limit veya sonsuz bekleme (takılma) riski oluşturur.
+
+### 89.2. Uygulanacak Mimari ve Tasarım Planı (Sıfır Harici Kazıma / %100 Yerel & Hızlı)
+
+#### 1. Tam Dünya Ülkeleri & Koordinat Veritabanı (`lib/world-cities.ts`, `lib/country-flags.ts`)
+- **~210+ Ülke ve Özerk Destinasyon:**
+  - Tüm 195 BM egemen devleti eksiksiz eklenecek.
+  - Birinci sınıf gezgin destinasyonları doğrudan eklenecek:
+    - **İskoçya (`GB-SCT`)**: Bayrak `🏴󠁧󠁢󠁳󠁣󠁴󠁿`, Alias: `["Scotland", "Iskocya", "Edinburgh", "Glasgow", "Highlands", "Aberdeen", "Inverness"]`
+    - **Galler (`GB-WLS`)**: Bayrak `🏴󠁧󠁢󠁷󠁬󠁳󠁿`, Alias: `["Wales", "Cardiff", "Swansea"]`
+    - **İngiltere (`GB-ENG`)**: Bayrak `🏴󠁧󠁢󠁥󠁮󠁧󠁿`, Alias: `["England", "Ingiltere", "London", "Londra", "Manchester", "Liverpool"]`
+    - **Kuzey İrlanda (`GB-NIR`)**: Bayrak `🇬🇧`, Alias: `["Northern Ireland", "Kuzey Irlanda", "Belfast"]`
+    - **KKTC (`KKTC`)**, **Kosova (`XK`)**, **Filistin (`PS`)**, **Tayvan (`TW`)**, **Hong Kong (`HK`)**, **Makao (`MO`)**, **Grönland (`GL`)**, **Faroe Adaları (`FO`)**, **Porto Riko (`PR`)**, **Aruba (`AW`)**, **Curaçao (`CW`)**, **Bermuda (`BM`)**, **Cebelitarık (`GI`)** vb.
+  - **Birleşik Krallık (`GB`)** alias'larına da `İskoçya`, `Scotland`, `Galler`, `Wales`, `İngiltere`, `England`, `Kuzey İrlanda` eklenerek çapraz arama desteklenecek.
+- **Tüm Ülkeler İçin Merkez Koordinatları (`COUNTRY_CENTERS`):**
+  - 210+ ülkenin tamamı gerçek `lat`, `lng`, `zoom` değerlerine sahip olacak; hiçbir şehir/ülke yanlışlıkla Türkiye koordinatına düşmeyecek.
+- **Türkçe + İngilizce + Aksansız Arama Normalizasyonu:**
+  - `İskoçya`, `Iskocya`, `iskocya`, `Scotland`, `scot`, `GB-SCT` gibi tüm varyasyonlar anında eşleşecek (`ğ/g`, `ş/s`, `ç/c`, `ö/o`, `ü/u`, `ı/i` duyarsız normalizasyon).
+
+#### 2. Bayrak Desteği (`lib/country-flags.ts` & `components/ui/country-flag.tsx`)
+- Harici scriptle hiçbir site taranmayacak.
+- `getCountryFlagUrl` ve `CountryFlag` bileşenleri 2 harfli ISO kodlarına ek olarak `GB-SCT`, `GB-WLS`, `GB-ENG`, `GB-NIR` alt bölge kodlarını destekleyecek; görsel yüklenemezse dahili SVG/emoji fallback (`🏴󠁧󠁢󠁳󠁣󠁴󠁿` vb.) ile kesintisiz gösterim sağlanacak.
+
+#### 3. Tüm Dünya Şehirleri İçin Offline Sunucu İndeksi (`/api/locations/cities`)
+- **`country-state-city` paketi (tamamen yerel/offline, ~150.000 dünya şehri ve gerçek `lat/lng` koordinatları):**
+  - Paket **yalnızca sunucu tarafında** (API Route: `app/api/locations/cities/route.ts`) kullanılacak; tarayıcı (client) JS paket boyutuna **0 KB** yük bindirecek.
+  - Harici hiçbir web servisine istek atılmadığı için **1–5 ms** içinde yanıt verecek, rate-limit veya takılma yaşanmayacak.
+  - **Zod Doğrulama (Kural 10):** `country` (opsiyonel ülke kodu), `q` (arama metni), `limit` (varsayılan 25, maks 50) parametreleri runtime'da Zod ile doğrulanacak.
+  - **Özerk Ülke / Alt Bölge Eşleştirmesi:**
+    - `GB-SCT` -> `GB` ülkesi + `SCT` (Scotland) state filtresi -> Edinburgh, Glasgow, Aberdeen, Inverness, Dundee, Stirling, Perth, St Andrews, Fort William, Oban vb. **yüzlerce İskoçya şehri**.
+    - `GB-WLS` -> `GB` + `WLS` (Wales), `GB-ENG` -> `GB` + `ENG` (England), `GB-NIR` -> `GB` + `NIR` (Northern Ireland).
+    - `TR` -> Mevcut 81 il + ilçe eşleştirme sözlüğü (`lib/turkey-cities.ts`) öncelikli olarak korunur.
+    - `KKTC` -> Girne, Lefkoşa, Gazimağusa, Güzelyurt, İskele, Lefke öncelikli döner.
+    - Diğer tüm 200+ ülke -> Önce Türkçe popüler şehirler (`POPULAR_WORLD_CITIES` — Viyana, Roma, Prag, Atina vb.), ardından `country-state-city` içindeki tüm şehirler tekilleştirilerek ve koordinatlarıyla (`lat`, `lng`) birlikte döner.
+  - **Ülke Seçilmeden Şehir Arama:** Kullanıcı önce şehir yazarsa (örn. "Edinburgh" veya "Kyoto") tüm dünya şehirleri içinde arama yapıp şehri ve bağlı olduğu ülkeyi (örn. `İskoçya / GB-SCT`) önerebilecek.
+
+#### 4. Arayüz & Koordinat Akışı (`location-autocomplete.tsx`, `create-trip-modal.tsx`, `add-visit-modal.tsx`)
+- **`CountryAutocomplete`:**
+  - Arama boşken yalnızca kısa **Popüler Destinasyonlar** listesi (ilk 12–16 ülke) gösterilir ve altında *"Tüm ülkeler için yazarak arayabilirsiniz..."* bilgi satırı yer alır; 200+ ülke aşağıya doğru yığılmaz.
+  - Kullanıcı yazmaya başladığında tüm 210+ ülke ve özerk destinasyon (İskoçya / Scotland vb.) içinde Türkçe/İngilizce/aksansız/kod bazlı anında filtrelenmiş eşleşmeler listelenir ve seçilebilir.
+- **`CityAutocomplete`:**
+  - Ülke seçiliyse açılır açılmaz o ülkenin başlıca şehirleri kısa liste halinde görünür.
+  - Kullanıcı yazmaya başlayınca 180 ms debounce + `AbortController` ile `/api/locations/cities` sorgulanır; 150.000+ şehirlik offline sunucu indeksinden eşleşmeler `name`, `countryCode`, `lat`, `lng` ile döner.
+  - Seçilen şehrin gerçek koordinatı (`lat`, `lng`) doğrudan state'e kaydedilir; böylece `CreateTripModal` rotayı kaydederken harita pinleri tam isabetli konuma yerleştirilir.
+  - `AddVisitModal` (Haritaya Bayrak Ekle) ekranı da aynı `CountryAutocomplete` / `CityAutocomplete` desteğine kavuşturulur.
+- **Mobil-First & Sıfır Yatay Kaydırma (Kural 13):**
+  - Dropdown öğeleri minimum `44px` dokunma yüksekliğine sahip olacak, yatay taşma (`overflow-x`) kesinlikle olmayacak.
+
+### 89.3. Onay Sonrası Geliştirme Adımları (Tamamlandı)
+1. `country-state-city` paketi kuruldu (`npm install country-state-city`) — tamamen offline ~148.038 şehir veri seti.
+2. `lib/country-flags.ts` ve `components/ui/country-flag.tsx` dosyalarında `GB-SCT`, `GB-WLS`, `GB-ENG`, `GB-NIR` alt bölge bayrak desteği, emoji `onError` fallback'i ve **213 ülkenin tamamı** için gerçek `COUNTRY_CENTERS` koordinatları eklendi.
+3. `lib/world-cities.ts` dosyasında **213 ülke ve özerk destinasyon** (195 BM ülkesi + İskoçya, Galler, İngiltere, Kuzey İrlanda, KKTC, Kosova, Filistin, Tayvan, Hong Kong, Makao, Grönland, Faroe Adaları, Porto Riko, Aruba, Curaçao vb.), aksansız/Türkçe normalizasyon (`normalizeSearchText`), öncelikli İngilizce/Türkçe sıralama ve `knownCoords` destekli `resolveLocationCoordinates` eklendi.
+4. `app/api/locations/cities/route.ts` sunucu tarafı offline şehir arama API'si (Zod doğrulamalı, bellek içi indeksli, `GB-SCT` -> `SCT` 530 İskoçya şehri, `GB-WLS` -> `WLS` 302 Galler şehri, `GB-ENG` -> `ENG` 2.919 İngiltere şehri, `GB-NIR` -> `NYK` 120 Kuzey İrlanda şehri, `TR` -> 81 il + ilçe, tüm diğer ülkeler + global arama) oluşturuldu.
+5. `components/map/location-autocomplete.tsx` (boşken sadece 14 Popüler Destinasyon + yazarak 213 ülke arama, mobil-first `min-h-[44px]` dokunma alanları, sıfır yatay kaydırma, `AbortController` + 4 sn timeout korumalı şehir arama), `components/map/create-trip-modal.tsx` ve `components/map/add-visit-modal.tsx` (seçilen şehrin gerçek `lat/lng` koordinat aktarımı ve otomatik ülke doldurma) güncellendi.
+
+### 89.4. Kalite Kapısı ve Doğrulama Sonuçları
+- **TypeScript (`npx tsc --noEmit`):** 0 hata.
+- **Veri Bütünlüğü:** 213 ülke, 0 tekrarlayan kod, 0 eksik `COUNTRY_CENTERS`.
+- **Arama Doğrulaması:** `Scotland`, `İskoçya`, `iskocya`, `scot` -> #1 `İskoçya (GB-SCT)` ve #2 `Birleşik Krallık (GB)`; boş dropdown = 14 popüler ülke.
+- **Offline Şehir API Performansı (`/api/locations/cities`):**
+  - `country=GB-SCT&q=stir` -> `Stirling` (`3.7 ms`)
+  - `country=GB-SCT&q=inv` -> `Inverness`, `Inverkip`, `Inverurie`...
+  - `country=PE&q=cus` -> `Cusco` (`5.8 ms`)
+  - `country=PL&q=kra` -> `Krakow`, `Kraśnik`...
+  - `q=aberdeen` (global) -> `Aberdeen (İskoçya / GB-SCT)` #1.
+- **Kural Disiplini:** Kural 2 (GitHub push yapılmadı) ve Kural 3 (deploy yapılmadı) korundu.
+
+---
+
+## 90. Rota Ekleme / Silme Puan Yaşam Döngüsü Kök Neden Analizi ve Düzeltme Tasarımı
+
+Kullanıcının *"Rota ekledim ama Puan artmadı. Rota eklediğim de puan artmalı, sildiğimde de puan düşmeli."* geri bildirimi üzerine gerçekleştirilen kök neden analizi:
+
+### 90.1. Kök Neden Analizi (Root Cause Analysis)
+1. **Planlanan (`planned`) Rotalara 0 Puan Verilmesi (`lib/actions/trips.ts`, `components/map/create-trip-modal.tsx`):**
+   - `CreateTripModal` varsayılan olarak `status: "planned"` ("Planlanan") seçili açılmaktadır.
+   - `createTrip` ise yalnızca `if (status === "completed")` koşulunda `awardPoints(..., actionType: "complete_trip")` (+50 Puan) çağırmakta; `"planned"` statüsünde oluşturulan rotalara hiç puan vermemektedir.
+   - İstemci tarafında da `create-trip-modal.tsx`, `trip-routes-drawer.tsx` ve `world-map.tsx` yalnızca `status === "completed"` durumunda `triggerFloatingPoints` tetiklemektedir.
+2. **Defter Geri Alma (Reversal) Sorgusunda Net Toplam Hatası (`lib/actions/trips.ts`):**
+   - `deleteTrip` ve `updateTripStatus` fonksiyonları iade edilecek puanı hesaplarken `WHERE finalPoints > 0` filtresi uygulamakta, önceki negatif iade kayıtlarını yoksaymaktadır.
+   - Aynı rota üzerinde birden fazla durum değişikliği sonrası silme yapılırsa fazladan puan kesintisi oluşma riski vardır.
+   - Çözüm: İlgili `referenceId` (`tripId`) için `userPointsLedger` tablosundaki **tüm kayıtların NET toplamı (`SUM(finalPoints)`)** hesaplanmalı ve yalnızca `netPoints > 0` ise `-netPoints` iadesi yazılmalıdır.
+3. **`updateTrip` İçinde Puan Senkronizasyonu Eksikliği (`lib/actions/trips.ts`):**
+   - Rota düzenleme ekranından durum değiştirildiğinde `updateTrip` puan motorunu güncellememektedir.
+
+### 90.2. Kesinleştirilen Ürün Kuralı ve Uygulanan Sertleştirme (Tamamlandı)
+Kullanıcı onayıyla kesinleştirilen kural: **Yalnızca "Geçmiş / Tamamlandı" (`completed`) statüsündeki rotalar +50 Puan kazandırır; "Planlanan" (`planned`) rotalar 0 Puan alır. Rota silindiğinde veya Planlanan durumuna çekildiğinde yalnızca o rota için verilmiş aktif NET puan (-50 Puan) geri alınır.**
+
+Uygulanan iyileştirmeler:
+1. **Net Defter Bakiyesi Koruması (`lib/actions/trips.ts`):**
+   - `getTripNetPoints(userId, tripId)` yardımcısı eklendi; `deleteTrip`, `updateTripStatus` ve `updateTrip` fonksiyonlarında `WHERE finalPoints > 0` yerine **tüm kayıtların net toplamı (`SUM(finalPoints)`)** hesaplanarak çoklu geçişlerde çifte puan kesintisi ve çifte ödül ihtimali tamamen ortadan kaldırıldı.
+   - `updateTrip` (Rota Düzenle modalı) içine `planned <-> completed` statü değişiminde puan senkronizasyonu eklendi.
+   - Tüm rota mutasyonlarına (`createTrip`, `updateTrip`, `updateTripStatus`, `deleteTrip`) sunucudan dönen gerçek `pointsDelta` alanı ve `revalidatePath("/points")` eklendi.
+2. **İstemci & Puan Tablosu Senkronizasyonu:**
+   - `components/map/create-trip-modal.tsx`: Durum seçicinin altına *"Tamamlanan rota +50 Puan kazandırır / Tamamlandı yapıldığında +50 Puan kazanılır"* bilgi satırı eklendi; `createTrip` ve `updateTrip` sonrası `res.pointsDelta` ile canlı puan animasyonu bağlandı.
+   - `components/map/trip-routes-drawer.tsx` & `components/map/world-map.tsx`: Durum geçişi ve silme animasyonları sunucudan dönen gerçek `res.pointsDelta` değerine bağlandı.
+   - `components/points/points-modal.tsx`: Puan Kazanım Tablosuna *"Tamamlanan Seyahat Rotası — +50 Puan"* satırı eklendi.
+
+### 90.3. Kalite Kapısı ve Doğrulama Sonuçları
+- **TypeScript (`npx tsc --noEmit`):** 0 hata.
+- **Birim Testler (`npx tsx scripts/test_pin_trip_lifecycle.ts`):** 25 / 25 test (%100) başarıyla geçti.
+- **Kural Disiplini:** Kural 2 (GitHub push yapılmadı) ve Kural 3 (deploy yapılmadı) korundu.
+
+---
+
+## 91. 2026 Puan Matrisi Güncellemesi (Tamamlanan Rota +50 P) ve Onaylı Sosyal İlişki Puanı (+20 P) Mimarisi
+
+Kullanıcının *"Şöyle bir sıkıntı var Rota paylaşımı kurallarda yazmıyor. Kurala onu da ekleyelim. Ben bir de Arkadaşı ile ilişki kurana da puan vermek istiyorum. Her ilişki 20 puan nasıl?"* talebi üzerine yapılan analiz ve tasarım:
+
+### 91.1. Tespitler ve Ekonomik Değerlendirme
+1. **Eksik Kural Kartı (`components/rewards/rewards-view.tsx`):**
+   - `/rewards` sayfasındaki **"2026 Sezonu Puan Kazanma Tablosu"** (`activeTab === "rules"`) içinde *"Tamamlanan Seyahat Rotası (+50 P)"* kartı eksikti (yalnızca `points-modal.tsx` tablosuna eklenmişti).
+   - Ayrıca `rewards-view.tsx` içindeki kart metinleri yalnızca Türkçe sabit yazılmıştı; İngilizce dil seçildiğinde başlık İngilizce, kartlar Türkçe görünüyordu.
+2. **İlişki Kurma (+20 Puan) Ekonomik Dengesi:**
+   - 2026 Puan Matrisinde: Giriş (+5) / Yorum-Beğeni (+5) → Pin (+10) → **Karşılıklı Onaylı İlişki (+20)** → Tamamlanan Rota (+50) / Davet Hoşgeldin (+50) → Fiziki GPS Check-in (+200).
+   - **+20 Puan**, sosyal ağ büyümesini teşvik eden, masabaşı pin ile tamamlanan rota arasında son derece dengeli bir ödüldür.
+3. **İkincil Bulgu (`lib/actions/social.ts`):**
+   - `disconnectTravelerAction` yalnızca `travelMatches` tablosundan kayıt silmekte, `userConnections` tablosundaki çift taraflı kaydı temizlememektedir. İlişki puan iadesi ile birlikte `userConnections` temizliği de eklenecektir.
+
+### 91.2. Tasarım ve Suistimal Önleme (Anti-Farming) Kuralları
+1. **Puan Kuralları (`lib/points/engine.ts`):**
+   - `connect_friend`: `+20 Puan` (*"Onaylı Arkadaş / Aile İlişkisi"*)
+   - `remove_friend`: `-20 Puan` (*"Kaldırılan İlişki Puan İadesi"*)
+2. **Kanonik Çift Anahtarı ile Çifte Puan & Farming Koruması:**
+   - Her kullanıcı çifti için tekil anahtar: `pair:<min(userA, userB)>:<max(userA, userB)>` (`referenceType: "connection"`).
+   - Puan **yalnızca teklif kabul edildiğinde** (`respondMatchRequest(matchId, "accepted")`) verilir; bekleyen istek (`pending`) puan kazandırmaz.
+   - Kabul anında her iki kullanıcı (gönderen + kabul eden) için ilgili `pair:...` anahtarının defterdeki **NET bakiyesi** kontrol edilir; yalnızca `netPoints <= 0` ise **+20 Puan** tahsis edilir.
+   - Bağlantı kaldırıldığında (`disconnectTravelerAction`) hem `travelMatches` hem `userConnections` temizlenir ve her iki kullanıcı için defterdeki aktif net `+20 Puan` bakiyesi **-20 Puan** (`remove_friend`) olarak geri alınır.
+3. **Arayüz Güncellemeleri:**
+   - `components/rewards/rewards-view.tsx`: **Tamamlanan Seyahat Rotası (+50 P)** ve **Arkadaş / Aile İlişkisi Kurma (+20 P)** kartları (TR/EN uyumlu) eklenecek.
+   - `components/points/points-modal.tsx`: **Arkadaş / Aile İlişkisi Kurma (+20 Puan)** satırı eklenecek.
+   - `components/social/match-view.tsx` ve bağlantı kaldırma çağrılarında `pointsDelta` üzerinden canlı `+20 / -20` floating efekt + `refresh-points` olayı tetiklenecek.
+
+### 91.3. Onay Sonrası Geliştirme Adımları (Tamamlandı)
+1. `lib/points/engine.ts` içine `connect_friend` (+20) ve `remove_friend` (-20) kuralları ile `getConnectionPairKey` ve tüm sezonlar arası net bakiye kontrolü yapan `getReferenceNetPoints` yardımcıları eklendi.
+2. `lib/actions/match.ts` (`respondMatchRequest`) içinde karşılıklı onayda her iki tarafa net-bakiye korumalı `+20 Puan` tahsisi ve `pointsDelta` dönüşü eklendi.
+3. `lib/actions/social.ts` (`disconnectTravelerAction`) içinde `travelMatches` + `userConnections` çift tablo temizliği ve her iki taraf için aktif net puanın `-20 Puan` geri alınması eklendi.
+4. `components/rewards/rewards-view.tsx` (2026 Sezonu Puan Kazanma Tablosu: **Tamamlanan Seyahat Rotası +50 P** ve **Arkadaş / Aile İlişkisi Kurma +20 P** kartları + tüm kartlara TR/EN çift dil desteği), `components/points/points-modal.tsx`, `components/social/match-view.tsx` ve `components/social/feed-view.tsx` güncellendi.
+5. `scripts/test_pin_trip_lifecycle.ts` içine izole 7-adımlı ilişki puanı & geri alma testi eklendi.
+
+### 91.4. Kalite Kapısı, Doğrulama ve Yıl Geçişi Strateji Notu
+- **TypeScript (`npx tsc --noEmit`):** 0 hata.
+- **Birim Testler (`npx tsx scripts/test_pin_trip_lifecycle.ts`):** 32 / 32 test (%100) başarıyla geçti.
+- **Yıl Geçişi (Sezon Devri) Strateji Önerisi:** Gerçek arkadaşlık bağları asla silinmez. 2026'da kazanılan +20 P ilişkiler 2026 defterinde kalır ve 2027'ye **Kıdem Devir Puanı (`carry_over`)** oranıyla (pin ve rotalar gibi) katkı sağlar. 2027 sezon havuzunda yeni puan kazanmak için **yeni gezginlerle** bağ kurulması gerekir; `getReferenceNetPoints` tüm yılları kapsadığı için eski bir arkadaşı yeni yılda silip tekrar ekleyerek +20 P farming yapılması teknik olarak engellenmiştir.
+- **Kural Disiplini:** Kural 2 (GitHub push yapılmadı) ve Kural 3 (deploy yapılmadı) korundu.
+
+---
+
+## 92. Yıla Başlangıç Puanı Formülü, Kural Tablosu Etiketleri ve Kesin Tam Sayı (Integer) Yuvarlama Mimarisi
+
+Kullanıcının *"Aslında Devir demeyelim. Yıla Başlangıç Puanı: O güne kadarki Toplam Pin Sayısı × 10 × %20, Toplam Rota sayısı × 50 × %20, Sosyal İlişki sayısı × 20 × %20. Diğerlerinden başlangıç puanı hesaplanmayacak. Bu oran hesaplamasında ve arkadaşından gelen %20 puanda çıkacak decimal değerleri hep yuvarlayalım. Puan her zaman tam sayı olsun."* tanımlaması üzerine güncellenen kesin tasarım:
+
+### 92.1. Kesin Tam Sayı Kuralı (Zero-Decimal Policy)
+- Merkezi `roundPoints(value: number): number` (`Math.round`) fonksiyonu `lib/points/engine.ts` içine eklenir.
+- `awardPoints`, `%20 referral_passive` (arkadaş daveti pasif geliri — `complete_trip` dahil) ve **Yıla Başlangıç Puanı** hesaplamalarında çıkan tüm ondalıklar daima en yakın tam sayıya yuvarlanır.
+
+### 92.2. Yıla Başlangıç Puanı Formülü (`calculateSeasonStartingPoints`)
+"Devir / Carry-Over" yerine **"Yıla Başlangıç Puanı"** (`season_start` / `carry_over`) kavramı kullanılır. Yeni yıl başlangıcında kullanıcının o güne kadarki mevcut aktif varlıkları üzerinden hesaplanır:
+- **Pin Katkısı:** `Math.round(toplamAktifPinSayısı × 10 × 0.20)` *(Gezi / Mekan Pini Ekleme)*
+- **Rota Katkısı:** `Math.round(toplamTamamlananRotaSayısı × 50 × 0.20)` *(Tamamlanan Seyahat Rotası)*
+- **Sosyal İlişki Katkısı:** `Math.round(toplamOnaylıİlişkiSayısı × 20 × 0.20)` *(Arkadaş / Aile İlişkisi)*
+- **Toplam Yıla Başlangıç Puanı:** `pinKatkısı + rotaKatkısı + ilişkiKatkısı` (kesin tam sayı).
+- **Diğer Tüm Kalemler (Başlangıç Puanına Dahil Edilmez / Sonraki Yıla Taşınmaz):**
+  - Fiziki Mekan Check-In (GPS Doğrulamalı) (`+200 P`) → **Sonraki yıla taşınmaz**
+  - Arkadaş Daveti Pasif Geliri (`%20 Pay`) → **Sonraki yıla taşınmaz** *(tam sayıya yuvarlanır)*
+  - Hoşgeldin Davet Bonusu (`+50 P`) → **Sonraki yıla taşınmaz**
+  - Günlük Kaşif Girişi (`+5 P`) → **Sonraki yıla taşınmaz**
+  - Yorum & Beğeni Etkileşimi (`+5 P`) → **Sonraki yıla taşınmaz**
+
+### 92.3. Kural Tablosu & Arayüz Güncellemeleri
+- `components/rewards/rewards-view.tsx`:
+  - Her puan kartının kendi altında net rozet:
+    - Pin, Tamamlanan Rota, Arkadaş/Aile İlişkisi → `🎯 Yıla başlangıç puanına %20 oranında dahil (yuvarlanır)`
+    - Check-In, Davet Pasif Geliri, Hoşgeldin Bonusu, Günlük Giriş, Yorum & Beğeni → `⏳ Sonraki yıla taşınmaz`
+  - Alt bölümdeki *"Sezon Devri (Carry-Over Kıdemi)"* kutusu **"Yıla Başlangıç Puanı"** başlığı ve açık formülüyle (`Pin × 10 × %20 + Tamamlanan Rota × 50 × %20 + İlişki × 20 × %20`, tüm ondalıklar tam sayıya yuvarlanır) güncellenecek (TR/EN uyumlu).
+- `components/points/points-modal.tsx`:
+  - Puan Kazanım Tablosundaki her satıra yıl geçişi bilgisi ve 4. maddeye **Yıla Başlangıç Puanı** formülü eklenecek.
+
+### 92.4. Onay Sonrası Geliştirme Adımları (Tamamlandı)
+1. `lib/points/engine.ts` içine `roundPoints`, `calculateReferralPassivePoints`, `POINT_RULES.includedInSeasonStart`, `computeSeasonStartingPointsFromCounts` ve aktif DB kayıtları (`visits`, `trips [completed]`, `userConnections [accepted]`) üzerinden `calculateSeasonStartingPoints(userId)` eklendi; `referral_passive` (`complete_trip` dahil) tüm oran hesaplamaları kesin tam sayıya bağlandı.
+2. `components/rewards/rewards-view.tsx` ve `components/points/points-modal.tsx` kural tablolarında her başlık altına **Yıla Başlangıç Puanı** veya **Sonraki yıla taşınmaz** rozeti eklendi; "Sezon Devri (Carry-Over)" kutusu **Yıla Başlangıç Puanı** ve açık formülüyle güncellendi.
+3. `scripts/test_pin_trip_lifecycle.ts` içine 11 yeni tam sayı yuvarlama & Yıla Başlangıç Puanı birim testi eklendi.
+
+### 92.5. Kalite Kapısı ve Doğrulama Sonuçları
+- **TypeScript (`npx tsc --noEmit`):** 0 hata.
+- **Birim Testler (`npx tsx scripts/test_pin_trip_lifecycle.ts`):** 43 / 43 test (%100) başarıyla geçti.
+- **Kural Disiplini:** Kural 2 (GitHub push yapılmadı) ve Kural 3 (deploy yapılmadı) korundu.
+
+---
+
+## 93. Harita Rota & Pin Ekleme Ekranları ve Konum Seçicilerinin Tam Çift Dil (TR / EN) Mimarisi
+
+Kullanıcının *"İngilizce seçili ama Route ve Pin ekleme ekranları Türkçe, onların da İngilizceye çevrilmesi lazım"* geri bildirimi üzerine yapılan kapsam analizi ve mimari tasarım:
+
+### 93.1. Tespit Edilen Eksikler
+`components/map/` dizininde yalnızca `world-map.tsx` ve `map-theme-switcher.tsx` dosyaları `useTranslation()` kullanmaktadır. Aşağıdaki 5 bileşen tamamen sabit Türkçe metin içermektedir:
+1. **`components/map/create-trip-modal.tsx`** (Yeni Rota Oluştur / Rotayı Düzenle)
+2. **`components/map/add-visit-modal.tsx`** (Haritaya Bayrak/Pin Ekle / Seyahati Düzenle)
+3. **`components/map/location-autocomplete.tsx`** (Ülke & Şehir Autocomplete — başlıklar, ipuçları, ülke adlarının gösterimi)
+4. **`components/map/trip-routes-drawer.tsx`** (Rotalarım yan çekmecesi)
+5. **`components/map/trips-drawer.tsx`** (Seyahatlerim yan çekmecesi)
+
+*(Not: Harita üzerindeki "Paris Turu" / "Roma Tatili" metinleri kullanıcının kendi girdiği rota başlıklarıdır; veritabanında kullanıcının yazdığı dilde saklanır.)*
+
+### 93.2. Uygulanacak Mimari Plan
+1. **Tip Güvenli Sözlük Genişletmesi (`lib/i18n/dictionaries/tr.ts` & `en.ts`):**
+   - `tripModal`, `visitModal`, `locationSearch`, `routesDrawer` ve `tripsDrawer` bölümleri tip güvenli `Dictionary` kontratıyla eksiksiz eklenecek.
+2. **İngilizce/Türkçe Lokalize Ülke Adı Gösterimi (`lib/world-cities.ts`):**
+   - `getLocalizedCountryName(country, locale)` yardımcısı eklenecek: `locale === "en"` seçiliyken ülke seçicisinde `Scotland`, `Turkey`, `France`, `Germany`, `United Kingdom` vb. İngilizce isimler görünecek; hem TR hem EN arama her iki dilde çalışmaya devam edecek.
+3. **Bileşenlerin Çift Dil Dönüşümü:**
+   - `create-trip-modal.tsx`: Tüm başlıklar, durum butonları, `+50 Puan` bilgi notu, tarih formatı (`tr-TR` / `en-US`), görünürlük seçenekleri, ulaşım araçları, durak/gece etiketleri, butonlar ve toast bildirimleri.
+   - `add-visit-modal.tsx`: Başlıklar, Ülke/Şehir/İlçe etiketleri, 12 ay isimleri, tarih modları, kalış süresi, seyahat amacı, görünürlük, notlar ve toast bildirimleri.
+   - `location-autocomplete.tsx`: Popüler Destinasyonlar, Eşleşen Ülkeler, Önerilen Şehirler, yükleniyor/bulunamadı metinleri ve lokalize ülke isimleri.
+   - `trip-routes-drawer.tsx` ve `trips-drawer.tsx`: Tüm liste başlıkları, durum rozetleri, onay/silme metinleri ve toast bildirimleri.
+
+### 93.3. Onay Sonrası Geliştirme Adımları (Tamamlandı)
+1. `lib/world-cities.ts` içine `Intl.DisplayNames(["en"], { type: "region" })` + özel kurucu/özerk ülke eşlemeleri (`GB-SCT -> Scotland`, `KKTC -> Northern Cyprus (TRNC)`, `TR -> Turkey` vb.) ile çalışan `getLocalizedCountryName(country, locale)` eklendi.
+2. `lib/i18n/dictionaries/tr.ts` ve `en.ts` sözlüklerine `locationSearch`, `tripModal`, `visitModal`, `routesDrawer` ve `tripsDrawer` bölümleri birebir anahtar paritesiyle (+189 satır) eklendi.
+3. 5 harita bileşeni (`create-trip-modal.tsx`, `add-visit-modal.tsx`, `location-autocomplete.tsx`, `trip-routes-drawer.tsx`, `trips-drawer.tsx`) `useTranslation()` ve yerel tarih/ay formatlarıyla (`tr-TR` / `en-US`) tam TR/EN uyumlu hale getirildi.
+
+### 93.4. Kalite Kapısı ve Doğrulama Sonuçları
+- **TypeScript (`npx tsc --noEmit`):** 0 hata.
+- **Çoklu Dil Parite Testi (`npx tsx scripts/test_language_system.ts`):** 13 / 13 test (%100) başarıyla geçti.
+- **Ülke Lokalizasyon Doğrulaması:** 213 ülkenin tamamı İngilizce modda resmi İngilizce adlarıyla görüntüleniyor (`Scotland`, `Turkey`, `Germany`, `France`, `United Kingdom`, `Northern Cyprus (TRNC)` vb.).
+- **Kural Disiplini (Madde 93):** Kural 2 (GitHub push yapılmadı) ve Kural 3 (deploy yapılmadı) korundu.
+
+---
+
+## 94. Route Radar / Gezgin Arama Ekranında İlişkiyi Kesme (Disconnect) ve Canlı Puan İadesi Tasarımı
+
+Kullanıcının *"Route Radar'da bir arkadaşımı bulup ilişkiyi kesebilmem lazım. Böylece - puan ve sonra ekleyince + puanı deneyebileceğim."* talebi üzerine yapılan analiz ve tasarım:
+
+### 94.1. Kök Neden / Eksik Tespiti
+- `components/social/match-view.tsx` içerisindeki **Find Travelers (Gezgin Ara)**, **Incoming Requests** ve **Sent Requests** kartlarında `accepted` durumundaki bağlantılar için yalnızca rozet (`Arkadaşım` / `Akrabam` / `Ailem`) ve `Sohbet Et` butonu bulunmakta; **bağlantıyı kaldırma (Disconnect)** aksiyonu yer almamaktadır (`disconnectTravelerAction` yalnızca `feed-view.tsx` içinden çağrılabilmekteydi).
+
+### 94.2. Tasarım Planı
+1. **Disconnect Butonu (Mobil-First, min 44px dokunma hedefi, sıfır yatay kaydırma, TR/EN):**
+   - `Find Travelers` arama sonuçlarında `connectionStatus === "accepted"` olan kartlara kırmızı tonlu `UserMinus` (**İlişkiyi Kes / Disconnect**) butonu eklenecek (`flex-wrap` ile mobilde taşma yapmayacak).
+   - `Incoming Requests` ve `Sent Requests` sekmelerindeki kabul edilmiş (`status === "accepted"`) kartlara da aynı aksiyon eklenecek.
+2. **Özel Onay Modalı (`window.confirm` kullanılmaz):**
+   - İlişki kaldırma onayı + *"Bu ilişkiden kazanılmış aktif +20 Puan varsa geri alınır"* bilgilendirmesi (TR / EN).
+3. **Anlık UI & Puan Senkronizasyonu:**
+   - `disconnectTravelerAction(targetUserId)` çağrısı sonrası:
+     - `searchResults` içindeki kart anında `"none"` durumuna dönerek yeniden **"Bağlantı Kur"** butonunu gösterecek.
+     - `incoming` / `outgoing` listelerinden ilgili kullanıcıya ait bağlantı kayıtları anında temizlenecek.
+     - `res.pointsDelta !== 0` ise `triggerFloatingPoints` (`-20`) ve `window.dispatchEvent(new CustomEvent("refresh-points"))` tetiklenecek.
+
+### 94.3. Onay Sonrası Geliştirme Adımları (Tamamlandı)
+1. `components/social/match-view.tsx` içine `disconnectTravelerAction` entegrasyonu, mobil-first (`min-h-[44px]`, `flex-wrap`, sıfır yatay kaydırma) **İlişkiyi Kes / Disconnect** butonları (`Find Travelers`, `Incoming Requests`, `Sent Requests` kabul edilmiş kartları), özel onay modalı ve canlı `pointsDelta` / `refresh-points` + anlık arama/liste state senkronizasyonu eklendi.
+2. **TypeScript (`npx tsc --noEmit`):** 0 hata.
+3. **Kural Disiplini (Madde 94):** Kural 2 (GitHub push yapılmadı) ve Kural 3 (deploy yapılmadı) korundu.

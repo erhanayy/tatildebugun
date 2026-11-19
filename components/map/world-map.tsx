@@ -990,10 +990,12 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
     if (res.success && res.trip) {
       toast.success("Tebrikler! Rota 'Tamamlandı' olarak işaretlendi! 🏆🎉");
       setTripsList((prev) => prev.map((t) => (t.id === tripId ? res.trip! : t)));
-      triggerFloatingPoints({
-        points: 50,
-        label: `${res.trip.title} Tamamlandı!`,
-      });
+      if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
+        triggerFloatingPoints({
+          points: res.pointsDelta,
+          label: `${res.trip.title} Tamamlandı!`,
+        });
+      }
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("refresh-points"));
       }
@@ -1051,9 +1053,9 @@ export function WorldMap({ initialVisits, initialTrips = [] }: WorldMapProps) {
         if (selectedTripId === tripToDelete.id) {
           setSelectedTripId(null);
         }
-        if (tripToDelete.status === "completed") {
+        if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
           triggerFloatingPoints({
-            points: -50,
+            points: res.pointsDelta,
             label: `${tripToDelete.title} Rotası İadesi`,
           });
         }

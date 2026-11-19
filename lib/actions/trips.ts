@@ -89,12 +89,31 @@ export async function getUserTrips(): Promise<TripWithStops[]> {
 }
 
 /**
+ * Belirli bir rota (tripId) için puan defterindeki (ledger) NET puan bakiyesini hesaplar.
+ * Tüm pozitif kazanımlar ve negatif geri almalar birlikte toplanır; çifte kesinti veya çifte ödül önlenir.
+ */
+async function getTripNetPoints(userId: string, tripId: string): Promise<number> {
+  const entries = await db
+    .select({ finalPoints: userPointsLedger.finalPoints })
+    .from(userPointsLedger)
+    .where(
+      and(
+        eq(userPointsLedger.userId, userId),
+        eq(userPointsLedger.referenceId, tripId)
+      )
+    );
+  return entries.reduce((sum, e) => sum + e.finalPoints, 0);
+}
+
+/**
  * Yeni rota (Trip) ve duraklarını oluşturur.
+ * Yalnızca 'completed' (Tamamlanan) statüsündeki rotalar +50 Puan kazandırır.
  */
 export async function createTrip(input: CreateTripInput): Promise<{
   success: boolean;
   message?: string;
   trip?: TripWithStops;
+  pointsDelta?: number;
 }> {
   try {
     const session = await auth();
@@ -155,10 +174,11 @@ export async function createTrip(input: CreateTripInput): Promise<{
     const insertedStops = await db.insert(tripStops).values(stopsToInsert).returning();
 
     // 2026 Sezonu Bütünleşik Değer Paylaşımı ve Puan Motoru:
-    // Eğer rota tamamlanmış (completed) olarak oluşturulduysa 50 Puan ver ve deftere yaz
+    // Yalnızca tamamlanmış (completed) olarak oluşturulan rotalar +50 Puan kazandırır
+    let pointsDelta = 0;
     if (status === "completed") {
       try {
-        await awardPoints({
+        const ledger = await awardPoints({
           userId: session.user.id,
           actionType: "complete_trip",
           referenceId: createdTrip.id,
@@ -166,6 +186,7 @@ export async function createTrip(input: CreateTripInput): Promise<{
           description: `Tamamlanan Seyahat Rotası: ${createdTrip.title}`,
           metadata: { stopCount: insertedStops.length, transportType },
         });
+        pointsDelta = ledger.finalPoints;
       } catch (ptsErr) {
         console.error("Rota puanı ekleme hatası:", ptsErr);
       }
@@ -174,10 +195,12 @@ export async function createTrip(input: CreateTripInput): Promise<{
     revalidatePath("/dashboard");
     revalidatePath("/feed");
     revalidatePath("/passport");
+    revalidatePath("/points");
     revalidatePath("/rewards");
 
     return {
       success: true,
+      pointsDelta,
       trip: {
         ...createdTrip,
         stops: insertedStops,
@@ -191,9 +214,13 @@ export async function createTrip(input: CreateTripInput): Promise<{
 
 /**
  * Rota (Trip) ve bağlı duraklarını siler.
- * Rota silindiğinde daha önce kazanılmış puanlar defterden tespit edilerek ters işlemle (reversal) düşülür.
+ * Bu rota için defterde aktif NET pozitif puan varsa yalnızca o net tutar ters işlemle (reversal) geri alınır.
  */
-export async function deleteTrip(tripId: string): Promise<{ success: boolean; message?: string }> {
+export async function deleteTrip(tripId: string): Promise<{
+  success: boolean;
+  message?: string;
+  pointsDelta?: number;
+}> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -213,32 +240,23 @@ export async function deleteTrip(tripId: string): Promise<{ success: boolean; me
 
     const trip = existing[0];
 
-    // 2. Bu rota için kazanılmış puan varsa defterden tespit et ve ters işlemle düş
-    const awardedEntries = await db
-      .select({ finalPoints: userPointsLedger.finalPoints })
-      .from(userPointsLedger)
-      .where(
-        and(
-          eq(userPointsLedger.userId, session.user.id),
-          eq(userPointsLedger.referenceId, tripId),
-          sql`${userPointsLedger.finalPoints} > 0`
-        )
-      );
+    // 2. Bu rota için defterdeki NET puan bakiyesini hesapla (çifte iade korumalı)
+    const netAwarded = await getTripNetPoints(session.user.id, tripId);
+    let pointsDelta = 0;
 
-    const totalAwarded = awardedEntries.reduce((sum, e) => sum + e.finalPoints, 0);
-
-    if (totalAwarded > 0) {
+    if (netAwarded > 0) {
       try {
-        await awardPoints({
+        const ledger = await awardPoints({
           userId: session.user.id,
           actionType: "delete_trip",
-          basePoints: -totalAwarded,
+          basePoints: -netAwarded,
           multiplier: 1.0,
           referenceId: tripId,
           referenceType: "trip",
           description: `Silinen Seyahat Rotası İadesi: ${trip.title}`,
           metadata: { tripTitle: trip.title },
         });
+        pointsDelta = ledger.finalPoints;
       } catch (ptsErr) {
         console.error("Rota silme puan iade hatası:", ptsErr);
       }
@@ -253,9 +271,10 @@ export async function deleteTrip(tripId: string): Promise<{ success: boolean; me
     revalidatePath("/feed");
     revalidatePath("/match");
     revalidatePath("/passport");
+    revalidatePath("/points");
     revalidatePath("/rewards");
 
-    return { success: true };
+    return { success: true, pointsDelta };
   } catch (error) {
     console.error("Rota silme hatası:", error);
     return { success: false, message: "Rota silinemedi." };
@@ -269,7 +288,7 @@ export async function deleteTrip(tripId: string): Promise<{ success: boolean; me
 export async function updateTripStatus(
   tripId: string,
   status: "planned" | "completed"
-): Promise<{ success: boolean; trip?: TripWithStops; message?: string }> {
+): Promise<{ success: boolean; trip?: TripWithStops; pointsDelta?: number; message?: string }> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -287,13 +306,16 @@ export async function updateTripStatus(
     }
 
     const oldStatus = existing[0].status;
+    let pointsDelta = 0;
 
-    // Puan durum geçişi kontrolü
+    // Puan durum geçişi kontrolü (Net defter bakiyesi korumalı)
     if (oldStatus !== status) {
-      if (status === "completed") {
-        // Planlanandan tamamlanmışa geçiş -> +50 Puan
+      const netAwarded = await getTripNetPoints(session.user.id, tripId);
+
+      if (status === "completed" && netAwarded <= 0) {
+        // Planlanandan tamamlanmışa geçiş -> +50 Puan (daha önce aktif puanı yoksa)
         try {
-          await awardPoints({
+          const ledger = await awardPoints({
             userId: session.user.id,
             actionType: "complete_trip",
             referenceId: tripId,
@@ -301,36 +323,25 @@ export async function updateTripStatus(
             description: `Tamamlanan Seyahat Rotası: ${existing[0].title}`,
             metadata: { previousStatus: oldStatus },
           });
+          pointsDelta = ledger.finalPoints;
         } catch (ptsErr) {
           console.error("Rota tamamlama puanı hatası:", ptsErr);
         }
-      } else if (oldStatus === "completed" && status === "planned") {
-        // Tamamlanmıştan planlanana geri çekilme -> Puan iadesi
-        const awardedEntries = await db
-          .select({ finalPoints: userPointsLedger.finalPoints })
-          .from(userPointsLedger)
-          .where(
-            and(
-              eq(userPointsLedger.userId, session.user.id),
-              eq(userPointsLedger.referenceId, tripId),
-              sql`${userPointsLedger.finalPoints} > 0`
-            )
-          );
-        const totalAwarded = awardedEntries.reduce((sum, e) => sum + e.finalPoints, 0);
-        if (totalAwarded > 0) {
-          try {
-            await awardPoints({
-              userId: session.user.id,
-              actionType: "delete_trip",
-              basePoints: -totalAwarded,
-              multiplier: 1.0,
-              referenceId: tripId,
-              referenceType: "trip",
-              description: `Durumu Planlanana Çekilen Rota Puan İadesi: ${existing[0].title}`,
-            });
-          } catch (ptsErr) {
-            console.error("Rota durum puan iade hatası:", ptsErr);
-          }
+      } else if (oldStatus === "completed" && status === "planned" && netAwarded > 0) {
+        // Tamamlanmıştan planlanana geri çekilme -> Yalnızca aktif net puanın iadesi
+        try {
+          const ledger = await awardPoints({
+            userId: session.user.id,
+            actionType: "delete_trip",
+            basePoints: -netAwarded,
+            multiplier: 1.0,
+            referenceId: tripId,
+            referenceType: "trip",
+            description: `Durumu Planlanana Çekilen Rota Puan İadesi: ${existing[0].title}`,
+          });
+          pointsDelta = ledger.finalPoints;
+        } catch (ptsErr) {
+          console.error("Rota durum puan iade hatası:", ptsErr);
         }
       }
     }
@@ -354,10 +365,12 @@ export async function updateTripStatus(
     revalidatePath("/feed");
     revalidatePath("/match");
     revalidatePath("/passport");
+    revalidatePath("/points");
     revalidatePath("/rewards");
 
     return {
       success: true,
+      pointsDelta,
       trip: {
         ...updated[0],
         stops,
@@ -371,11 +384,12 @@ export async function updateTripStatus(
 
 /**
  * Mevcut rotayı ve duraklarını günceller.
+ * Düzenleme sırasında statü (planned <-> completed) değişirse puan defteri de senkronize edilir.
  */
 export async function updateTrip(
   tripId: string,
   input: CreateTripInput
-): Promise<{ success: boolean; trip?: TripWithStops; message?: string }> {
+): Promise<{ success: boolean; trip?: TripWithStops; pointsDelta?: number; message?: string }> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -395,6 +409,8 @@ export async function updateTrip(
     if (existing.length === 0) {
       return { success: false, message: "Rota bulunamadı veya yetkiniz yok." };
     }
+
+    const oldStatus = existing[0].status;
 
     // 1. Rota ana tablosunu güncelle
     const updatedTrip = await db
@@ -432,12 +448,53 @@ export async function updateTrip(
 
     const insertedStops = await db.insert(tripStops).values(stopsToInsert).returning();
 
+    // 3. Düzenleme sırasında statü değiştiyse puan defterini senkronize et
+    let pointsDelta = 0;
+    if (oldStatus !== status) {
+      const netAwarded = await getTripNetPoints(session.user.id, tripId);
+      if (status === "completed" && netAwarded <= 0) {
+        try {
+          const ledger = await awardPoints({
+            userId: session.user.id,
+            actionType: "complete_trip",
+            referenceId: tripId,
+            referenceType: "trip",
+            description: `Tamamlanan Seyahat Rotası: ${title}`,
+            metadata: { previousStatus: oldStatus, source: "updateTrip" },
+          });
+          pointsDelta = ledger.finalPoints;
+        } catch (ptsErr) {
+          console.error("Rota güncelleme puan ekleme hatası:", ptsErr);
+        }
+      } else if (oldStatus === "completed" && status === "planned" && netAwarded > 0) {
+        try {
+          const ledger = await awardPoints({
+            userId: session.user.id,
+            actionType: "delete_trip",
+            basePoints: -netAwarded,
+            multiplier: 1.0,
+            referenceId: tripId,
+            referenceType: "trip",
+            description: `Durumu Planlanana Çekilen Rota Puan İadesi: ${title}`,
+            metadata: { previousStatus: oldStatus, source: "updateTrip" },
+          });
+          pointsDelta = ledger.finalPoints;
+        } catch (ptsErr) {
+          console.error("Rota güncelleme puan iade hatası:", ptsErr);
+        }
+      }
+    }
+
     revalidatePath("/dashboard");
     revalidatePath("/feed");
     revalidatePath("/match");
+    revalidatePath("/passport");
+    revalidatePath("/points");
+    revalidatePath("/rewards");
 
     return {
       success: true,
+      pointsDelta,
       trip: {
         ...updatedTrip[0],
         stops: insertedStops,

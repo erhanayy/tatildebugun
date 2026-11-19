@@ -24,6 +24,8 @@ import {
   MapPin,
   Users,
   Compass,
+  Navigation,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -393,80 +395,182 @@ export function RewardsView({ initialSummary, initialLedger, user }: RewardsView
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              <div className="p-4 rounded-2xl bg-slate-950/80 border border-emerald-500/30 flex items-center justify-between">
-                <div className="space-y-1">
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-emerald-500/30 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
                   <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4" />
-                    Fiziki Mekan Check-In (GPS Doğrulamalı)
+                    <MapPin className="w-4 h-4 shrink-0" />
+                    {locale === "en"
+                      ? "Physical Place Check-In (GPS Verified)"
+                      : "Fiziki Mekan Check-In (GPS Doğrulamalı)"}
                   </span>
-                  <p className="text-xs text-slate-400">Gezilen mekanda varlık kanıtı (Proof-of-Presence)</p>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "Proof-of-Presence at the visited location"
+                      : "Gezilen mekanda varlık kanıtı (Proof-of-Presence)"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/70 text-[10px] font-semibold text-slate-400">
+                    {locale === "en" ? "⏳ Does not carry over to next year" : "⏳ Sonraki yıla taşınmaz"}
+                  </span>
                 </div>
-                <span className="text-lg font-black text-emerald-300 px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                <span className="text-lg font-black text-emerald-300 px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 shrink-0">
                   +200 P
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-950/80 border border-purple-500/30 flex items-center justify-between">
-                <div className="space-y-1">
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-purple-500/30 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
                   <span className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
-                    <Users className="w-4 h-4" />
-                    Arkadaş Daveti Pasif Geliri
+                    <Users className="w-4 h-4 shrink-0" />
+                    {locale === "en"
+                      ? "Friend Referral Passive Income"
+                      : "Arkadaş Daveti Pasif Geliri"}
                   </span>
-                  <p className="text-xs text-slate-400">Davet ettiğin arkadaşının o yılki tüm seyahatlerinden</p>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "20% of your invited friend's travels (rounded to whole points)"
+                      : "Davet ettiğin arkadaşının seyahatlerinden %20 (tam sayıya yuvarlanır)"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/70 text-[10px] font-semibold text-slate-400">
+                    {locale === "en" ? "⏳ Does not carry over to next year" : "⏳ Sonraki yıla taşınmaz"}
+                  </span>
                 </div>
-                <span className="text-lg font-black text-purple-300 px-3 py-1 rounded-xl bg-purple-500/10 border border-purple-500/30">
-                  %20 Pay
+                <span className="text-lg font-black text-purple-300 px-3 py-1 rounded-xl bg-purple-500/10 border border-purple-500/30 shrink-0">
+                  {locale === "en" ? "20% Share" : "%20 Pay"}
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-950/80 border border-amber-500/30 flex items-center justify-between">
-                <div className="space-y-1">
-                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                    <Gift className="w-4 h-4" />
-                    Hoşgeldin Davet Bonusu
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-sky-500/30 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
+                  <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                    <Navigation className="w-4 h-4 shrink-0" />
+                    {locale === "en"
+                      ? "Completed Travel Route Sharing"
+                      : "Tamamlanan Seyahat Rotası Paylaşımı"}
                   </span>
-                  <p className="text-xs text-slate-400">Davet koduyla AllTripX ailesine katılım</p>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "Routes saved as Completed (reversed if deleted or reverted)"
+                      : "Geçmiş / Tamamlandı statüsünde rota paylaşımı (silinirse iade)"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                    {locale === "en"
+                      ? "🎯 Season Start: Routes × 50 × 20% (rounded)"
+                      : "🎯 Yıla Başlangıç: Toplam Rota × 50 × %20"}
+                  </span>
                 </div>
-                <span className="text-lg font-black text-amber-300 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                <span className="text-lg font-black text-sky-300 px-3 py-1 rounded-xl bg-sky-500/10 border border-sky-500/30 shrink-0">
                   +50 P
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-950/80 border border-cyan-500/30 flex items-center justify-between">
-                <div className="space-y-1">
-                  <span className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
-                    <Compass className="w-4 h-4" />
-                    Gezi / Mekan Pini Ekleme
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-amber-500/30 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
+                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                    <Gift className="w-4 h-4 shrink-0" />
+                    {locale === "en"
+                      ? "Welcome Invite Bonus"
+                      : "Hoşgeldin Davet Bonusu"}
                   </span>
-                  <p className="text-xs text-slate-400">Haritaya yeni ziyaret veya rota katkısı</p>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "Joining the AllTripX community with a referral code"
+                      : "Davet koduyla AllTripX ailesine katılım"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/70 text-[10px] font-semibold text-slate-400">
+                    {locale === "en" ? "⏳ Does not carry over to next year" : "⏳ Sonraki yıla taşınmaz"}
+                  </span>
                 </div>
-                <span className="text-lg font-black text-cyan-300 px-3 py-1 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
+                <span className="text-lg font-black text-amber-300 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 shrink-0">
+                  +50 P
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-teal-500/30 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
+                  <span className="text-xs font-bold text-teal-400 flex items-center gap-1.5">
+                    <UserPlus className="w-4 h-4 shrink-0" />
+                    {locale === "en"
+                      ? "Confirmed Friend / Family Connection"
+                      : "Arkadaş / Aile İlişkisi Kurma"}
+                  </span>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "Awarded to both travelers on mutual acceptance (reversed if removed)"
+                      : "Karşılıklı onaylanan her arkadaş, akraba veya aile bağlantısı (kaldırılırsa iade)"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                    {locale === "en"
+                      ? "🎯 Season Start: Connections × 20 × 20% (rounded)"
+                      : "🎯 Yıla Başlangıç: Sosyal İlişki × 20 × %20"}
+                  </span>
+                </div>
+                <span className="text-lg font-black text-teal-300 px-3 py-1 rounded-xl bg-teal-500/10 border border-teal-500/30 shrink-0">
+                  +20 P
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-cyan-500/30 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
+                  <span className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                    <Compass className="w-4 h-4 shrink-0" />
+                    {locale === "en"
+                      ? "Travel / Place Pin Creation"
+                      : "Gezi / Mekan Pini Ekleme"}
+                  </span>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "Adding a new visited city or place pin to the map"
+                      : "Haritaya yeni ziyaret veya mekan pini katkısı"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                    {locale === "en"
+                      ? "🎯 Season Start: Pins × 10 × 20% (rounded)"
+                      : "🎯 Yıla Başlangıç: Toplam Pin × 10 × %20"}
+                  </span>
+                </div>
+                <span className="text-lg font-black text-cyan-300 px-3 py-1 rounded-xl bg-cyan-500/10 border border-cyan-500/30 shrink-0">
                   +10 P
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-between">
-                <div className="space-y-1">
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
                   <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4" />
-                    Günlük Kaşif Girişi
+                    <Calendar className="w-4 h-4 shrink-0" />
+                    {locale === "en" ? "Daily Explorer Login" : "Günlük Kaşif Girişi"}
                   </span>
-                  <p className="text-xs text-slate-400">Günde 1 kez platforma giriş sadakat ödülü</p>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "Once-a-day platform loyalty check-in reward"
+                      : "Günde 1 kez platforma giriş sadakat ödülü"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/70 text-[10px] font-semibold text-slate-400">
+                    {locale === "en" ? "⏳ Does not carry over to next year" : "⏳ Sonraki yıla taşınmaz"}
+                  </span>
                 </div>
-                <span className="text-base font-bold text-blue-300 px-3 py-1 rounded-xl bg-blue-500/10 border border-blue-500/30">
+                <span className="text-base font-bold text-blue-300 px-3 py-1 rounded-xl bg-blue-500/10 border border-blue-500/30 shrink-0">
                   +5 P
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-between">
-                <div className="space-y-1">
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
                   <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-pink-400" />
-                    Yorum & Beğeni Etkileşimi
+                    <Sparkles className="w-4 h-4 text-pink-400 shrink-0" />
+                    {locale === "en"
+                      ? "Comment & Like Interaction"
+                      : "Yorum & Beğeni Etkileşimi"}
                   </span>
-                  <p className="text-xs text-slate-400">Topluluk içeriklerine anlamlı katkı</p>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "Meaningful contribution to community posts"
+                      : "Topluluk içeriklerine anlamlı katkı"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/70 text-[10px] font-semibold text-slate-400">
+                    {locale === "en" ? "⏳ Does not carry over to next year" : "⏳ Sonraki yıla taşınmaz"}
+                  </span>
                 </div>
-                <span className="text-base font-bold text-pink-300 px-3 py-1 rounded-xl bg-pink-500/10 border border-pink-500/30">
+                <span className="text-base font-bold text-pink-300 px-3 py-1 rounded-xl bg-pink-500/10 border border-pink-500/30 shrink-0">
                   +5 P
                 </span>
               </div>
@@ -502,9 +606,13 @@ export function RewardsView({ initialSummary, initialLedger, user }: RewardsView
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-950/80 border border-amber-900/30 space-y-1">
-                <span className="font-bold text-amber-300 flex items-center gap-1">🔄 Sezon Devri (Carry-Over Kıdemi)</span>
+                <span className="font-bold text-amber-300 flex items-center gap-1">
+                  {locale === "en" ? "🎯 Season Starting Score" : "🎯 Yıla Başlangıç Puanı"}
+                </span>
                 <p className="text-slate-400 leading-relaxed">
-                  Kazanılan puanlar yıl bitiminde buharlaşmaz. Yeni yıla kıdem puanı olarak aktarılarak sonraki sezona ayrıcalıklı başlanması sağlanır.
+                  {locale === "en"
+                    ? "At the start of each new year, your starting score is calculated from your active assets to date: (Total Pins × 10 × 20%) + (Completed Routes × 50 × 20%) + (Confirmed Connections × 20 × 20%). Other point types do not carry over; all percentage calculations are always rounded to whole integers."
+                    : "Yeni yıla başlarken o güne kadarki aktif kayıtların üzerinden hesaplanır: (Toplam Pin × 10 × %20) + (Tamamlanan Rota × 50 × %20) + (Sosyal İlişki × 20 × %20). Diğer puan kalemleri sonraki yıla taşınmaz; tüm oran hesaplamalarında ondalıklar en yakın tam sayıya yuvarlanır."}
                 </p>
               </div>
             </div>

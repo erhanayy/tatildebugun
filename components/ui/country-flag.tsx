@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { getCountryFlagEmoji, getCountryFlagUrl } from "@/lib/country-flags";
 
 interface CountryFlagProps {
@@ -17,6 +18,12 @@ export function CountryFlag({
   className = "",
   alt,
 }: CountryFlagProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [countryCode]);
+
   if (!countryCode) {
     return <span className={className} style={{ fontSize: height * 0.85 }}>🌍</span>;
   }
@@ -47,22 +54,21 @@ export function CountryFlag({
     );
   }
 
-  // 2. Standart 2 Haneli Ülke Kodları (FlagCDN)
-  if (code.length === 2) {
-    const url = getCountryFlagUrl(code, "w80");
-    if (url) {
-      return (
-        <img
-          src={url}
-          width={width}
-          height={height}
-          alt={alt || `${code} Bayrağı`}
-          className={`inline-block align-middle rounded-xs shadow-xs border border-slate-300 dark:border-slate-700/60 object-cover shrink-0 ${className}`}
-          style={{ width, height }}
-          loading="lazy"
-        />
-      );
-    }
+  // 2. Standart 2 Haneli ISO ve Desteklenen Alt Bölge Kodları (GB-SCT, GB-WLS, GB-ENG, GB-NIR)
+  const url = getCountryFlagUrl(code, "w80");
+  if (url && !imgFailed) {
+    return (
+      <img
+        src={url}
+        width={width}
+        height={height}
+        alt={alt || `${code} Bayrağı`}
+        className={`inline-block align-middle rounded-xs shadow-xs border border-slate-300 dark:border-slate-700/60 object-cover shrink-0 ${className}`}
+        style={{ width, height }}
+        loading="lazy"
+        onError={() => setImgFailed(true)}
+      />
+    );
   }
 
   return <span className={className} style={{ fontSize: height * 0.85 }}>{getCountryFlagEmoji(code)}</span>;

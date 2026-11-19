@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { MatchCandidate } from "@/lib/actions/match";
 import { sendMatchRequest, respondMatchRequest } from "@/lib/actions/match";
+import { disconnectTravelerAction } from "@/lib/actions/social";
 import {
   findFriendsByContactHashes,
   findFriendsByContacts,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/actions/search-travelers";
 import { normalizeToInternational } from "@/lib/utils/phone";
 import { CountryFlag } from "@/components/ui/country-flag";
+import { triggerFloatingPoints } from "@/components/points/floating-points-effect";
 import {
   Compass,
   Calendar,
@@ -41,6 +43,7 @@ import {
   Check,
   Loader2,
   UserPlus,
+  UserMinus,
   Search,
   AtSign,
   User,
@@ -99,6 +102,10 @@ export function MatchView({
   const [connectionRelationship, setConnectionRelationship] = useState<"friend" | "relative" | "family">("friend");
   const [connectionIntroMsg, setConnectionIntroMsg] = useState("");
   const [isSendingConnection, setIsSendingConnection] = useState(false);
+
+  // Bağlantı / İlişki Kaldırma Onay Modalı State
+  const [disconnectTarget, setDisconnectTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   // Kişisel Davet Bağlantısı
   const inviteUrl =
@@ -415,6 +422,15 @@ export function MatchView({
     const res = await respondMatchRequest(matchId, action);
     if (res.success) {
       toast.success(action === "accepted" ? t("match.acceptSuccess") : t("match.declineSuccess"));
+      if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
+        triggerFloatingPoints({
+          points: res.pointsDelta,
+          label: locale === "en" ? "New Connection Bonus!" : "Yeni İlişki Puanı!",
+        });
+      }
+      if (action === "accepted" && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("refresh-points"));
+      }
       setIncoming((prev) =>
         prev.map((item) =>
           item.match.id === matchId
@@ -424,6 +440,66 @@ export function MatchView({
       );
     } else {
       toast.error(res.message || (locale === "en" ? "Action could not be completed." : "İşlem tamamlanamadı."));
+    }
+  }
+
+  // İlişkiyi / Bağlantıyı Kaldır (Disconnect + Puan İadesi)
+  async function handleConfirmDisconnect() {
+    if (!disconnectTarget) return;
+    setIsDisconnecting(true);
+    try {
+      const res = await disconnectTravelerAction(disconnectTarget.id);
+      if (res.success) {
+        toast.success(
+          locale === "en"
+            ? `Disconnected from ${disconnectTarget.name}.`
+            : `${disconnectTarget.name} ile bağlantı kaldırıldı.`
+        );
+        // Arama sonuçlarını anında güncelle (tekrar "Bağlantı Kur" aktif olur)
+        setSearchResults((prev) =>
+          prev.map((trv) =>
+            trv.id === disconnectTarget.id
+              ? { ...trv, connectionStatus: "none", relationshipType: null }
+              : trv
+          )
+        );
+        // Gelen / Gönderilen listelerden kaldır
+        setIncoming((prev) => prev.filter((item) => item.sender.id !== disconnectTarget.id));
+        setOutgoing((prev) => prev.filter((item) => item.receiver.id !== disconnectTarget.id));
+        // Rehber listesini güncelle
+        setContactFriends((prev) =>
+          prev.map((f) =>
+            f.id === disconnectTarget.id
+              ? { ...f, hasExistingRequest: false, requestStatus: undefined }
+              : f
+          )
+        );
+
+        if (typeof res.pointsDelta === "number" && res.pointsDelta !== 0) {
+          triggerFloatingPoints({
+            points: res.pointsDelta,
+            label:
+              locale === "en"
+                ? "Connection Removed (Reversal)"
+                : "Kaldırılan İlişki İadesi",
+          });
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("refresh-points"));
+        }
+        setDisconnectTarget(null);
+      } else {
+        toast.error(
+          res.message ||
+            (locale === "en" ? "Could not remove connection." : "Bağlantı kaldırılamadı.")
+        );
+      }
+    } catch {
+      toast.error(
+        locale === "en" ? "An error occurred while disconnecting." : "Bağlantı kaldırılırken hata oluştu."
+      );
+    } finally {
+      setIsDisconnecting(false);
     }
   }
 
@@ -847,18 +923,33 @@ export function MatchView({
                     </button>
                   </div>
                 ) : item.match.status === "accepted" ? (
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
                     <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Kabul Edildi</span>
+                      <span>{locale === "en" ? "Accepted" : "Kabul Edildi"}</span>
                     </span>
-                    <Link
-                      href={`/messages?user=${item.sender.id}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer min-h-[44px]"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Sohbet Et</span>
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/messages?user=${item.sender.id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer min-h-[44px]"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>{locale === "en" ? "Message" : "Sohbet Et"}</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDisconnectTarget({
+                            id: item.sender.id,
+                            name: item.sender.fullName || "Gezgin",
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-800/70 text-xs font-bold transition-all cursor-pointer min-h-[44px]"
+                      >
+                        <UserMinus className="w-3.5 h-3.5" />
+                        <span>{locale === "en" ? "Disconnect" : "İlişkiyi Kes"}</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <span className="text-xs font-bold text-slate-400 uppercase">
@@ -897,22 +988,43 @@ export function MatchView({
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <span className="px-3 py-1 rounded-full text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300">
                     {item.match.status === "pending"
-                      ? "⏳ Yanıt Bekliyor"
+                      ? locale === "en"
+                        ? "⏳ Pending"
+                        : "⏳ Yanıt Bekliyor"
                       : item.match.status === "accepted"
-                      ? "✅ Kabul Edildi"
+                      ? locale === "en"
+                        ? "✅ Accepted"
+                        : "✅ Kabul Edildi"
+                      : locale === "en"
+                      ? "Declined"
                       : "Reddedildi"}
                   </span>
                   {item.match.status === "accepted" && (
-                    <Link
-                      href={`/messages?user=${item.receiver.id}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer min-h-[44px]"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Sohbet Et</span>
-                    </Link>
+                    <>
+                      <Link
+                        href={`/messages?user=${item.receiver.id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer min-h-[44px]"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>{locale === "en" ? "Message" : "Sohbet Et"}</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDisconnectTarget({
+                            id: item.receiver.id,
+                            name: item.receiver.fullName || "Gezgin",
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-800/70 text-xs font-bold transition-all cursor-pointer min-h-[44px]"
+                      >
+                        <UserMinus className="w-3.5 h-3.5" />
+                        <span>{locale === "en" ? "Disconnect" : "İlişkiyi Kes"}</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1023,36 +1135,60 @@ export function MatchView({
                   </div>
 
                   {/* İstatistikler ve Aksiyon */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
                     <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                      <span>{traveler.visitCount} Ziyaret 📍</span>
-                      <span>{traveler.tripCount} Rota 🗺️</span>
+                      <span>
+                        {traveler.visitCount} {locale === "en" ? "Visits" : "Ziyaret"} 📍
+                      </span>
+                      <span>
+                        {traveler.tripCount} {locale === "en" ? "Routes" : "Rota"} 🗺️
+                      </span>
                     </div>
 
                     {traveler.isSelf ? (
                       <Link
                         href="/profile"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all min-h-[36px]"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all min-h-[44px]"
                       >
                         <User className="w-3.5 h-3.5" />
                         <span>{locale === "en" ? "You (Your Profile)" : "Sen (Profilin)"}</span>
                       </Link>
                     ) : traveler.connectionStatus === "accepted" ? (
-                      <div className="flex items-center gap-2">
-                        <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/80">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/80">
                           {traveler.relationshipType === "family"
-                            ? "🏡 Ailem"
+                            ? locale === "en"
+                              ? "🏡 Family"
+                              : "🏡 Ailem"
                             : traveler.relationshipType === "relative"
-                            ? "🤝 Akrabam"
+                            ? locale === "en"
+                              ? "🤝 Relative"
+                              : "🤝 Akrabam"
+                            : locale === "en"
+                            ? "👥 Friend"
                             : "👥 Arkadaşım"}
                         </span>
                         <Link
                           href={`/messages?user=${traveler.id}`}
-                          className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 transition-colors cursor-pointer min-h-[36px]"
-                          title="Sohbet Et"
+                          className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                          title={locale === "en" ? "Message" : "Sohbet Et"}
                         >
                           <MessageSquare className="w-4 h-4" />
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDisconnectTarget({
+                              id: traveler.id,
+                              name: traveler.fullName || `@${traveler.username}`,
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/50 hover:bg-rose-900/70 text-rose-300 border border-rose-800/70 text-xs font-bold transition-all cursor-pointer min-h-[44px]"
+                          title={locale === "en" ? "Disconnect" : "İlişkiyi Kes"}
+                        >
+                          <UserMinus className="w-3.5 h-3.5" />
+                          <span>{locale === "en" ? "Disconnect" : "İlişkiyi Kes"}</span>
+                        </button>
                       </div>
                     ) : traveler.connectionStatus === "pending_outgoing" ? (
                       <span className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold border border-slate-700">
@@ -1418,6 +1554,58 @@ export function MatchView({
                   </>
                 ) : (
                   <span>Sorgula ve Eşleştir 🔍</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* İlişkiyi Kes (Disconnect) Onay Modalı */}
+      {disconnectTarget && (
+        <div className="fixed inset-0 z-[3200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-slate-900 rounded-3xl p-6 shadow-2xl border border-rose-500/30 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
+                <UserMinus className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-bold text-base text-white">
+                  {locale === "en" ? "Remove Connection?" : "İlişkiyi Kesmek İstiyor musunuz?"}
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {locale === "en"
+                    ? `Are you sure you want to disconnect from ${disconnectTarget.name}? If +20 Points were awarded for this connection, they will be reversed from both accounts.`
+                    : `${disconnectTarget.name} ile olan bağlantıyı kaldırmak istediğinize emin misiniz? Bu ilişkiden kazanılmış aktif +20 Puan varsa her iki taraftan geri alınır.`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isDisconnecting}
+                onClick={() => setDisconnectTarget(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer min-h-[44px]"
+              >
+                {locale === "en" ? "Cancel" : "Vazgeç"}
+              </button>
+              <button
+                type="button"
+                disabled={isDisconnecting}
+                onClick={handleConfirmDisconnect}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/25 transition-all disabled:opacity-50 cursor-pointer min-h-[44px] flex items-center gap-1.5"
+              >
+                {isDisconnecting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{locale === "en" ? "Disconnecting..." : "Kaldırılıyor..."}</span>
+                  </>
+                ) : (
+                  <>
+                    <UserMinus className="w-3.5 h-3.5" />
+                    <span>{locale === "en" ? "Yes, Disconnect" : "Evet, İlişkiyi Kes"}</span>
+                  </>
                 )}
               </button>
             </div>
