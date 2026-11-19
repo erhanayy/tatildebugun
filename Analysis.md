@@ -4446,6 +4446,45 @@ Açılan modal, 3 sekmeli ve modern dark glassmorphism mimarisinde sunulur:
 - **Kural 2 Uyarınca:** GitHub'a otomatik push yapılmadı.
 - **Kural 3 Uyarınca:** Canlı ortama otomatik deploy yapılmadı.
 
+---
 
+## 86. Negatif Puan Anomalisi Kök Neden Analizi, Veritabanı Temizliği ve Savunmacı Kod (Defensive Bounds) Mimarisi
 
+Kullanıcının *"Gövleyi sildim puan -994bin oldu"* bildirimi ve paylaştığı ekran görüntüsünde üst barda yer alan `-997.044 PTS` hatası üzerine gerçekleştirilen kök neden analizi, defter temizliği ve kalıcı mimari düzeltmeler:
 
+### 86.1. Kök Neden Analizi (Root Cause Analysis)
+1. **Test Scripti İzolasyon Eksikliği:**
+   - Önceki aşamada yazılan `scripts/test_pin_trip_lifecycle.ts` birim testinde, Test 6 senaryosu ("Sıfırın altına düşmeme testi - GREATEST(0, ...)") doğrudan gerçek kullanıcı hesabı (`erhanayyildiz@gmail.com`) üzerinde çalıştırılmıştır.
+   - Bu test kapsamında `awardPoints` fonksiyonuna `actionType: "admin_penalty"`, `basePoints: -999999` gönderilmiştir.
+   - Test sonrasında `users.travelerScore` alanı başlangıç değerine (`2,965 Pts`) güncellenmiş; ancak `user_points_ledger` (puan defteri) içerisine yazılan `-999,999 Pts` değerindeki test kaydı veritabanından silinmeyip defterde kalmıştır.
+2. **Defter Toplama ve UI Entegrasyonu:**
+   - Kullanıcı Gävle pinini sildiğinde `deleteVisit` kusursuz çalışarak -10 Puanlık ters işlem kaydı oluşturmuştur.
+   - Ancak üst bardaki puan rozeti (`app-header.tsx`) ve ödül/pasaport ekranları güncel puanı `getUserPointsSummary(userId)` üzerinden defterdeki tüm hareketleri toplayarak (`sum(finalPoints)`) hesaplamaktadır.
+   - Defterde bekleyen `-999,999 Pts` test cezası nedeniyle toplam:
+     `2,955 Pts (Gerçek Puanlar) - 999,999 Pts (Test Kaydı) = -997,044 PTS`
+     olarak hesaplanmış ve arayüze bu değer yansımıştır.
+
+### 86.2. Uygulanan Kalıcı Çözümler ve Savunmacı Mimari
+1. **Veritabanı Defter Temizliği ve Skor Senkronizasyonu:**
+   - `user_points_ledger` tablosundan test esnasında oluşturulmuş olan 7 adet sahte test kaydı (başta `-999,999` olmak üzere) tespit edilerek tamamen silindi.
+   - Erhan Ayyıldız kullanıcısının durumu doğrulandı:
+     - `users.travelerScore`: **2,955 Pts** (2,925 başlangıç + Stockholm ve Gävle +40 - Gävle silme -10 = 2,955)
+     - `user_points_ledger` toplamı: **2,955 Pts** (Tam tutarlılık)
+     - Sezon Havuz Puanı (`valueSharePools`): **3,910 Pts**
+2. **Savunmacı Kod (Defensive Bounds) Eklendi (`lib/points/engine.ts`):**
+   - `getUserPointsSummary` fonksiyonuna matematiksel alt sınır (`Math.max(0, ...)`) koruması eklendi.
+   - Herhangi bir defter dengesizliği veya beklenmeyen ceza kaydı oluşsa dahi; `totalPoints`, `checkinPoints`, `referralPoints` ve `activityPoints` asla 0'ın altına düşmeyecek, arayüzde negatif sayı görüntülenemeyecektir.
+3. **Birim Testlerde Tam İzolasyon Prensibi (`scripts/test_pin_trip_lifecycle.ts`):**
+   - Test scripti gerçek kullanıcı hesaplarına dokunmayacak şekilde yeniden yapılandırıldı.
+   - Test başladığında geçici bir `test_runner_${Date.now()}@internal.test` kullanıcısı oluşturulmakta; pin ekleme, rota oluşturma, rota silme, durum değiştirme ve sınır testleri bu izole kullanıcı üzerinde koşturulmaktadır.
+   - Testin sonunda `finally` bloğu içerisinde test kullanıcısı, test pinleri, test rotaları ve test defter kayıtları eksiksiz silinmektedir. Sıfır veri kalıntısı garantilenmiştir.
+
+### 86.3. Kalite Kapısı ve Doğrulama
+1. **Birim Testler (`npx tsx scripts/test_pin_trip_lifecycle.ts`):**
+   - 25 adet testin 25'i de (%100) başarıyla tamamlandı.
+   - Test bitiminde tüm geçici veriler temizlendi, gerçek kullanıcı ve defter verilerine hiçbir yan etki oluşmadığı teyit edildi.
+2. **TypeScript Kalite Kapısı (`npx tsc --noEmit`):**
+   - 0 Hata ile başarıyla tamamlandı.
+3. **Kural Disiplini:**
+   - Kural 2 uyarınca GitHub'a otomatik push yapılmadı.
+   - Kural 3 uyarınca otomatik canlı dağıtım (deploy) yapılmadı.

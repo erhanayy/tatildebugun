@@ -303,6 +303,12 @@ export async function getUserPointsSummary(
     }
   }
 
+  // Güvenlik Önlemi: Puanlar asla negatif olamaz (Math.max(0, ...))
+  totalPoints = Math.max(0, totalPoints);
+  checkinPoints = Math.max(0, checkinPoints);
+  referralPoints = Math.max(0, referralPoints);
+  activityPoints = Math.max(0, activityPoints);
+
   // Havuz Toplam Puanı (En az kullanıcının puanı kadar olmalı)
   const totalPoolPoints = Math.max(pool.totalPoolPoints, totalPoints, 1);
 
