@@ -26,6 +26,7 @@ import {
   Compass,
   Navigation,
   UserPlus,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -121,6 +122,20 @@ export function RewardsView({ initialSummary, initialLedger, user }: RewardsView
         return { label: locale === "en" ? "Passive (%20)" : "Pasif (%20)", color: "bg-purple-500/15 text-purple-400 border-purple-500/30" };
       case "create_pin":
         return { label: locale === "en" ? "Travel Pin" : "Gezi Pini", color: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" };
+      case "delete_pin":
+        return { label: locale === "en" ? "Pin Removed" : "Silinen Pin", color: "bg-rose-500/15 text-rose-400 border-rose-500/30" };
+      case "complete_trip":
+        return { label: locale === "en" ? "Completed Route" : "Tamamlanan Rota", color: "bg-sky-500/15 text-sky-400 border-sky-500/30" };
+      case "delete_trip":
+        return { label: locale === "en" ? "Route Reversal" : "Rota İadesi", color: "bg-rose-500/15 text-rose-400 border-rose-500/30" };
+      case "connect_friend":
+        return { label: locale === "en" ? "Connection" : "Sosyal İlişki", color: "bg-teal-500/15 text-teal-400 border-teal-500/30" };
+      case "remove_friend":
+        return { label: locale === "en" ? "Disconnect" : "İlişki İadesi", color: "bg-rose-500/15 text-rose-400 border-rose-500/30" };
+      case "visit_place":
+        return { label: locale === "en" ? "Visited Place" : "Görülen Yer", color: "bg-lime-500/15 text-lime-400 border-lime-500/30" };
+      case "remove_place_visit":
+        return { label: locale === "en" ? "Place Removed" : "Çıkarılan Yer", color: "bg-rose-500/15 text-rose-400 border-rose-500/30" };
       case "welcome_bonus":
         return { label: locale === "en" ? "Welcome" : "Hoşgeldin", color: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
       case "daily_login":
@@ -574,6 +589,30 @@ export function RewardsView({ initialSummary, initialLedger, user }: RewardsView
                   +5 P
                 </span>
               </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-lime-500/30 flex items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
+                  <span className="text-xs font-bold text-lime-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    {locale === "en"
+                      ? "On Vacation — Visited Place"
+                      : "Tatildeyim — Görülen Yer"}
+                  </span>
+                  <p className="text-xs text-slate-400">
+                    {locale === "en"
+                      ? "Each place marked visited in On Vacation guide (-2 P if removed)"
+                      : "Tatildeyim rehberinde görüldü eklenen her yer (çıkarılırsa -2 P iade)"}
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                    {locale === "en"
+                      ? "🎯 Season Start: Visited Places × 2 × 20% (rounded)"
+                      : "🎯 Yıla Başlangıç: Görülen Yer × 2 × %20"}
+                  </span>
+                </div>
+                <span className="text-base font-black text-lime-300 px-3 py-1 rounded-xl bg-lime-500/10 border border-lime-500/30 shrink-0">
+                  +2 P
+                </span>
+              </div>
             </div>
           </div>
 
@@ -611,8 +650,8 @@ export function RewardsView({ initialSummary, initialLedger, user }: RewardsView
                 </span>
                 <p className="text-slate-400 leading-relaxed">
                   {locale === "en"
-                    ? "At the start of each new year, your starting score is calculated from your active assets to date: (Total Pins × 10 × 20%) + (Completed Routes × 50 × 20%) + (Confirmed Connections × 20 × 20%). Other point types do not carry over; all percentage calculations are always rounded to whole integers."
-                    : "Yeni yıla başlarken o güne kadarki aktif kayıtların üzerinden hesaplanır: (Toplam Pin × 10 × %20) + (Tamamlanan Rota × 50 × %20) + (Sosyal İlişki × 20 × %20). Diğer puan kalemleri sonraki yıla taşınmaz; tüm oran hesaplamalarında ondalıklar en yakın tam sayıya yuvarlanır."}
+                    ? "At the start of each new year, your starting score is calculated from your active assets to date: (Total Pins × 10 × 20%) + (Completed Routes × 50 × 20%) + (Confirmed Connections × 20 × 20%) + (Visited Places × 2 × 20%). Other point types do not carry over; all percentage calculations are always rounded to whole integers."
+                    : "Yeni yıla başlarken o güne kadarki aktif kayıtların üzerinden hesaplanır: (Toplam Pin × 10 × %20) + (Tamamlanan Rota × 50 × %20) + (Sosyal İlişki × 20 × %20) + (Görülen Yer × 2 × %20). Diğer puan kalemleri sonraki yıla taşınmaz; tüm oran hesaplamalarında ondalıklar en yakın tam sayıya yuvarlanır."}
                 </p>
               </div>
             </div>

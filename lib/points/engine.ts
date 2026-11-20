@@ -5,6 +5,7 @@ import {
   users,
   visits,
   trips,
+  tripPlaceVisits,
   userConnections,
   UserPointsLedger,
 } from "@/lib/db/schema";
@@ -144,6 +145,20 @@ export const POINT_RULES: Record<
     titleTr: "Kaldırılan İlişki Puan İadesi",
     titleEn: "Removed Connection Point Reversal",
   },
+  visit_place: {
+    base: 2,
+    multiplier: 1.0,
+    includedInSeasonStart: true,
+    titleTr: "Tatildeyim: Görülen Yer",
+    titleEn: "On Vacation: Visited Place",
+  },
+  remove_place_visit: {
+    base: -2,
+    multiplier: 1.0,
+    includedInSeasonStart: false,
+    titleTr: "Tatildeyim: Çıkarılan Yer Puan İadesi",
+    titleEn: "On Vacation: Removed Place Reversal",
+  },
   welcome_bonus: {
     base: 50,
     multiplier: 1.0,
@@ -174,7 +189,15 @@ export function getConnectionPairKey(userA: string, userB: string): string {
 }
 
 /**
- * Bir kullanıcının belirli bir referans (rota, pin, sosyal bağlantı çifti vb.) için
+ * Tatildeyim rehberindeki bir mekan ziyareti için kanonik tekil referans anahtarı üretir.
+ * Aynı tur + mekan için çifte puan ve çifte kesintiyi kesin olarak engeller.
+ */
+export function getPlaceVisitKey(tripId: string, placeId: string): string {
+  return `place_visit:${tripId}:${placeId}`;
+}
+
+/**
+ * Bir kullanıcının belirli bir referans (rota, pin, sosyal bağlantı çifti, görülen yer vb.) için
  * tüm sezonlar boyunca defterdeki NET puan bakiyesini hesaplar.
  * Çifte ödül, ekle-sil farming ve çifte kesintiyi kesin olarak engeller.
  */
@@ -198,9 +221,11 @@ export interface SeasonStartingPointsBreakdown {
   pinCount: number;
   completedTripCount: number;
   activeConnectionCount: number;
+  visitedPlaceCount: number;
   pinPoints: number;
   tripPoints: number;
   connectionPoints: number;
+  visitedPlacePoints: number;
   totalStartingPoints: number;
 }
 
@@ -209,42 +234,52 @@ export interface SeasonStartingPointsBreakdown {
  * - Toplam Pin Sayısı × 10 × %20
  * - Toplam Tamamlanan Rota Sayısı × 50 × %20
  * - Toplam Sosyal İlişki Sayısı × 20 × %20
+ * - Toplam Görülen Yer Sayısı (Tatildeyim) × 2 × %20
  * Tüm ara ve toplam değerler tam sayıya yuvarlanır. Diğer puan kalemleri dahil edilmez.
  */
 export function computeSeasonStartingPointsFromCounts(counts: {
   pinCount: number;
   completedTripCount: number;
   activeConnectionCount: number;
+  visitedPlaceCount?: number;
 }): SeasonStartingPointsBreakdown {
   const safePins = Math.max(0, Math.floor(counts.pinCount || 0));
   const safeTrips = Math.max(0, Math.floor(counts.completedTripCount || 0));
   const safeConnections = Math.max(0, Math.floor(counts.activeConnectionCount || 0));
+  const safeVisitedPlaces = Math.max(0, Math.floor(counts.visitedPlaceCount || 0));
 
   const pinPoints = roundPoints(safePins * POINT_RULES.create_pin.base * SEASON_START_RATE);
   const tripPoints = roundPoints(safeTrips * POINT_RULES.complete_trip.base * SEASON_START_RATE);
   const connectionPoints = roundPoints(
     safeConnections * POINT_RULES.connect_friend.base * SEASON_START_RATE
   );
+  const visitedPlacePoints = roundPoints(
+    safeVisitedPlaces * POINT_RULES.visit_place.base * SEASON_START_RATE
+  );
 
   return {
     pinCount: safePins,
     completedTripCount: safeTrips,
     activeConnectionCount: safeConnections,
+    visitedPlaceCount: safeVisitedPlaces,
     pinPoints,
     tripPoints,
     connectionPoints,
-    totalStartingPoints: roundPoints(pinPoints + tripPoints + connectionPoints),
+    visitedPlacePoints,
+    totalStartingPoints: roundPoints(
+      pinPoints + tripPoints + connectionPoints + visitedPlacePoints
+    ),
   };
 }
 
 /**
  * Bir kullanıcının veritabanındaki o güne kadarki aktif varlıklarına göre
- * Yıla Başlangıç Puanını (Pin + Tamamlanan Rota + Onaylı İlişki) hesaplar.
+ * Yıla Başlangıç Puanını (Pin + Tamamlanan Rota + Onaylı İlişki + Görülen Yer) hesaplar.
  */
 export async function calculateSeasonStartingPoints(
   userId: string
 ): Promise<SeasonStartingPointsBreakdown> {
-  const [pinRows, tripRows, connRows] = await Promise.all([
+  const [pinRows, tripRows, connRows, placeVisitRows] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)` })
       .from(visits)
@@ -259,16 +294,22 @@ export async function calculateSeasonStartingPoints(
       .where(
         and(eq(userConnections.userId, userId), eq(userConnections.status, "accepted"))
       ),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(tripPlaceVisits)
+      .where(eq(tripPlaceVisits.userId, userId)),
   ]);
 
   const pinCount = Number(pinRows[0]?.count || 0);
   const completedTripCount = Number(tripRows[0]?.count || 0);
   const activeConnectionCount = new Set(connRows.map((c) => c.targetUserId)).size;
+  const visitedPlaceCount = Number(placeVisitRows[0]?.count || 0);
 
   return computeSeasonStartingPointsFromCounts({
     pinCount,
     completedTripCount,
     activeConnectionCount,
+    visitedPlaceCount,
   });
 }
 

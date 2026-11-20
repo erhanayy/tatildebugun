@@ -16,7 +16,28 @@ import { CURATED_PLACES } from "@/lib/poi-data";
 import { eq, and, sql, desc, asc, ilike, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { awardPoints } from "@/lib/points/engine";
+import {
+  awardPoints,
+  getPlaceVisitKey,
+  getReferenceNetPoints,
+} from "@/lib/points/engine";
+
+function revalidatePlaceAndPointPaths() {
+  revalidatePath("/tatildeyim");
+  revalidatePath("/dashboard");
+  revalidatePath("/passport");
+  revalidatePath("/points");
+  revalidatePath("/rewards");
+}
+
+async function getPlaceNameById(placeId: string): Promise<string> {
+  const rows = await db
+    .select({ name: placesOfInterest.name })
+    .from(placesOfInterest)
+    .where(eq(placesOfInterest.id, placeId))
+    .limit(1);
+  return rows[0]?.name || "Mekan";
+}
 
 // Zod Doğrulama Şemaları (Kural 10 - Katı Tip Güvenliği)
 const togglePlaceVisitSchema = z.object({
@@ -363,13 +384,36 @@ export async function togglePlaceVisit(input: {
       )
       .limit(1);
 
+    const refKey = getPlaceVisitKey(tripId, placeId);
+    const placeName = await getPlaceNameById(placeId);
+
     if (existing.length > 0) {
-      // Tiki kaldır (Sil)
+      // Tiki kaldır (Sil) ve aktif net puanı geri al (-2 Puan)
+      let pointsDelta = 0;
+      try {
+        const netAwarded = await getReferenceNetPoints(userId, refKey);
+        if (netAwarded > 0) {
+          const pointRes = await awardPoints({
+            userId,
+            actionType: "remove_place_visit",
+            basePoints: -netAwarded,
+            multiplier: 1.0,
+            referenceId: refKey,
+            referenceType: "place_visit",
+            description: `Tatildeyim Çıkarılan Yer İadesi: ${placeName}`,
+            metadata: { tripId, placeId, placeName },
+          });
+          pointsDelta = pointRes.finalPoints;
+        }
+      } catch (pe) {
+        console.error("awardPoints reversal error in togglePlaceVisit:", pe);
+      }
+
       await db.delete(tripPlaceVisits).where(eq(tripPlaceVisits.id, existing[0].id));
-      revalidatePath("/tatildeyim");
-      return { success: true, action: "removed", visitId: null };
+      revalidatePlaceAndPointPaths();
+      return { success: true, action: "removed", visitId: null, pointsDelta };
     } else {
-      // Ziyaret kaydet (Yeni tik)
+      // Ziyaret kaydet (Yeni tik) ve net bakiye korumalı +2 Puan ver
       const visitDate = visitedAt ? new Date(visitedAt) : new Date();
       const [inserted] = await db
         .insert(tripPlaceVisits)
@@ -383,29 +427,33 @@ export async function togglePlaceVisit(input: {
         })
         .returning();
 
-      // Madde 81.1: Fiziki Check-in 20x Çarpanı (200 Puan)
-      let awardedPoints = 0;
+      let pointsDelta = 0;
       try {
-        const pointRes = await awardPoints({
-          userId,
-          actionType: "checkin_pin",
-          referenceId: inserted.id,
-          referenceType: "visit",
-          description: "Fiziki Mekan Ziyareti & Check-in (20x Çarpan!)",
-        });
-        awardedPoints = pointRes.finalPoints;
+        const netAwarded = await getReferenceNetPoints(userId, refKey);
+        if (netAwarded <= 0) {
+          const pointRes = await awardPoints({
+            userId,
+            actionType: "visit_place",
+            referenceId: refKey,
+            referenceType: "place_visit",
+            description: `Tatildeyim Görülen Yer: ${placeName}`,
+            metadata: { tripId, placeId, visitId: inserted.id, placeName },
+          });
+          pointsDelta = pointRes.finalPoints;
+        }
       } catch (pe) {
         console.error("awardPoints error in togglePlaceVisit:", pe);
       }
 
-      revalidatePath("/tatildeyim");
+      revalidatePlaceAndPointPaths();
       return {
         success: true,
         action: "added",
         visitId: inserted.id,
         visitedAt: inserted.visitedAt,
         userRating: inserted.userRating,
-        awardedPoints,
+        awardedPoints: pointsDelta,
+        pointsDelta,
       };
     }
   } catch (error) {
@@ -435,6 +483,7 @@ export async function batchRecordPlaceVisits(input: {
 
   try {
     const insertedVisits: Array<{ placeId: string; visitId: string; visitedAt: Date }> = [];
+    let pointsDelta = 0;
 
     for (const v of visits) {
       const existing = await db
@@ -480,11 +529,30 @@ export async function batchRecordPlaceVisits(input: {
           visitId: inserted.id,
           visitedAt: inserted.visitedAt,
         });
+
+        try {
+          const refKey = getPlaceVisitKey(tripId, v.placeId);
+          const netAwarded = await getReferenceNetPoints(userId, refKey);
+          if (netAwarded <= 0) {
+            const placeName = await getPlaceNameById(v.placeId);
+            const pointRes = await awardPoints({
+              userId,
+              actionType: "visit_place",
+              referenceId: refKey,
+              referenceType: "place_visit",
+              description: `Tatildeyim Görülen Yer: ${placeName}`,
+              metadata: { tripId, placeId: v.placeId, visitId: inserted.id, source: "photo_batch" },
+            });
+            pointsDelta += pointRes.finalPoints;
+          }
+        } catch (pe) {
+          console.error("awardPoints error in batchRecordPlaceVisits:", pe);
+        }
       }
     }
 
-    revalidatePath("/tatildeyim");
-    return { success: true, visits: insertedVisits };
+    revalidatePlaceAndPointPaths();
+    return { success: true, visits: insertedVisits, pointsDelta };
   } catch (error) {
     console.error("batchRecordPlaceVisits hatası:", error);
     return { success: false, error: "Ziyaretler kaydedilemedi" };
@@ -574,6 +642,7 @@ export async function setPlaceRating(input: {
       .limit(1);
 
     let visitId: string;
+    let isNewVisit = false;
 
     if (existing.length > 0) {
       const [updated] = await db
@@ -595,25 +664,34 @@ export async function setPlaceRating(input: {
         })
         .returning();
       visitId = inserted.id;
+      isNewVisit = true;
     }
 
-    // Madde 81.1: Fiziki Check-in 20x Çarpanı (200 Puan)
-    let awardedPoints = 0;
-    try {
-      const pointRes = await awardPoints({
-        userId,
-        actionType: "checkin_pin",
-        referenceId: visitId,
-        referenceType: "visit",
-        description: "Fiziki Mekan Check-in & GPS Doğrulaması (20x Çarpan!)",
-      });
-      awardedPoints = pointRes.finalPoints;
-    } catch (pe) {
-      console.error("awardPoints error in checkInToPlace:", pe);
+    // Yalnızca ilk kez görüldü kaydı oluşturulduysa +2 Puan ver (mevcut kayıtta yıldız güncelleme 0 P)
+    let pointsDelta = 0;
+    if (isNewVisit) {
+      try {
+        const refKey = getPlaceVisitKey(tripId, placeId);
+        const netAwarded = await getReferenceNetPoints(userId, refKey);
+        if (netAwarded <= 0) {
+          const placeName = await getPlaceNameById(placeId);
+          const pointRes = await awardPoints({
+            userId,
+            actionType: "visit_place",
+            referenceId: refKey,
+            referenceType: "place_visit",
+            description: `Tatildeyim Görülen Yer: ${placeName}`,
+            metadata: { tripId, placeId, visitId, source: "rating" },
+          });
+          pointsDelta = pointRes.finalPoints;
+        }
+      } catch (pe) {
+        console.error("awardPoints error in setPlaceRating:", pe);
+      }
     }
 
-    revalidatePath("/tatildeyim");
-    return { success: true, visitId, userRating, awardedPoints };
+    revalidatePlaceAndPointPaths();
+    return { success: true, visitId, userRating, awardedPoints: pointsDelta, pointsDelta };
   } catch (error) {
     console.error("setPlaceRating hatası:", error);
     return { success: false, error: "Puan kaydedilemedi" };
@@ -676,7 +754,27 @@ export async function createCustomPlace(input: {
       })
       .returning();
 
-    revalidatePath("/tatildeyim");
+    // 3. Tatildeyim görülen yer puanı (+2 Puan)
+    let pointsDelta = 0;
+    try {
+      const refKey = getPlaceVisitKey(tripId, place.id);
+      const netAwarded = await getReferenceNetPoints(userId, refKey);
+      if (netAwarded <= 0) {
+        const pointRes = await awardPoints({
+          userId,
+          actionType: "visit_place",
+          referenceId: refKey,
+          referenceType: "place_visit",
+          description: `Tatildeyim Görülen Yer: ${place.name}`,
+          metadata: { tripId, placeId: place.id, visitId: visit.id, isCustom: true },
+        });
+        pointsDelta = pointRes.finalPoints;
+      }
+    } catch (pe) {
+      console.error("awardPoints error in createCustomPlace:", pe);
+    }
+
+    revalidatePlaceAndPointPaths();
 
     const placeItem: CityPlaceItem = {
       ...place,
@@ -687,7 +785,7 @@ export async function createCustomPlace(input: {
       notes: visit.notes,
     };
 
-    return { success: true, place: placeItem };
+    return { success: true, place: placeItem, pointsDelta };
   } catch (error) {
     console.error("createCustomPlace hatası:", error);
     return { success: false, error: "Özel mekan eklenirken bir hata oluştu" };

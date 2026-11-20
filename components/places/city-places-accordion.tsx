@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useTransition, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   getCityPlaces,
   togglePlaceVisit,
@@ -56,7 +57,19 @@ export function CityPlacesAccordion({
   longitude,
   onPlacesCountChange,
 }: CityPlacesAccordionProps) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
+
+  function syncPointsFeedback(pointsDelta: number | undefined, label: string) {
+    if (!pointsDelta || pointsDelta === 0) return;
+    triggerFloatingPoints({
+      points: pointsDelta,
+      label,
+      multiplier: pointsDelta > 0 ? `+${pointsDelta} Puan` : `${pointsDelta} Puan`,
+    });
+    window.dispatchEvent(new CustomEvent("refresh-points"));
+    router.refresh();
+  }
   const [places, setPlaces] = useState<CityPlaceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"places" | "itinerary">("places");
@@ -161,11 +174,7 @@ export function CityPlacesAccordion({
       } else {
         if (res.action === "added") {
           toast.success(`${place.name} görüldü olarak kaydedildi! 🎯`);
-          triggerFloatingPoints({
-            points: 200,
-            label: `${place.name} Check-in`,
-            multiplier: "20x Bonus 🚀",
-          });
+          syncPointsFeedback(res.pointsDelta, `${place.name} Görülen Yer`);
           if (res.visitId) {
             setPlaces((prev) =>
               prev.map((p) =>
@@ -175,6 +184,7 @@ export function CityPlacesAccordion({
           }
         } else {
           toast.info(`${place.name} ziyareti kaldırıldı.`);
+          syncPointsFeedback(res.pointsDelta, `${place.name} Çıkarıldı`);
           setPlaces((prev) =>
             prev.map((p) =>
               p.id === place.id ? { ...p, visitId: null, isVisited: false, userRating: null } : p
@@ -220,6 +230,7 @@ export function CityPlacesAccordion({
         } else {
           toast.info("Puan kaldırıldı.");
         }
+        syncPointsFeedback(res.pointsDelta, `${place.name} Görülen Yer`);
         if (res.visitId) {
           setPlaces((prev) =>
             prev.map((p) =>
@@ -300,11 +311,7 @@ export function CityPlacesAccordion({
 
       if (res.success && res.place) {
         toast.success(`${customName} eklendi ve görüldü olarak kaydedildi! 🌟`);
-        triggerFloatingPoints({
-          points: 10,
-          label: `${customName} Mekan Kaydı`,
-          multiplier: "+10 Puan 📍",
-        });
+        syncPointsFeedback(res.pointsDelta, `${customName} Görülen Yer`);
         setPlaces((prev) => [res.place, ...prev]);
         setIsAddModalOpen(false);
         setCustomName("");
@@ -1071,6 +1078,10 @@ export function CityPlacesAccordion({
           });
 
           if (res.success && res.visits) {
+            syncPointsFeedback(
+              res.pointsDelta,
+              `${cityName} Görülen Yerler`
+            );
             setPhotoDetectedPlaceIds((prev) => {
               const next = new Set(prev);
               matches.forEach((m) => next.add(m.placeId));

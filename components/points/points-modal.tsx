@@ -397,6 +397,18 @@ export function PointsModal({ isOpen, onClose, initialSummary }: PointsModalProp
                         <td className="py-2.5 px-3 text-[11px] text-slate-400">Sonraki yıla taşınmaz</td>
                         <td className="py-2.5 px-3 text-right font-black text-amber-400">+5 Puan</td>
                       </tr>
+                      <tr>
+                        <td className="py-2.5 px-3 font-semibold text-white">
+                          <div>{isEn ? "On Vacation — Visited Place" : "Tatildeyim — Görülen Yer"}</div>
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            {isEn ? "Reversed (-2 Pts) if removed" : "Çıkarılan yer -2 Puan iade"}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-[11px] text-amber-300 font-semibold">
+                          {isEn ? "Start: Places × 2 × 20%" : "Başlangıç: Yer × 2 × %20"}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-black text-lime-400">+2 Puan</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -447,7 +459,9 @@ export function PointsModal({ isOpen, onClose, initialSummary }: PointsModalProp
                     <div className="text-xs text-slate-300 space-y-0.5">
                       <strong className="text-white block font-bold">4. Yıla Başlangıç Puanı & Tam Sayı Kuralı:</strong>
                       <p className="text-[11px] text-slate-400">
-                        Yeni yıla başlarken o güne kadarki aktif kayıtların üzerinden hesaplanır: (Toplam Pin × 10 × %20) + (Tamamlanan Rota × 50 × %20) + (Sosyal İlişki × 20 × %20). Diğer puanlar sonraki yıla taşınmaz ve tüm oran hesaplamaları tam sayıya yuvarlanır.
+                        {isEn
+                          ? "Calculated at the start of each new year from your active records: (Total Pins × 10 × 20%) + (Completed Routes × 50 × 20%) + (Connections × 20 × 20%) + (Visited Places × 2 × 20%). Other points do not carry over and all ratios round to whole integers."
+                          : "Yeni yıla başlarken o güne kadarki aktif kayıtların üzerinden hesaplanır: (Toplam Pin × 10 × %20) + (Tamamlanan Rota × 50 × %20) + (Sosyal İlişki × 20 × %20) + (Görülen Yer × 2 × %20). Diğer puanlar sonraki yıla taşınmaz ve tüm oran hesaplamaları tam sayıya yuvarlanır."}
                       </p>
                     </div>
                   </div>
@@ -505,6 +519,24 @@ export function PointsModal({ isOpen, onClose, initialSummary }: PointsModalProp
                                 ? "Arkadaş Seyahati (%20)"
                                 : entry.actionType === "create_pin"
                                 ? "Mekan Ekleme"
+                                : entry.actionType === "delete_pin"
+                                ? "Silinen Pin"
+                                : entry.actionType === "complete_trip"
+                                ? "Tamamlanan Rota"
+                                : entry.actionType === "delete_trip"
+                                ? "Rota İadesi"
+                                : entry.actionType === "connect_friend"
+                                ? "Sosyal İlişki"
+                                : entry.actionType === "remove_friend"
+                                ? "İlişki İadesi"
+                                : entry.actionType === "visit_place"
+                                ? isEn
+                                  ? "Visited Place"
+                                  : "Görülen Yer"
+                                : entry.actionType === "remove_place_visit"
+                                ? isEn
+                                  ? "Place Removed"
+                                  : "Çıkarılan Yer"
                                 : entry.actionType === "admin_penalty"
                                 ? "Ceza Puanı"
                                 : entry.actionType}

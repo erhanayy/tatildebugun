@@ -4830,3 +4830,95 @@ Kullanıcının *"Route Radar'da bir arkadaşımı bulup ilişkiyi kesebilmem la
 1. `components/social/match-view.tsx` içine `disconnectTravelerAction` entegrasyonu, mobil-first (`min-h-[44px]`, `flex-wrap`, sıfır yatay kaydırma) **İlişkiyi Kes / Disconnect** butonları (`Find Travelers`, `Incoming Requests`, `Sent Requests` kabul edilmiş kartları), özel onay modalı ve canlı `pointsDelta` / `refresh-points` + anlık arama/liste state senkronizasyonu eklendi.
 2. **TypeScript (`npx tsc --noEmit`):** 0 hata.
 3. **Kural Disiplini (Madde 94):** Kural 2 (GitHub push yapılmadı) ve Kural 3 (deploy yapılmadı) korundu.
+
+---
+
+## 95. Tatildeyim Görülen Yer Puanlaması (+2 P / -2 P), Kural Kartları ve Yıla Başlangıç Puanı (%20) Entegrasyonu
+
+Kullanıcının *"Tatildeyim kısmından görülen her bir yere 2 puan vermek istiyorum. Her eklenen yer +2 puan çıkarılan yer -2 puan olacak. Bir de puan kartına bu kuralı da bilgi olarak ekleyelim. Bir de gelecek sene başı baz puan hesaplamasına yine %20'si eklenecek."* talebi üzerine gerçekleştirilen analiz, tasarım ve geliştirme:
+
+### 95.1. Tespit Edilen Mevcut Durum & Kök Nedenler
+1. `lib/actions/places.ts`:
+   - `togglePlaceVisit` GPS doğrulaması olmadan `checkin_pin` (+200 P) yazmakta, tik kaldırıldığında puan iadesi yapmamaktaydı.
+   - `setPlaceRating` zaten ziyaret edilmiş mekanın yıldızı değiştirildiğinde dahi yeniden +200 P vermekteydi.
+   - `createCustomPlace` ve `batchRecordPlaceVisits` sunucu tarafında hiç puan yazmamaktaydı (`city-places-accordion.tsx` özel mekanda sahte +10 animasyonu göstermekteydi).
+2. `lib/points/engine.ts`:
+   - `POINT_RULES` matrisinde Tatildeyim görülen yer ekleme/çıkarma kuralları (`visit_place` / `remove_place_visit`) ve `calculateSeasonStartingPoints` içinde `trip_place_visits` aktif sayısı yer almamaktaydı.
+
+### 95.2. Uygulanan Mimari ve Değişiklikler
+1. **Puan Motoru & Yıla Başlangıç Puanı (`lib/points/engine.ts`):**
+   - `POINT_RULES` içine `visit_place` (**+2 P**, `includedInSeasonStart: true`) ve `remove_place_visit` (**-2 P**, `includedInSeasonStart: false`) kuralları eklendi.
+   - Kanonik anahtar üreteci `getPlaceVisitKey(tripId, placeId)` (`place_visit:${tripId}:${placeId}`) eklendi; çifte ödül, ekle-sil farming ve çifte kesinti `getReferenceNetPoints` ile engellendi.
+   - `computeSeasonStartingPointsFromCounts` ve `calculateSeasonStartingPoints` güncellenerek `trip_place_visits` aktif görülen yer sayısı (`visitedPlaceCount`) dahil edildi:
+     `Pin × 10 × %20 + Tamamlanan Rota × 50 × %20 + Sosyal İlişki × 20 × %20 + Görülen Yer × 2 × %20` (tüm ara ve toplam değerler `roundPoints` ile tam sayıya yuvarlanır).
+2. **Tatildeyim Sunucu Aksiyonları (`lib/actions/places.ts` & `lib/actions/trips.ts`):**
+   - `togglePlaceVisit`: Görüldü eklendiğinde net bakiye korumalı **+2 P**, çıkarıldığında **-2 P** iade (`pointsDelta` döner).
+   - `setPlaceRating`: Yalnızca ilk kez görüldü kaydı oluşturuyorsa **+2 P**, mevcut ziyarette yıldız güncelliyorsa **0 P**.
+   - `createCustomPlace`: Özel mekan/kafe eklendiğinde **+2 P** (tiki kaldırılırsa **-2 P**).
+   - `batchRecordPlaceVisits`: Fotoğraftan yeni eklenen her benzersiz yer için **+2 P** (toplam `pointsDelta`).
+   - `deleteTrip`: Rota silinirken bağlı `trip_place_visits` kayıtlarının aktif net puanları da iade edilir.
+   - Tüm mutasyonlar `/tatildeyim`, `/dashboard`, `/passport`, `/points`, `/rewards` yollarını yeniler.
+3. **Canlı Puan Senkronizasyonu (`components/places/city-places-accordion.tsx`):**
+   - Tüm mekan ekleme/çıkarma/yıldız/fotoğraf onay akışlarında sunucudan dönen gerçek `pointsDelta` üzerinden `triggerFloatingPoints`, `refresh-points` olayı ve `router.refresh()` entegre edildi.
+4. **Puan Kural Kartları & Defter Rozetleri (`components/rewards/rewards-view.tsx` & `components/points/points-modal.tsx`):**
+   - 2026 Puan Matrisine **Tatildeyim — Görülen Yer (+2 P)** kartı/satırı (TR & EN) ve **Yıla Başlangıç: Görülen Yer × 2 × %20** rozeti eklendi.
+   - Yıla Başlangıç Puanı açıklama kutuları 4 bileşenli yeni formülle güncellendi (TR & EN).
+   - Puan Defteri rozetlerine `visit_place`, `remove_place_visit` ve eksik rota/ilişki/pin rozetleri eklendi.
+5. **İzole Birim Testleri (`scripts/test_pin_trip_lifecycle.ts`):**
+   - Tatildeyim görülen yer (+2 P / -2 P), çifte ödül koruması, tekrar ekleme döngüsü ve `visitedPlaceCount × 2 × %20` tam sayı yuvarlama testleri eklendi.
+
+### 95.3. Kalite Kapısı ve Doğrulama
+- **TypeScript (`npx tsc --noEmit`):** 0 hata.
+- **Next.js Production Build (`npm run build`):** Başarılı (`2.5s`, `14/14` sayfa).
+- **Birim & Dil Testleri:** `scripts/test_pin_trip_lifecycle.ts` **56/56**, `scripts/test_language_system.ts` **13/13** başarılı.
+- **Canlı Puan Düzeltmesi & Yayına Alma (2026-11-20):** Kullanıcının açık talimatıyla eski canlı sürüm (`v2.7.0`) üzerinde Paris testinde yazılan tekil `+200 P` `checkin_pin` kaydı temizlenerek `users.traveler_score` (`2.995 P`) ve 2026 `value_share_pools` (`4.020 P`) senkronize edildi; ardından **v2.7.1** sürümü Cloud Run (`tatilde-bugun-00030-f5j`, `https://alltripx.com` HTTP 200) ve GitHub (`main`) üzerine aktarıldı.
+- **Kural 14 Eklendi (`AGENTS.md`):** Uzaktan (DevStudio Mobil) çalışırken kullanıcı açıkça GitHub push ve/veya deploy talimatı verdiğinde, kalite kapısı sonrası komutların doğrudan terminalden yürütülmesi kurala bağlandı.
+
+---
+
+## 96. Gelir Getirici Modeller (Monetization) Sıralı Uygulama Yol Haritası & Faz 1 (Travel Affiliate) Mimari Tasarımı
+
+[Strategy.md](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/Strategy.md) ve [Analysis.md](file:///Users/erhanayyildiz/Desktop/Work/TatildeBugun/Analysis.md) (Madde 57, 61, 62, 63, 64) belgelerindeki gelir analizleri derlenerek **en hızlı nakit akışı ve sıfır sözleşme** ilkesiyle 5 fazlı uygulama sırası çıkarılmış ve **Faz 1** mimarisi tasarlanmıştır:
+
+### 96.1. Sıralı Gelir Modelleri Yol Haritası (Faz 1 → Faz 5)
+1. **Faz 1 (Hemen — Sıfır Sözleşme): Seyahat Satış Ortaklıkları (Travel Affiliate)**
+   - Airalo (eSIM %15–25 komisyon), GetYourGuide (Müze/Tur/Hızlı Geçiş Bileti %8–12), Booking.com (Otel %4–7), Seyahat Sağlık Sigortası.
+   - Tıklama takip motoru (`/api/partners/go`) + `/admin/partners` yönetim & analitik paneli.
+2. **Faz 2: AllTripX PRO / Gezgin Pasaportu (Freemium Abonelik — Web + Mobil IAP / RevenueCat Hazır)**
+   - `users.is_pro` / `subscriptions` şeması, `/pro` yükseltme ekranı, sınırsız AI rota, Altın Gezgin rozeti, gizli mod, reklamsız deneyim, `/api/webhooks/revenuecat` altyapısı.
+3. **Faz 3: Google AdSense & Seyahat Odaklı Doğal Akış Reklamları (In-Feed Native Ads)**
+   - `/feed` akışında her 4–5 gönderide bir seyahat reklamı slotu + harita yan çekmece alt slotu (yalnızca ücretsiz kullanıcılara, PRO'ya reklamsız).
+4. **Faz 4: B2B Yerel İşletme & Mekan Sponsorlukları (Sponsored Spots)**
+   - Kafe/otel/tur işletmeleri için öne çıkan mekan rozeti, *"AllTripX Gezginlerine Özel %10 İndirim"* kuponu ve `host` başvuru/yönetim paneli.
+5. **Faz 5: Baskılı Seyahat Albümü (Print-on-Demand Photobook) & Butik Grup Turları**
+   - Yıl sonu harita + fotoğraf albümü önizleme/sipariş ve lisanslı acente butik tur aracılığı.
+
+### 96.2. Faz 1 Detaylı Mimari Tasarımı (Self-Serve Travel Affiliate Motoru)
+1. **Veritabanı & Geri Alınabilir Migrasyon (Kural 8):**
+   - `affiliate_clicks` tablosu: `id`, `user_id` (opsiyonel), `partner_key` (`airalo` | `getyourguide` | `booking` | `insurance`), `placement` (`tatildeyim_banner` | `place_card` | `itinerary_stop` | `route_drawer`), `country_code`, `city_name`, `place_name`, `locale`, `created_at` (Sıfır PII!).
+   - `partner_settings` tablosu (veya `.env` fallback + DB override): her partner için `is_enabled`, `affiliate_id`, `custom_base_url` — kod deploy etmeden `/admin/partners` ekranından partner ID girilip anında açılıp kapatılabilecek.
+   - Geri alma scripti: `scripts/rollback_affiliate_monetization.sql` + `.env.example` güncellemesi (Kural 9).
+2. **Merkezi Deep-Link & Güvenli Yönlendirme Servisi (`lib/partners/affiliate.ts` & `app/api/partners/go/route.ts`):**
+   - Zod doğrulamalı (`partner`, `country`, `city`, `place`, `placement`, `locale`) yönlendirme endpoint'i:
+     - Açık yönlendirme (Open Redirect) saldırılarına karşı **sıkı alan adı beyaz listesi (allowlist)**: yalnızca `airalo.com`, `getyourguide.com`, `booking.com` vb. resmi partner URL'leri üretilir.
+     - Tıklamayı asenkron olarak `affiliate_clicks` tablosuna kaydeder (kullanıcıyı bekletmeden 302 redirect).
+   - Dinamik şehir/ülke bağlamı:
+     - **Airalo eSIM:** Seçilen yurtdışı ülke adına göre doğrudan o ülkenin eSIM paketlerine (örn. İtalya/İskoçya/Fransa eSIM) yönlendirir.
+     - **GetYourGuide:** Şehir veya mekan adına göre (örn. *"Colosseum Rome"*, *"Edinburgh Castle"*) doğrudan bilet/tur arama sayfasına yönlendirir.
+     - **Booking.com:** Şehir + rota giriş/çıkış tarihleriyle (`checkin` & `checkout`) doğrudan tarihli otel listesine yönlendirir!
+3. **Kullanıcı Arayüzü Yerleşimleri (TR / EN, Mobil-First Kural 13):**
+   - **`Tatildeyim` (`tatildeyim-view.tsx`) & Şehir Mekanları (`city-places-accordion.tsx`):**
+     - Şehir üstünde zarif **"Seyahat Fırsatları / Travel Essentials"** şeridi: `📱 eSIM Al` (yurtdışı şehirlerde), `🏨 Otelleri Gör`, `🎟️ Tur & Biletler` (yatay kaydırmasız `flex-wrap`, `min-h-[44px]`).
+     - Mekan kartlarında (özellikle müze/tarihi mekanlarda) zarif `🎟️ Bilet` kısayolu.
+   - **Rotalarım Çekmecesi (`trip-routes-drawer.tsx`):**
+     - Özellikle **Planlanan (`planned`)** rotaların altında *"Yolculuk Hazırlığı: 📱 eSIM · 🏨 Otel · 🎟️ Aktivite"* tek satır kompakt bar (rota tarihleriyle Booking'e gider!).
+4. **Admin Gelir & Tıklama Paneli (`/admin/partners` + `/admin` Hub Kartı):**
+   - Partner bazlı toplam tıklama, son 7/30 gün trendi, en çok tıklanan şehirler/mekanlar, partner bazlı `Affiliate ID` girişi ve anlık Aç/Kapat anahtarı.
+   - `app/admin/page.tsx` ana menüsüne **"Gelir & Partner Merkezi"** kartı eklenir.
+
+### 96.3. Onay Sonrası Faz 1 Geliştirme Adımları
+1. `scripts/create_affiliate_monetization.sql` & `scripts/rollback_affiliate_monetization.sql` + `lib/db/schema.ts` + `.env.example` güncellemeleri.
+2. `lib/partners/affiliate.ts` ve `app/api/partners/go/route.ts` (Zod doğrulamalı, allowlist korumalı yönlendirme + tıklama kaydı).
+3. `components/partners/travel-deals-bar.tsx` (TR/EN, mobil-first) + `tatildeyim-view.tsx`, `city-places-accordion.tsx` ve `trip-routes-drawer.tsx` entegrasyonu.
+4. `lib/actions/partners.ts` + `app/admin/partners/page.tsx` + `app/admin/page.tsx` kartı.
+5. `npx tsc --noEmit`, `npm run build` ve izole affiliate doğrulama testleri.

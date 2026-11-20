@@ -9,11 +9,21 @@
  */
 
 import { db } from "../lib/db";
-import { users, visits, trips, tripStops, userPointsLedger, valueSharePools } from "../lib/db/schema";
+import {
+  users,
+  visits,
+  trips,
+  tripStops,
+  placesOfInterest,
+  tripPlaceVisits,
+  userPointsLedger,
+  valueSharePools,
+} from "../lib/db/schema";
 import {
   awardPoints,
   getUserPointsSummary,
   getConnectionPairKey,
+  getPlaceVisitKey,
   getReferenceNetPoints,
   roundPoints,
   calculateReferralPassivePoints,
@@ -381,9 +391,142 @@ async function runTests() {
     assert(summary.totalPoints >= 0, `getUserPointsSummary totalPoints sıfırın altına düşmez (${summary.totalPoints} >= 0)`);
 
     // ==============================================================
-    // TEST 8: YILA BAŞLANGIÇ PUANI FORMÜLÜ & KESİN TAM SAYI YUVARLAMA TESTİ
+    // TEST 8: TATİLDEYİM GÖRÜLEN YER (+2 P / -2 P), ÇİFTE ÖDÜL KORUMASI & BAZ PUAN (%20)
     // ==============================================================
-    console.log("\n--- 8. Yıla Başlangıç Puanı & Kesin Tam Sayı Yuvarlama Testi ---");
+    console.log("\n--- 8. Tatildeyim Görülen Yer (+2 / -2 Puan) & Net Bakiye Koruması Testi ---");
+    const [testTripForPlace] = await db
+      .insert(trips)
+      .values({
+        userId,
+        title: "Tatildeyim Test Turu",
+        status: "planned",
+        visibility: "public",
+      })
+      .returning();
+
+    const [testPlace1, testPlace2] = await db
+      .insert(placesOfInterest)
+      .values([
+        {
+          countryCode: "IT",
+          cityName: "Roma Test",
+          name: "Test Kolezyum",
+          category: "monument",
+          isCustom: true,
+          createdByUserId: userId,
+        },
+        {
+          countryCode: "IT",
+          cityName: "Roma Test",
+          name: "Test Pantheon",
+          category: "historic",
+          isCustom: true,
+          createdByUserId: userId,
+        },
+      ])
+      .returning();
+
+    try {
+      const pvKey1 = getPlaceVisitKey(testTripForPlace.id, testPlace1.id);
+      const pvKey2 = getPlaceVisitKey(testTripForPlace.id, testPlace2.id);
+
+      // 8.1 Görülen yer 1 eklendiğinde +2 Puan
+      const [pv1] = await db
+        .insert(tripPlaceVisits)
+        .values({
+          userId,
+          tripId: testTripForPlace.id,
+          placeId: testPlace1.id,
+        })
+        .returning();
+
+      const addPv1 = await awardPoints({
+        userId,
+        actionType: "visit_place",
+        referenceId: pvKey1,
+        referenceType: "place_visit",
+        description: `Tatildeyim Görülen Yer: ${testPlace1.name}`,
+      });
+      assert(addPv1.finalPoints === 2, "Tatildeyim görülen yer ekleme +2 Puan verir");
+      assert((await getReferenceNetPoints(userId, pvKey1)) === 2, "Görülen yer 1 net bakiyesi +2'dir");
+
+      // 8.2 Aynı yer için tekrar ekleme / yıldız güncellemesi çifte puan vermez (net > 0)
+      const netBeforeDup = await getReferenceNetPoints(userId, pvKey1);
+      assert(netBeforeDup > 0, "Aynı tur+mekan için aktif bakiye > 0 olduğundan çifte +2 P engellenir");
+
+      // 8.3 Görülen yer 2 eklendiğinde +2 Puan (Toplam aktif 2 yer -> baz puan: round(2 * 2 * 0.2) = 1)
+      await db.insert(tripPlaceVisits).values({
+        userId,
+        tripId: testTripForPlace.id,
+        placeId: testPlace2.id,
+      });
+      const addPv2 = await awardPoints({
+        userId,
+        actionType: "visit_place",
+        referenceId: pvKey2,
+        referenceType: "place_visit",
+        description: `Tatildeyim Görülen Yer: ${testPlace2.name}`,
+      });
+      assert(addPv2.finalPoints === 2, "2. görülen yer ekleme +2 Puan verir");
+
+      // Canlı DB üzerinden 2 aktif görülen yerin Yıla Başlangıç Puanı katkısı: 2 × 2 × %20 = 0.8 -> 1
+      const dbStartWithPlaces = await calculateSeasonStartingPoints(userId);
+      assert(dbStartWithPlaces.visitedPlaceCount === 2, "DB'de 2 aktif Tatildeyim görülen yer sayılır");
+      assert(dbStartWithPlaces.visitedPlacePoints === 1, "2 Görülen Yer × 2 × %20 = 0.8 -> 1 tam sayı baz puan");
+
+      // 8.4 Görülen yer 1 çıkarıldığında -2 Puan iade
+      const netBeforeRemove1 = await getReferenceNetPoints(userId, pvKey1);
+      const remPv1 = await awardPoints({
+        userId,
+        actionType: "remove_place_visit",
+        basePoints: -netBeforeRemove1,
+        multiplier: 1.0,
+        referenceId: pvKey1,
+        referenceType: "place_visit",
+        description: `Tatildeyim Çıkarılan Yer İadesi: ${testPlace1.name}`,
+      });
+      await db.delete(tripPlaceVisits).where(eq(tripPlaceVisits.id, pv1.id));
+
+      assert(remPv1.finalPoints === -2, "Tatildeyim görülen yer çıkarma -2 Puan iade eder");
+      assert((await getReferenceNetPoints(userId, pvKey1)) === 0, "Çıkarılan yerin net bakiyesi 0'a iner");
+
+      // 8.5 Çıkarılan yer tekrar eklenince yeniden +2 Puan verir
+      const netBeforeReAdd = await getReferenceNetPoints(userId, pvKey1);
+      assert(netBeforeReAdd <= 0, "Çıkarılan yer tekrar eklendiğinde net <= 0 olduğu için yeniden +2 P alabilir");
+      const reAddPv1 = await awardPoints({
+        userId,
+        actionType: "visit_place",
+        referenceId: pvKey1,
+        referenceType: "place_visit",
+        description: `Tatildeyim Görülen Yer (Tekrar): ${testPlace1.name}`,
+      });
+      assert(reAddPv1.finalPoints === 2, "Çıkarılan yer tekrar eklendiğinde +2 Puan yeniden verilir");
+
+      // Temizlik: test yer 1 ve 2 net puanlarını iade et
+      for (const key of [pvKey1, pvKey2]) {
+        const net = await getReferenceNetPoints(userId, key);
+        if (net > 0) {
+          await awardPoints({
+            userId,
+            actionType: "remove_place_visit",
+            basePoints: -net,
+            multiplier: 1.0,
+            referenceId: key,
+            referenceType: "place_visit",
+            description: "Test temizlik iadesi",
+          });
+        }
+      }
+    } finally {
+      await db.delete(tripPlaceVisits).where(eq(tripPlaceVisits.userId, userId));
+      await db.delete(placesOfInterest).where(eq(placesOfInterest.createdByUserId, userId));
+      await db.delete(trips).where(eq(trips.id, testTripForPlace.id));
+    }
+
+    // ==============================================================
+    // TEST 9: YILA BAŞLANGIÇ PUANI FORMÜLÜ & KESİN TAM SAYI YUVARLAMA TESTİ
+    // ==============================================================
+    console.log("\n--- 9. Yıla Başlangıç Puanı & Kesin Tam Sayı Yuvarlama Testi ---");
     assert(roundPoints(3.4) === 3, "roundPoints(3.4) aşağı yuvarlanır (3)");
     assert(roundPoints(3.5) === 4, "roundPoints(3.5) yukarı yuvarlanır (4)");
     assert(calculateReferralPassivePoints(7) === 1, "7 puanın %20 pasif payı tam sayıya yuvarlanır (1.4 -> 1)");
@@ -394,14 +537,36 @@ async function runTests() {
       pinCount: 7, // 7 * 10 * 0.2 = 14
       completedTripCount: 3, // 3 * 50 * 0.2 = 30
       activeConnectionCount: 4, // 4 * 20 * 0.2 = 16
+      visitedPlaceCount: 11, // 11 * 2 * 0.2 = 4.4 -> 4
     });
     assert(sampleStart.pinPoints === 14, "7 Pin × 10 × %20 = 14 Puan");
     assert(sampleStart.tripPoints === 30, "3 Tamamlanan Rota × 50 × %20 = 30 Puan");
     assert(sampleStart.connectionPoints === 16, "4 Sosyal İlişki × 20 × %20 = 16 Puan");
-    assert(sampleStart.totalStartingPoints === 60, "Toplam Yıla Başlangıç Puanı = 60 (Tam Sayı)");
+    assert(sampleStart.visitedPlacePoints === 4, "11 Görülen Yer × 2 × %20 = 4.4 -> 4 Puan");
+    assert(sampleStart.totalStartingPoints === 64, "Toplam Yıla Başlangıç Puanı = 64 (Tam Sayı)");
     assert(Number.isInteger(sampleStart.totalStartingPoints), "Yıla Başlangıç Puanı kesin tam sayıdır");
 
-    // Veritabanı üzerinden canlı hesaplama (şu an test kullanıcısının 0 aktif pini/rotası/ilişkisi var)
+    // Yuvarlama sınır testi: 1 yer (0.4 -> 0), 2 yer (0.8 -> 1), 5 yer (2.0 -> 2)
+    assert(
+      computeSeasonStartingPointsFromCounts({
+        pinCount: 0,
+        completedTripCount: 0,
+        activeConnectionCount: 0,
+        visitedPlaceCount: 1,
+      }).visitedPlacePoints === 0,
+      "1 Görülen Yer × 2 × %20 = 0.4 -> 0 (tam sayı yuvarlama)"
+    );
+    assert(
+      computeSeasonStartingPointsFromCounts({
+        pinCount: 0,
+        completedTripCount: 0,
+        activeConnectionCount: 0,
+        visitedPlaceCount: 5,
+      }).visitedPlacePoints === 2,
+      "5 Görülen Yer × 2 × %20 = 2.0 -> 2"
+    );
+
+    // Veritabanı üzerinden canlı hesaplama (şu an test kullanıcısının 0 aktif pini/rotası/ilişkisi/yeri var)
     const dbStart = await calculateSeasonStartingPoints(userId);
     assert(dbStart.totalStartingPoints === 0, "Aktif kaydı olmayan kullanıcı için Yıla Başlangıç Puanı 0'dır");
 

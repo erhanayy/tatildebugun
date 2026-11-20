@@ -2,10 +2,10 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { trips, tripStops, visits, users, type Trip, type TripStop, userPointsLedger } from "@/lib/db/schema";
+import { trips, tripStops, tripPlaceVisits, visits, users, type Trip, type TripStop, userPointsLedger } from "@/lib/db/schema";
 import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { awardPoints } from "@/lib/points/engine";
+import { awardPoints, getPlaceVisitKey, getReferenceNetPoints } from "@/lib/points/engine";
 import { z } from "zod";
 
 // Zod Doğrulama Şeması (Kural 10 - Katı Tip & Runtime Kontrolü)
@@ -262,12 +262,46 @@ export async function deleteTrip(tripId: string): Promise<{
       }
     }
 
+    // 2b. Bu rotaya bağlı Tatildeyim görülen yerlerin aktif net puanlarını da iade et
+    try {
+      const tripVisitedPlaces = await db
+        .select({ placeId: tripPlaceVisits.placeId })
+        .from(tripPlaceVisits)
+        .where(
+          and(
+            eq(tripPlaceVisits.tripId, tripId),
+            eq(tripPlaceVisits.userId, session.user.id)
+          )
+        );
+
+      for (const pv of tripVisitedPlaces) {
+        const refKey = getPlaceVisitKey(tripId, pv.placeId);
+        const netPlacePoints = await getReferenceNetPoints(session.user.id, refKey);
+        if (netPlacePoints > 0) {
+          const placeReversal = await awardPoints({
+            userId: session.user.id,
+            actionType: "remove_place_visit",
+            basePoints: -netPlacePoints,
+            multiplier: 1.0,
+            referenceId: refKey,
+            referenceType: "place_visit",
+            description: `Silinen Rota Görülen Yer İadesi: ${trip.title}`,
+            metadata: { tripId, placeId: pv.placeId },
+          });
+          pointsDelta += placeReversal.finalPoints;
+        }
+      }
+    } catch (pvErr) {
+      console.error("Rota silme görülen yer puan iade hatası:", pvErr);
+    }
+
     // 3. Rotayı veritabanından sil
     await db
       .delete(trips)
       .where(and(eq(trips.id, tripId), eq(trips.userId, session.user.id)));
 
     revalidatePath("/dashboard");
+    revalidatePath("/tatildeyim");
     revalidatePath("/feed");
     revalidatePath("/match");
     revalidatePath("/passport");
